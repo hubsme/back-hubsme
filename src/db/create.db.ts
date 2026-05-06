@@ -1,6 +1,6 @@
-import { execSync } from "child_process";
-import { Client } from "pg";
-import { dbConfig } from "./config.db";
+import { execSync } from 'child_process';
+import { Client } from 'pg';
+import { dbConfig } from './config.db';
 
 async function createDatabase() {
   const { database, ...postgresConfig } = dbConfig;
@@ -8,16 +8,13 @@ async function createDatabase() {
   // Connect to default 'postgres' database to check/create the target database
   const client = new Client({
     ...postgresConfig,
-    database: "postgres",
+    database: 'postgres',
   });
 
   try {
     await client.connect();
 
-    const result = await client.query(
-      `SELECT 1 FROM pg_database WHERE datname = $1`,
-      [database]
-    );
+    const result = await client.query(`SELECT 1 FROM pg_database WHERE datname = $1`, [database]);
 
     if (result.rowCount === 0) {
       console.log(`Database '${database}' does not exist. Creating...`);
@@ -27,7 +24,7 @@ async function createDatabase() {
       console.log(`Database '${database}' already exists.`);
     }
   } catch (error) {
-    console.error("❌ Error checking/creating database:", error);
+    console.error('❌ Error checking/creating database:', error);
     process.exit(1);
   } finally {
     await client.end();
@@ -43,10 +40,10 @@ async function enableExtensions() {
 
   try {
     await client.connect();
-    await client.query("CREATE EXTENSION IF NOT EXISTS pg_trgm;");
+    await client.query('CREATE EXTENSION IF NOT EXISTS pg_trgm;');
     console.log("✅ Extension 'pg_trgm' enabled successfully.");
   } catch (error) {
-    console.error("❌ Error enabling extensions:", error);
+    console.error('❌ Error enabling extensions:', error);
     throw error;
   } finally {
     await client.end();
@@ -57,14 +54,14 @@ async function createTables() {
   try {
     await createDatabase();
     await enableExtensions();
-    execSync("npx drizzle-kit push --config=drizzle.config.ts", {
-      stdio: "inherit",
+    execSync('npx drizzle-kit push --config=drizzle.config.ts', {
+      stdio: 'inherit',
       cwd: process.cwd(),
     });
-    console.log("✅ Tablas creadas exitosamente desde los modelos");
+    console.log('✅ Tablas creadas exitosamente desde los modelos');
     process.exit(0);
   } catch (error) {
-    console.error("❌ Error al crear las tablas/extensions");
+    console.error('❌ Error al crear las tablas/extensions');
     process.exit(1);
   }
 }

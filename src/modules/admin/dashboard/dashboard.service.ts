@@ -27,16 +27,31 @@ export class DashboardService {
     }
 
     const [meetingCount, taskCount, diagnosticCount, taskRows, upcomingRows, meetingRows] = await Promise.all([
-      database.select({ total: count() }).from(meeting).where(and(...meetingConditions)),
-      database.select({ total: count() }).from(task).where(and(...taskConditions)),
-      database.select({ total: count() }).from(diagnostic).where(and(...diagnosticConditions)),
-      database.select({ status: task.status }).from(task).where(and(...taskConditions)),
+      database
+        .select({ total: count() })
+        .from(meeting)
+        .where(and(...meetingConditions)),
+      database
+        .select({ total: count() })
+        .from(task)
+        .where(and(...taskConditions)),
+      database
+        .select({ total: count() })
+        .from(diagnostic)
+        .where(and(...diagnosticConditions)),
+      database
+        .select({ status: task.status })
+        .from(task)
+        .where(and(...taskConditions)),
       database
         .select({ id: meeting.id, title: meeting.title, startTime: meeting.startTime, status: meeting.status })
         .from(meeting)
         .where(and(...meetingConditions, gte(meeting.startTime, new Date())))
         .limit(5),
-      database.select({ pymeId: meeting.pymeId }).from(meeting).where(and(...meetingConditions)),
+      database
+        .select({ pymeId: meeting.pymeId })
+        .from(meeting)
+        .where(and(...meetingConditions)),
     ]);
 
     const taskStatus = taskRows.reduce(

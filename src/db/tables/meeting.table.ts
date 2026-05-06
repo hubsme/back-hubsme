@@ -8,7 +8,12 @@ export type MeetingMinutes = {
   resumen: string;
   puntosTratados: string[];
   acuerdos: { descripcion: string; responsable: string; fechaLimite?: string }[];
-  tareasGeneradas: { titulo: string; descripcion: string; asignadoA: 'pyme' | 'consultor'; prioridad: 'alta' | 'media' | 'baja' }[];
+  tareasGeneradas: {
+    titulo: string;
+    descripcion: string;
+    asignadoA: 'pyme' | 'consultor';
+    prioridad: 'alta' | 'media' | 'baja';
+  }[];
 };
 
 export const meeting = pgTable(

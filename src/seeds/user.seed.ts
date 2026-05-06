@@ -48,10 +48,10 @@ export async function seedUsers(): Promise<SeededUserGroup> {
   const values = seedEntries
     .filter((entry) => !existingByEmail[entry.email])
     .map((entry) => ({
-    ...entry,
-    password,
-    isActive: 'true' as const,
-  }));
+      ...entry,
+      password,
+      isActive: 'true' as const,
+    }));
 
   const insertedUsers = values.length > 0 ? await database.insert(user).values(values).returning() : [];
 

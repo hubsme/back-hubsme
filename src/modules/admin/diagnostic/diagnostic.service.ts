@@ -61,10 +61,26 @@ export class DiagnosticService {
     const businessName = String(pymeData.name ?? 'La PYME');
 
     const areasEvaluadas = [
-      this.area('Finanzas', financeScore, 'Los ingresos muestran capacidad de sostener mejoras si se ordena la gestion financiera.'),
-      this.area('Operaciones', operationsScore, 'El nivel de digitalizacion define el mayor potencial de productividad inmediata.'),
-      this.area('Equipo', teamScore, 'La estructura del equipo requiere rituales de seguimiento y responsables claros.'),
-      this.area('Mercado', marketScore, 'La posicion comercial puede fortalecerse con segmentacion y oferta consultiva.'),
+      this.area(
+        'Finanzas',
+        financeScore,
+        'Los ingresos muestran capacidad de sostener mejoras si se ordena la gestion financiera.',
+      ),
+      this.area(
+        'Operaciones',
+        operationsScore,
+        'El nivel de digitalizacion define el mayor potencial de productividad inmediata.',
+      ),
+      this.area(
+        'Equipo',
+        teamScore,
+        'La estructura del equipo requiere rituales de seguimiento y responsables claros.',
+      ),
+      this.area(
+        'Mercado',
+        marketScore,
+        'La posicion comercial puede fortalecerse con segmentacion y oferta consultiva.',
+      ),
     ];
 
     const problemasCriticos = [

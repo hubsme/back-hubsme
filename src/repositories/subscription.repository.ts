@@ -1,7 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { eq, and, isNull, count, desc, sql } from 'drizzle-orm';
 import { database } from '@db/connection.db';
-import { subscription, SubscriptionDTO, subscriptionPlanEnum, subscriptionStatusEnum } from '@db/tables/subscription.table';
+import {
+  subscription,
+  SubscriptionDTO,
+  subscriptionPlanEnum,
+  subscriptionStatusEnum,
+} from '@db/tables/subscription.table';
 
 @Injectable()
 export class SubscriptionRepository {
