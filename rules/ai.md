@@ -26,3 +26,34 @@ Estos son los comandos clave definidos en `package.json`:
 | `npm run lint`           | Ejecuta el linter (ESLint) y corrige errores automáticos.               |
 | `npm run format`         | Formatea el código con Prettier.                                        |
 | `npm run generate:types` | Genera tipos de API para el frontend (usando `swagger-typescript-api`). |
+
+## 4. Reglas Imprescindibles para Cambios Backend
+
+El backend está en etapa de producción. Cualquier cambio debe preservar datos y estructura existente.
+
+### Comandos totalmente prohibidos para IA
+
+No ejecutar bajo ninguna circunstancia:
+
+- `npm run db:reset`: elimina todas las tablas de la base de datos.
+- `npm run db:create`: crea/sincroniza toda la base de datos en base a las tablas declaradas.
+- `npm run db:seed`: ejecuta inserts/seeds para las tablas.
+- `npx drizzle-kit generate`: comando nativo de Drizzle; también queda prohibido.
+
+### Comandos reservados solo para humanos
+
+No ejecutar desde la IA:
+
+- `npm run db:restore`: restaura la data desde un archivo `.sql`.
+- `npm run db:backup`: genera un respaldo `.sql`.
+- `npm run db:migrate`: aplica migraciones a la base de datos.
+
+### Comando obligatorio permitido
+
+- `npm run generate:types`: se debe ejecutar al final de cada cambio backend que afecte modelos, DTOs, interfaces o endpoints de API, para mantener actualizado `frontend-hubsme/src/api/backend.api.ts`.
+
+### Capas backend
+
+- `repository`: unica capa con conexion directa a base de datos, queries, inserts, updates y deletes.
+- `service`: contiene logica de negocio y solo se conecta con repositories; nunca accede directo a la DB.
+- `controller`: enruta endpoints y documenta modelos/DTOs. Cada DTO debe importarse; no declarar DTOs inline. Cada response debe delegar directo al service, sin logica de negocio.

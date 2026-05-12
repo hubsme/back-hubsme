@@ -126,23 +126,51 @@ export const user = pgTable(
 );
 ```
 
-## 4. Scripts y Comandos
+## 4. Scripts y Comandos en Produccion
 
-Los scripts se ejecutan vía `npm run` (definidos en package.json) y usan `ts-node` para ejecutar los archivos en `src/db`.
+El backend esta en etapa de produccion. La IA debe tratar cualquier cambio de base de datos como una operacion sensible.
 
-| Comando             | Archivo        | Acción                                                            |
-| :------------------ | :------------- | :---------------------------------------------------------------- |
-| `npm run db:create` | `create.db.ts` | Ejecuta `drizzle-kit push` para sincronizar el esquema con la DB. |
-| `npm run db:reset`  | `reset.db.ts`  | **Destructivo**: Elimina el esquema `public` y lo recrea.         |
-| `npm run db:seed`   | `seed.db.ts`   | Ejecuta la secuencia de seeds definida.                           |
+### Comandos totalmente prohibidos para IA
+
+No ejecutar bajo ninguna circunstancia:
+
+| Comando                    | Motivo                                                                 |
+| :------------------------- | :--------------------------------------------------------------------- |
+| `npm run db:reset`         | Elimina todas las tablas de la base de datos.                          |
+| `npm run db:create`        | Crea/sincroniza toda la base de datos desde las tablas declaradas.      |
+| `npm run db:seed`          | Inserta datos seed en las tablas.                                      |
+| `npx drizzle-kit generate` | Genera migraciones con Drizzle; queda reservado fuera del flujo de IA. |
+
+### Comandos solo para humanos
+
+No ejecutar desde la IA:
+
+| Comando              | Motivo                                                        |
+| :------------------- | :------------------------------------------------------------ |
+| `npm run db:restore` | Restaura data desde un archivo `.sql` de una version previa.  |
+| `npm run db:backup`  | Genera un respaldo `.sql` de una version especifica.          |
+| `npm run db:migrate` | Aplica migraciones a la base de datos.                        |
+
+### Comando permitido y obligatorio
+
+| Comando                  | Uso                                                                                                     |
+| :----------------------- | :------------------------------------------------------------------------------------------------------ |
+| `npm run generate:types` | Ejecutar al final de cada cambio backend que afecte modelos, DTOs, interfaces o endpoints de la API.    |
+
+Este comando mantiene actualizado el archivo autogenerado `frontend-hubsme/src/api/backend.api.ts`.
 
 ## 5. Flujo de Trabajo
 
-1.  **Crear nueva tabla**:
-    - Crear `src/db/tables/[nombre].table.ts`.
-    - Definir `pgTable` y tipos.
+1.  **Crear o modificar tablas**:
+    - Crear o editar `src/db/tables/[nombre].table.ts`.
+    - Definir `pgTable`, indices y tipos.
     - Exportar en `src/db/connection.db.ts` dentro del objeto `schema`.
-2.  **Aplicar cambios**:
-    - Ejecutar `npm run db:create` (push).
-3.  **Resetear (Dev)**:
-    - `npm run db:reset` seguido de `npm run db:create` y `npm run db:seed`.
+2.  **Crear migracion SQL manual**:
+    - Incluir siempre un archivo de migracion cuando haya cambios de base de datos.
+    - Revisar los archivos `.env` para identificar la version exacta de migracion.
+    - Usar una nomenclatura similar a las migraciones ya establecidas.
+3.  **No aplicar migraciones desde IA**:
+    - No ejecutar `npm run db:migrate`.
+    - Dejar la migracion lista para revision y ejecucion humana.
+4.  **Actualizar tipos frontend si cambia la API**:
+    - Ejecutar `npm run generate:types` al ultimo cuando cambien modelos, DTOs, interfaces o endpoints.
