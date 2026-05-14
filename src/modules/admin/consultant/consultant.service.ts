@@ -4,6 +4,7 @@ import { handleDbError } from '@functions/db-error.function';
 import { ConsultantCreateDto } from './dto/consultant-create.dto';
 import { ConsultantListFiltersDto } from './dto/consultant-list.dto';
 import { ConsultantUpdateDto } from './dto/consultant-update.dto';
+import { ConsultantDTO } from '@db/tables/consultant.table';
 
 @Injectable()
 export class ConsultantService {
@@ -35,7 +36,7 @@ export class ConsultantService {
 
   async create(data: ConsultantCreateDto) {
     try {
-      return await this.consultantRepository.create(this.clean(data));
+      return await this.consultantRepository.create(this.clean(data) as ConsultantDTO);
     } catch (error) {
       handleDbError(error);
     }
@@ -55,13 +56,15 @@ export class ConsultantService {
     return this.consultantRepository.delete(id);
   }
 
-  private clean<T extends Partial<ConsultantCreateDto>>(data: T): any {
+  private clean<T extends Partial<ConsultantCreateDto>>(data: T): Partial<ConsultantDTO> {
     return {
       ...data,
       name: data.name?.trim(),
       bio: data.bio?.trim(),
       specialties: data.specialties?.map((item) => item.trim()).filter(Boolean),
       sectors: data.sectors?.map((item) => item.trim()).filter(Boolean),
+      photoUrl: data.photoUrl?.trim(),
+      videoUrl: data.videoUrl?.trim(),
       pricePerHour: data.pricePerHour === undefined ? undefined : data.pricePerHour.toFixed(2),
     };
   }

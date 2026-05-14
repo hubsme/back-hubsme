@@ -43,6 +43,12 @@ export class ConsultantListItemDto {
   @ApiProperty({ type: [String] })
   sectors: string[];
 
+  @ApiProperty({ nullable: true })
+  photoUrl: string | null;
+
+  @ApiProperty({ nullable: true })
+  videoUrl: string | null;
+
   @ApiProperty()
   pricePerHour: string;
 

@@ -33,4 +33,7 @@ export class PymeResultDto {
 
   @ApiProperty({ nullable: true })
   description: string | null;
+
+  @ApiProperty({ nullable: true })
+  logoUrl: string | null;
 }

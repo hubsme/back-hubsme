@@ -1,6 +1,8 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UserRepository } from '@repositories/user.repository';
+import { ConsultantRepository } from '@repositories/consultant.repository';
+import { PymeRepository } from '@repositories/pyme.repository';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import * as bcrypt from 'bcrypt';
@@ -10,6 +12,8 @@ import { handleDbError } from '@functions/db-error.function';
 export class AuthService {
   constructor(
     private readonly userRepository: UserRepository,
+    private readonly pymeRepository: PymeRepository,
+    private readonly consultantRepository: ConsultantRepository,
     private readonly jwtService: JwtService,
   ) {}
 
@@ -61,6 +65,20 @@ export class AuthService {
         role: registerDto.role ?? 'pyme',
         isActive: 'true',
       });
+
+      if (user.role === 'consultor') {
+        await this.consultantRepository.create({
+          userId: user.id,
+          name: user.name,
+          active: 'true',
+          validated: 'false',
+        });
+      } else if (user.role === 'pyme') {
+        await this.pymeRepository.create({
+          userId: user.id,
+          name: user.name,
+        });
+      }
 
       const payload = {
         sub: user.id,

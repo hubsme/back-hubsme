@@ -62,6 +62,7 @@ export class PymeService {
       ruc: data.ruc?.trim(),
       sector: data.sector?.trim(),
       description: data.description?.trim(),
+      logoUrl: data.logoUrl?.trim(),
     };
   }
 }

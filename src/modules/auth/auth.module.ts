@@ -5,6 +5,8 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
 import { UserRepository } from '@repositories/user.repository';
+import { ConsultantRepository } from '@repositories/consultant.repository';
+import { PymeRepository } from '@repositories/pyme.repository';
 
 @Module({
   imports: [
@@ -15,7 +17,7 @@ import { UserRepository } from '@repositories/user.repository';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, UserRepository],
+  providers: [AuthService, JwtStrategy, UserRepository, PymeRepository, ConsultantRepository],
   exports: [AuthService],
 })
 export class AuthModule {}

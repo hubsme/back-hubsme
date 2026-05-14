@@ -16,6 +16,8 @@ export const consultant = pgTable(
     bio: text('bio'),
     specialties: text('specialties').array().default([]).notNull(),
     sectors: text('sectors').array().default([]).notNull(),
+    photoUrl: text('photo_url'),
+    videoUrl: text('video_url'),
     pricePerHour: decimal('price_per_hour', { precision: 10, scale: 2 }).default('0.00').notNull(),
     rating: decimal('rating', { precision: 3, scale: 2 }).default('0.00').notNull(),
     totalReviews: integer('total_reviews').default(0).notNull(),

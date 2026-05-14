@@ -18,6 +18,7 @@ export const pyme = pgTable(
     numEmployees: integer('num_employees'),
     yearsInOperation: integer('years_in_operation'),
     description: text('description'),
+    logoUrl: text('logo_url'),
   },
   (t) => [
     index('pyme_name_idx').using('gin', t.name.op('gin_trgm_ops')),

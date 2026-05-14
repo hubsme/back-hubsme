@@ -41,4 +41,9 @@ export class PymeCreateDto {
   @IsString()
   @IsOptional()
   description?: string;
+
+  @ApiPropertyOptional({ example: 'https://storage.example.com/pymes/logo.jpg' })
+  @IsString()
+  @IsOptional()
+  logoUrl?: string;
 }

@@ -30,6 +30,16 @@ export class ConsultantCreateDto {
   @IsOptional()
   sectors?: string[];
 
+  @ApiPropertyOptional({ example: 'https://storage.example.com/consultants/photo.jpg' })
+  @IsString()
+  @IsOptional()
+  photoUrl?: string;
+
+  @ApiPropertyOptional({ example: 'https://storage.example.com/consultants/video.mp4' })
+  @IsString()
+  @IsOptional()
+  videoUrl?: string;
+
   @ApiPropertyOptional({ example: 150 })
   @Type(() => Number)
   @IsNumber()

@@ -9,6 +9,8 @@ import { subscription } from '@db/tables/subscription.table';
 import { diagnostic } from '@db/tables/diagnostic.table';
 import { consultant } from '@db/tables/consultant.table';
 import { task } from '@db/tables/task.table';
+import { pymeConsultantMatch } from '@db/tables/pyme-consultant-match.table';
+import { pymeConsultantMessage } from '@db/tables/pyme-consultant-message.table';
 
 const pool = new Pool(dbConfig);
 
@@ -20,6 +22,8 @@ const schema = {
   diagnostic,
   consultant,
   task,
+  pymeConsultantMatch,
+  pymeConsultantMessage,
 };
 
 export const database = drizzle(pool, { schema: schema });

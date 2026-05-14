@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 
 const SWAGGER_URL = 'http://localhost:3000/api-json';
-const OUTPUT_DIR = path.resolve(__dirname, '../../frontend-cachorros/src/api');
+const OUTPUT_DIR = path.resolve(__dirname, '../../frontend-hubsme/src/api');
 const OUTPUT_FILE = 'backend.api.ts';
 
 // Crear directorio si no existe

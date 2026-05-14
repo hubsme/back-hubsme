@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { MeetingMinutes } from '@db/tables/meeting.table';
 import { TaskDTO } from '@db/tables/task.table';
 import { MeetingRepository } from '@repositories/meeting.repository';
+import { PymeConsultantMatchRepository } from '@repositories/pyme-consultant-match.repository';
 import { TaskRepository } from '@repositories/task.repository';
 import { GeminiService } from '@modules/admin/common/gemini.service';
 import { MeetingCreateDto } from './dto/meeting-create.dto';
@@ -14,6 +15,7 @@ export class MeetingService {
   constructor(
     private readonly meetingRepository: MeetingRepository,
     private readonly taskRepository: TaskRepository,
+    private readonly matchRepository: PymeConsultantMatchRepository,
     private readonly geminiService: GeminiService,
   ) {}
 
@@ -35,13 +37,18 @@ export class MeetingService {
     return meeting;
   }
 
-  create(data: MeetingCreateDto) {
+  async create(data: MeetingCreateDto) {
+    const acceptedMatch = await this.matchRepository.findAcceptedByPair(data.pymeId, data.consultantId);
+    if (!acceptedMatch) {
+      throw new BadRequestException(['Para solicitar una reunion debe existir un match aceptado']);
+    }
+
     return this.meetingRepository.create({
       ...data,
       title: data.title.trim(),
       meetingUrl: data.meetingUrl?.trim(),
       durationMinutes: data.durationMinutes ?? 60,
-      status: data.status ?? 'confirmada',
+      status: data.status ?? 'solicitada',
     });
   }
 

@@ -35,7 +35,7 @@ export class SubscriptionService {
         name: 'Experto',
         price: 149,
         description: 'Para agencias y consultores senior.',
-        features: ['Marca blanca', 'API de integracion', 'Soporte prioritario'],
+        features: ['API de integracion', 'Soporte prioritario', 'Acompanamiento estrategico'],
       },
     ];
   }
