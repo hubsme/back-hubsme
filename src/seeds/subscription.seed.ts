@@ -2,7 +2,7 @@ import { and, inArray, isNull } from 'drizzle-orm';
 import { database } from '@db/connection.db';
 import { subscription, SubscriptionDTO } from '@db/tables/subscription.table';
 import { User } from '@db/tables/user.table';
-import { daysFromNow } from './utils.seed';
+import { daysFromNow } from '@functions/date.function';
 
 export async function seedSubscriptions(seededUsers: { byEmail: Record<string, User> }) {
   const getUser = (email: string) => {
@@ -39,19 +39,6 @@ export async function seedSubscriptions(seededUsers: { byEmail: Record<string, U
       status: 'paused',
       startedAt: daysFromNow(-140),
       expiresAt: daysFromNow(80),
-    },
-    {
-      userId: getUser('marco.paredes@hubsme.com').id,
-      plan: 'free',
-      status: 'active',
-      startedAt: daysFromNow(-35),
-    },
-    {
-      userId: getUser('valeria.soto@hubsme.com').id,
-      plan: 'basic',
-      status: 'active',
-      startedAt: daysFromNow(-55),
-      expiresAt: daysFromNow(310),
     },
   ];
 

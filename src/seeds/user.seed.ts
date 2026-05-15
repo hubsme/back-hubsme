@@ -10,25 +10,15 @@ type SeededUserGroup = {
   byEmail: Record<string, User>;
 };
 
-const adminUsers = [{ email: 'admin@hubsme.com', name: 'Admin Hubsme', role: 'admin' as const }];
+const adminUsers: { email: string; name: string; role: 'admin' }[] = [];
 
-const pymeUsers = [
-  { email: 'pyme@hubsme.com', name: 'Textiles del Sur SAC', role: 'pyme' as const },
-  { email: 'contacto@tecnologistica.pe', name: 'TecnoLogistica Express', role: 'pyme' as const },
-  { email: 'gerencia@alimentospacifico.pe', name: 'Alimentos Pacifico', role: 'pyme' as const },
-  { email: 'operaciones@constructoranova.pe', name: 'Constructora Nova', role: 'pyme' as const },
-  { email: 'equipo@bioandesfoods.pe', name: 'BioAndes Foods', role: 'pyme' as const },
-  { email: 'direccion@clinicadentalorigen.pe', name: 'Clinica Dental Origen', role: 'pyme' as const },
-  { email: 'admin@ecosmartcommerce.pe', name: 'EcoSmart Commerce', role: 'pyme' as const },
-];
+const pymeUsers: { email: string; name: string; role: 'pyme' }[] = [];
 
 const consultantUsers = [
   { email: 'consultor@hubsme.com', name: 'Carlos Mendoza', role: 'consultor' as const },
   { email: 'ana.torres@hubsme.com', name: 'Ana Lucia Torres', role: 'consultor' as const },
   { email: 'roberto.sanchez@hubsme.com', name: 'Roberto Sanchez', role: 'consultor' as const },
   { email: 'elena.rivas@hubsme.com', name: 'Elena Rivas', role: 'consultor' as const },
-  { email: 'marco.paredes@hubsme.com', name: 'Marco Paredes', role: 'consultor' as const },
-  { email: 'valeria.soto@hubsme.com', name: 'Valeria Soto', role: 'consultor' as const },
 ];
 
 export async function seedUsers(): Promise<SeededUserGroup> {
