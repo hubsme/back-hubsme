@@ -24,7 +24,14 @@ export class PymeConsultantMatchRepository {
 
     if (filters?.search) {
       const searchTerm = filters.search.trim();
-      conditions.push(or(ilike(pyme.name, `%${searchTerm}%`), ilike(consultant.name, `%${searchTerm}%`)));
+      conditions.push(
+        or(
+          ilike(pyme.name, `%${searchTerm}%`),
+          ilike(pyme.sector, `%${searchTerm}%`),
+          ilike(consultant.name, `%${searchTerm}%`),
+          sql`${consultant.specialties}::text ILIKE ${`%${searchTerm}%`}`,
+        ),
+      );
     }
 
     if (filters?.pymeId) {
@@ -56,8 +63,18 @@ export class PymeConsultantMatchRepository {
         deletedAt: pymeConsultantMatch.deletedAt,
         pymeId: pymeConsultantMatch.pymeId,
         pymeName: pyme.name,
+        pymeSector: pyme.sector,
+        pymeNumEmployees: pyme.numEmployees,
+        pymeYearsInOperation: pyme.yearsInOperation,
+        pymeDescription: pyme.description,
+        pymeLogoUrl: pyme.logoUrl,
         consultantId: pymeConsultantMatch.consultantId,
         consultantName: consultant.name,
+        consultantBio: consultant.bio,
+        consultantSpecialties: consultant.specialties,
+        consultantPhotoUrl: consultant.photoUrl,
+        consultantPricePerHour: consultant.pricePerHour,
+        consultantRating: consultant.rating,
         status: pymeConsultantMatch.status,
         source: pymeConsultantMatch.source,
         notes: pymeConsultantMatch.notes,
@@ -82,8 +99,18 @@ export class PymeConsultantMatchRepository {
         deletedAt: pymeConsultantMatch.deletedAt,
         pymeId: pymeConsultantMatch.pymeId,
         pymeName: pyme.name,
+        pymeSector: pyme.sector,
+        pymeNumEmployees: pyme.numEmployees,
+        pymeYearsInOperation: pyme.yearsInOperation,
+        pymeDescription: pyme.description,
+        pymeLogoUrl: pyme.logoUrl,
         consultantId: pymeConsultantMatch.consultantId,
         consultantName: consultant.name,
+        consultantBio: consultant.bio,
+        consultantSpecialties: consultant.specialties,
+        consultantPhotoUrl: consultant.photoUrl,
+        consultantPricePerHour: consultant.pricePerHour,
+        consultantRating: consultant.rating,
         status: pymeConsultantMatch.status,
         source: pymeConsultantMatch.source,
         notes: pymeConsultantMatch.notes,
@@ -104,6 +131,20 @@ export class PymeConsultantMatchRepository {
           eq(pymeConsultantMatch.pymeId, pymeId),
           eq(pymeConsultantMatch.consultantId, consultantId),
           eq(sql`${pymeConsultantMatch.status}::text`, 'aceptado'),
+          isNull(pymeConsultantMatch.deletedAt),
+        ),
+      );
+    return result[0];
+  }
+
+  async findByPair(pymeId: number, consultantId: number) {
+    const result = await database
+      .select()
+      .from(pymeConsultantMatch)
+      .where(
+        and(
+          eq(pymeConsultantMatch.pymeId, pymeId),
+          eq(pymeConsultantMatch.consultantId, consultantId),
           isNull(pymeConsultantMatch.deletedAt),
         ),
       );

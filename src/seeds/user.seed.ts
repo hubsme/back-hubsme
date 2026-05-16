@@ -15,7 +15,7 @@ const adminUsers: { email: string; name: string; role: 'admin' }[] = [];
 const pymeUsers: { email: string; name: string; role: 'pyme' }[] = [];
 
 const consultantUsers = [
-  { email: 'consultor@hubsme.com', name: 'Carlos Mendoza', role: 'consultor' as const },
+  { email: 'miguel.salinas@hubsme.com', name: 'Miguel Salinas', role: 'consultor' as const },
   { email: 'ana.torres@hubsme.com', name: 'Ana Lucia Torres', role: 'consultor' as const },
   { email: 'roberto.sanchez@hubsme.com', name: 'Roberto Sanchez', role: 'consultor' as const },
   { email: 'elena.rivas@hubsme.com', name: 'Elena Rivas', role: 'consultor' as const },

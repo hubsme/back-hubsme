@@ -1,20 +1,7 @@
-import { pgTable, serial, text, timestamp, integer, pgEnum, jsonb, index } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, timestamp, integer, pgEnum, index } from 'drizzle-orm/pg-core';
 import { user } from './user.table';
 
 export const meetingStatusEnum = pgEnum('meeting_status', ['solicitada', 'confirmada', 'finalizada', 'cancelada']);
-
-export type MeetingMinutes = {
-  titulo: string;
-  resumen: string;
-  puntosTratados: string[];
-  acuerdos: { descripcion: string; responsable: string; fechaLimite?: string }[];
-  tareasGeneradas: {
-    titulo: string;
-    descripcion: string;
-    asignadoA: 'pyme' | 'consultor';
-    prioridad: 'alta' | 'media' | 'baja';
-  }[];
-};
 
 export const meeting = pgTable(
   'meeting',
@@ -35,7 +22,6 @@ export const meeting = pgTable(
     meetingUrl: text('meeting_url'),
     status: meetingStatusEnum('status').default('confirmada').notNull(),
     description: text('description'),
-    minutes: jsonb('minutes').$type<MeetingMinutes | null>(),
     completedAt: timestamp('completed_at'),
   },
   (t) => [

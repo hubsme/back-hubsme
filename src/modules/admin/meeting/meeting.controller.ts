@@ -51,7 +51,7 @@ export class MeetingController {
   }
 
   @Post('finalize/:id')
-  @ApiOperation({ summary: 'Finalize meeting, generate minutes and create follow-up tasks' })
+  @ApiOperation({ summary: 'Finalize meeting, save markdown minutes and create follow-up tasks' })
   @ApiParam({ name: 'id', type: 'number' })
   @ApiResponse({ status: 200, type: MeetingFinalizeResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })

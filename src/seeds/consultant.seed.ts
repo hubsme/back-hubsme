@@ -12,11 +12,15 @@ export async function seedConsultants(seededUsers: { byEmail: Record<string, Use
 
   const consultantValues: ConsultantDTO[] = [
     {
-      userId: getUser('consultor@hubsme.com').id,
-      name: 'Carlos Mendoza',
+      userId: getUser('miguel.salinas@hubsme.com').id,
+      name: 'Miguel Salinas',
       bio: 'Consultor en transformacion digital, procesos y crecimiento para PYMES.',
       specialties: ['Tecnologia', 'Operaciones', 'Estrategia'],
       sectors: ['Retail', 'Manufactura', 'Logistica'],
+      photoUrl:
+        'https://storagetransporte.blob.core.windows.net/storagetransporte/consultants/photos/image_01_1778862459411.jpeg',
+      videoUrl:
+        'https://storagetransporte.blob.core.windows.net/storagetransporte/consultants/videos/video_01_1778861936432.mp4',
       pricePerHour: '150.00',
       rating: '0.00',
       totalReviews: 0,
@@ -29,6 +33,10 @@ export async function seedConsultants(seededUsers: { byEmail: Record<string, Use
       bio: 'Especialista en finanzas, control de gestion y estructuras de rentabilidad para empresas en expansion.',
       specialties: ['Finanzas', 'Planeamiento', 'Control de gestion'],
       sectors: ['Servicios', 'Salud', 'Alimentos'],
+      photoUrl:
+        'https://storagetransporte.blob.core.windows.net/storagetransporte/consultants/photos/image_03_1778862478554.jpeg',
+      videoUrl:
+        'https://storagetransporte.blob.core.windows.net/storagetransporte/consultants/videos/video_03_1778862111466.mov',
       pricePerHour: '180.00',
       rating: '0.00',
       totalReviews: 0,
@@ -41,6 +49,10 @@ export async function seedConsultants(seededUsers: { byEmail: Record<string, Use
       bio: 'Experto en operaciones, supply chain y productividad para negocios con multiples frentes operativos.',
       specialties: ['Operaciones', 'Supply chain', 'Productividad'],
       sectors: ['Manufactura', 'Construccion', 'Logistica'],
+      photoUrl:
+        'https://storagetransporte.blob.core.windows.net/storagetransporte/consultants/photos/image_02_1778862501750.jpeg',
+      videoUrl:
+        'https://storagetransporte.blob.core.windows.net/storagetransporte/consultants/videos/video_02_1778862155700.mov',
       pricePerHour: '165.00',
       rating: '0.00',
       totalReviews: 0,
@@ -53,6 +65,10 @@ export async function seedConsultants(seededUsers: { byEmail: Record<string, Use
       bio: 'Consultora en recursos humanos, cultura organizacional y desarrollo de liderazgo.',
       specialties: ['RRHH', 'Cultura', 'Liderazgo'],
       sectors: ['Servicios', 'Salud', 'Retail digital'],
+      photoUrl:
+        'https://storagetransporte.blob.core.windows.net/storagetransporte/consultants/photos/image_04_1778862546158.jpeg',
+      videoUrl:
+        'https://storagetransporte.blob.core.windows.net/storagetransporte/consultants/videos/video_04_1778862185047.mov',
       pricePerHour: '135.00',
       rating: '0.00',
       totalReviews: 0,

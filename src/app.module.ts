@@ -9,8 +9,6 @@ import { TaskModule } from './modules/admin/task/task.module';
 import { DiagnosticModule } from './modules/admin/diagnostic/diagnostic.module';
 import { SubscriptionModule } from './modules/admin/subscription/subscription.module';
 import { DashboardModule } from './modules/admin/dashboard/dashboard.module';
-import { PymeConsultantMatchModule } from './modules/admin/pyme-consultant-match/pyme-consultant-match.module';
-import { PymeConsultantMessageModule } from './modules/admin/pyme-consultant-message/pyme-consultant-message.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { StorageModule } from './modules/storage/storage.module';
 @Module({
@@ -24,8 +22,6 @@ import { StorageModule } from './modules/storage/storage.module';
     DiagnosticModule,
     SubscriptionModule,
     DashboardModule,
-    PymeConsultantMatchModule,
-    PymeConsultantMessageModule,
     StorageModule,
   ],
   controllers: [AppController],

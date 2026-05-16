@@ -35,6 +35,11 @@ export class MeetingCreateDto {
   @IsOptional()
   meetingUrl?: string;
 
+  @ApiPropertyOptional({ example: 'Revisar objetivos, contexto y dudas principales para la sesion.' })
+  @IsString()
+  @IsOptional()
+  description?: string;
+
   @ApiPropertyOptional({ enum: ['solicitada', 'confirmada', 'finalizada', 'cancelada'], default: 'confirmada' })
   @IsIn(['solicitada', 'confirmada', 'finalizada', 'cancelada'])
   @IsOptional()

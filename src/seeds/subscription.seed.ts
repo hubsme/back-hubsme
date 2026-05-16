@@ -13,7 +13,7 @@ export async function seedSubscriptions(seededUsers: { byEmail: Record<string, U
 
   const subscriptionValues: SubscriptionDTO[] = [
     {
-      userId: getUser('consultor@hubsme.com').id,
+      userId: getUser('miguel.salinas@hubsme.com').id,
       plan: 'pro',
       status: 'active',
       startedAt: daysFromNow(-120),

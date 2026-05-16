@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { eq, ilike, and, isNull, count, desc, sql } from 'drizzle-orm';
 import { database } from '@db/connection.db';
 import { meeting, MeetingDTO, meetingStatusEnum } from '@db/tables/meeting.table';
+import { task } from '@db/tables/task.table';
 
 @Injectable()
 export class MeetingRepository {
@@ -50,11 +51,19 @@ export class MeetingRepository {
   }
 
   async findOne(id: number) {
-    const result = await database
+    const meetingResult = await database
       .select()
       .from(meeting)
       .where(and(eq(meeting.id, id), isNull(meeting.deletedAt)));
-    return result[0];
+    
+    if (!meetingResult[0]) return null;
+
+    const tasks = await database
+      .select()
+      .from(task)
+      .where(and(eq(task.meetingId, id), isNull(task.deletedAt)));
+
+    return { ...meetingResult[0], tasks };
   }
 
   async create(data: MeetingDTO) {
