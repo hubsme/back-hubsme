@@ -28,7 +28,7 @@ export class PymeConsultantMatchRepository {
         or(
           ilike(pyme.name, `%${searchTerm}%`),
           ilike(pyme.sector, `%${searchTerm}%`),
-          ilike(consultant.name, `%${searchTerm}%`),
+          ilike(consultant.fullName, `%${searchTerm}%`),
           sql`${consultant.specialties}::text ILIKE ${`%${searchTerm}%`}`,
         ),
       );
@@ -69,7 +69,7 @@ export class PymeConsultantMatchRepository {
         pymeDescription: pyme.description,
         pymeLogoUrl: pyme.logoUrl,
         consultantId: pymeConsultantMatch.consultantId,
-        consultantName: consultant.name,
+        consultantName: consultant.fullName,
         consultantBio: consultant.bio,
         consultantSpecialties: consultant.specialties,
         consultantPhotoUrl: consultant.photoUrl,
@@ -105,7 +105,7 @@ export class PymeConsultantMatchRepository {
         pymeDescription: pyme.description,
         pymeLogoUrl: pyme.logoUrl,
         consultantId: pymeConsultantMatch.consultantId,
-        consultantName: consultant.name,
+        consultantName: consultant.fullName,
         consultantBio: consultant.bio,
         consultantSpecialties: consultant.specialties,
         consultantPhotoUrl: consultant.photoUrl,

@@ -23,6 +23,21 @@ export class PymeResultDto {
   ruc: string | null;
 
   @ApiProperty({ nullable: true })
+  ownerFirstName: string | null;
+
+  @ApiProperty({ nullable: true })
+  ownerLastName: string | null;
+
+  @ApiProperty({ nullable: true })
+  ownerEmail: string | null;
+
+  @ApiProperty({ nullable: true })
+  ownerPhone: string | null;
+
+  @ApiProperty({ nullable: true })
+  ownerPosition: string | null;
+
+  @ApiProperty({ nullable: true })
   sector: string | null;
 
   @ApiProperty({ nullable: true })

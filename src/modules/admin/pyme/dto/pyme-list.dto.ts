@@ -28,6 +28,15 @@ export class PymeListItemDto {
   ruc: string | null;
 
   @ApiProperty({ nullable: true })
+  ownerFirstName: string | null;
+
+  @ApiProperty({ nullable: true })
+  ownerLastName: string | null;
+
+  @ApiProperty({ nullable: true })
+  ownerEmail: string | null;
+
+  @ApiProperty({ nullable: true })
   sector: string | null;
 
   @ApiProperty({ nullable: true })

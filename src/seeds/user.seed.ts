@@ -10,15 +10,15 @@ type SeededUserGroup = {
   byEmail: Record<string, User>;
 };
 
-const adminUsers: { email: string; name: string; role: 'admin' }[] = [];
+const adminUsers: { email: string; name: string; firstName?: string; lastName?: string; role: 'admin' }[] = [];
 
-const pymeUsers: { email: string; name: string; role: 'pyme' }[] = [];
+const pymeUsers: { email: string; name: string; firstName?: string; lastName?: string; role: 'pyme' }[] = [];
 
 const consultantUsers = [
-  { email: 'miguel.salinas@hubsme.com', name: 'Miguel Salinas', role: 'consultor' as const },
-  { email: 'ana.torres@hubsme.com', name: 'Ana Lucia Torres', role: 'consultor' as const },
-  { email: 'roberto.sanchez@hubsme.com', name: 'Roberto Sanchez', role: 'consultor' as const },
-  { email: 'elena.rivas@hubsme.com', name: 'Elena Rivas', role: 'consultor' as const },
+  { email: 'miguel.salinas@hubsme.com', name: 'Miguel Salinas', firstName: 'Miguel', lastName: 'Salinas', role: 'consultor' as const },
+  { email: 'ana.torres@hubsme.com', name: 'Ana Lucia Torres', firstName: 'Ana Lucia', lastName: 'Torres', role: 'consultor' as const },
+  { email: 'roberto.sanchez@hubsme.com', name: 'Roberto Sanchez', firstName: 'Roberto', lastName: 'Sanchez', role: 'consultor' as const },
+  { email: 'elena.rivas@hubsme.com', name: 'Elena Rivas', firstName: 'Elena', lastName: 'Rivas', role: 'consultor' as const },
 ];
 
 export async function seedUsers(): Promise<SeededUserGroup> {

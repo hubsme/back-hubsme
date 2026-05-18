@@ -13,7 +13,9 @@ export async function seedConsultants(seededUsers: { byEmail: Record<string, Use
   const consultantValues: ConsultantDTO[] = [
     {
       userId: getUser('miguel.salinas@hubsme.com').id,
-      name: 'Miguel Salinas',
+      firstName: 'Miguel',
+      lastName: 'Salinas',
+      fullName: 'Miguel Salinas',
       bio: 'Consultor en transformacion digital, procesos y crecimiento para PYMES.',
       specialties: ['Tecnologia', 'Operaciones', 'Estrategia'],
       sectors: ['Retail', 'Manufactura', 'Logistica'],
@@ -29,7 +31,9 @@ export async function seedConsultants(seededUsers: { byEmail: Record<string, Use
     },
     {
       userId: getUser('ana.torres@hubsme.com').id,
-      name: 'Ana Lucia Torres',
+      firstName: 'Ana Lucia',
+      lastName: 'Torres',
+      fullName: 'Ana Lucia Torres',
       bio: 'Especialista en finanzas, control de gestion y estructuras de rentabilidad para empresas en expansion.',
       specialties: ['Finanzas', 'Planeamiento', 'Control de gestion'],
       sectors: ['Servicios', 'Salud', 'Alimentos'],
@@ -45,7 +49,9 @@ export async function seedConsultants(seededUsers: { byEmail: Record<string, Use
     },
     {
       userId: getUser('roberto.sanchez@hubsme.com').id,
-      name: 'Roberto Sanchez',
+      firstName: 'Roberto',
+      lastName: 'Sanchez',
+      fullName: 'Roberto Sanchez',
       bio: 'Experto en operaciones, supply chain y productividad para negocios con multiples frentes operativos.',
       specialties: ['Operaciones', 'Supply chain', 'Productividad'],
       sectors: ['Manufactura', 'Construccion', 'Logistica'],
@@ -61,7 +67,9 @@ export async function seedConsultants(seededUsers: { byEmail: Record<string, Use
     },
     {
       userId: getUser('elena.rivas@hubsme.com').id,
-      name: 'Elena Rivas',
+      firstName: 'Elena',
+      lastName: 'Rivas',
+      fullName: 'Elena Rivas',
       bio: 'Consultora en recursos humanos, cultura organizacional y desarrollo de liderazgo.',
       specialties: ['RRHH', 'Cultura', 'Liderazgo'],
       sectors: ['Servicios', 'Salud', 'Retail digital'],
@@ -111,7 +119,7 @@ export async function seedConsultants(seededUsers: { byEmail: Record<string, Use
     );
 
   return consultantRows.reduce<Record<string, (typeof consultantRows)[number]>>((acc, current) => {
-    acc[current.name] = current;
+    acc[current.fullName] = current;
     return acc;
   }, {});
 }

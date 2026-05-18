@@ -18,6 +18,16 @@ export class UserUpdateDto {
   @IsOptional()
   name?: string;
 
+  @ApiPropertyOptional({ example: 'Carlos' })
+  @IsString()
+  @IsOptional()
+  firstName?: string;
+
+  @ApiPropertyOptional({ example: 'Mendoza' })
+  @IsString()
+  @IsOptional()
+  lastName?: string;
+
   @ApiPropertyOptional({ enum: ['admin', 'pyme', 'consultor'] })
   @IsIn(['admin', 'pyme', 'consultor'])
   @IsOptional()

@@ -1,1 +1,0 @@
-ALTER TABLE "meeting" DROP COLUMN IF EXISTS "minutes";

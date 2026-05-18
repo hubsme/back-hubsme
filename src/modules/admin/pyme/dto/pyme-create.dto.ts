@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
+import { IsEmail, IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
 
 export class PymeCreateDto {
   @ApiProperty({ example: 2 })
@@ -17,6 +17,31 @@ export class PymeCreateDto {
   @IsString()
   @IsOptional()
   ruc?: string;
+
+  @ApiPropertyOptional({ example: 'Maria' })
+  @IsString()
+  @IsOptional()
+  ownerFirstName?: string;
+
+  @ApiPropertyOptional({ example: 'Torres' })
+  @IsString()
+  @IsOptional()
+  ownerLastName?: string;
+
+  @ApiPropertyOptional({ example: 'maria@empresa.com' })
+  @IsEmail()
+  @IsOptional()
+  ownerEmail?: string;
+
+  @ApiPropertyOptional({ example: '+51999888777' })
+  @IsString()
+  @IsOptional()
+  ownerPhone?: string;
+
+  @ApiPropertyOptional({ example: 'Gerente general' })
+  @IsString()
+  @IsOptional()
+  ownerPosition?: string;
 
   @ApiPropertyOptional({ example: 'Manufactura' })
   @IsString()

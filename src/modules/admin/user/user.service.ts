@@ -49,8 +49,11 @@ export class UserService {
         ...createUserDto,
         email: createUserDto.email.trim().toLowerCase(),
         name: createUserDto.name.trim(),
+        firstName: createUserDto.firstName?.trim(),
+        lastName: createUserDto.lastName?.trim(),
         password: hashedPassword,
         role: createUserDto.role ?? 'pyme',
+        authProvider: 'local',
         isActive: 'true',
       });
 
@@ -76,6 +79,14 @@ export class UserService {
 
       if (updateUserDto.name) {
         updateData.name = updateUserDto.name.trim();
+      }
+
+      if (updateUserDto.firstName) {
+        updateData.firstName = updateUserDto.firstName.trim();
+      }
+
+      if (updateUserDto.lastName) {
+        updateData.lastName = updateUserDto.lastName.trim();
       }
 
       if (updateUserDto.password) {

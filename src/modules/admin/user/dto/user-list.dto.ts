@@ -29,8 +29,17 @@ export class UserListItemDto {
   @ApiProperty()
   name: string;
 
+  @ApiProperty({ nullable: true })
+  firstName: string | null;
+
+  @ApiProperty({ nullable: true })
+  lastName: string | null;
+
   @ApiProperty({ enum: ['admin', 'pyme', 'consultor'] })
   role: 'admin' | 'pyme' | 'consultor';
+
+  @ApiProperty({ enum: ['local', 'google'] })
+  authProvider: 'local' | 'google';
 
   @ApiProperty({ enum: ['true', 'false'] })
   isActive: string;

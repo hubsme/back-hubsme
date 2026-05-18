@@ -17,7 +17,9 @@ export class ConsultantRepository {
       const searchTerm = filters.search.trim();
       conditions.push(
         or(
-          ilike(consultant.name, `%${searchTerm}%`),
+          ilike(consultant.fullName, `%${searchTerm}%`),
+          ilike(consultant.firstName, `%${searchTerm}%`),
+          ilike(consultant.lastName, `%${searchTerm}%`),
           ilike(consultant.bio, `%${searchTerm}%`),
           sql`${consultant.specialties}::text ILIKE ${`%${searchTerm}%`}`,
         ),

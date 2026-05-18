@@ -138,7 +138,9 @@ export class ConsultantService {
   private clean<T extends Partial<ConsultantCreateDto>>(data: T): Partial<ConsultantDTO> {
     return {
       ...data,
-      name: data.name?.trim(),
+      firstName: data.firstName?.trim(),
+      lastName: data.lastName?.trim(),
+      fullName: this.buildFullName(data),
       bio: data.bio?.trim(),
       specialties: data.specialties?.map((item) => item.trim()).filter(Boolean),
       sectors: data.sectors?.map((item) => item.trim()).filter(Boolean),
@@ -146,5 +148,12 @@ export class ConsultantService {
       videoUrl: data.videoUrl?.trim(),
       pricePerHour: data.pricePerHour === undefined ? undefined : data.pricePerHour.toFixed(2),
     };
+  }
+
+  private buildFullName(data: Partial<ConsultantCreateDto>) {
+    const explicitFullName = data.fullName?.trim();
+    if (explicitFullName) return explicitFullName;
+
+    return [data.firstName?.trim(), data.lastName?.trim()].filter(Boolean).join(' ');
   }
 }

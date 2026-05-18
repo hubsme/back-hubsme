@@ -8,10 +8,20 @@ export class ConsultantCreateDto {
   @IsInt()
   userId: number;
 
-  @ApiProperty({ example: 'Carlos Mendoza' })
+  @ApiPropertyOptional({ example: 'Carlos' })
   @IsString()
-  @IsNotEmpty()
-  name: string;
+  @IsOptional()
+  firstName?: string;
+
+  @ApiPropertyOptional({ example: 'Mendoza' })
+  @IsString()
+  @IsOptional()
+  lastName?: string;
+
+  @ApiPropertyOptional({ example: 'Carlos Mendoza' })
+  @IsString()
+  @IsOptional()
+  fullName?: string;
 
   @ApiPropertyOptional({ example: 'Consultor en transformacion digital para PYMES.' })
   @IsString()

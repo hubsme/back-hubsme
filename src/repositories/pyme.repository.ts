@@ -11,7 +11,15 @@ export class PymeRepository {
 
     if (filters?.search) {
       const searchTerm = filters.search.trim();
-      conditions.push(or(ilike(pyme.name, `%${searchTerm}%`), ilike(pyme.ruc, `%${searchTerm}%`)));
+      conditions.push(
+        or(
+          ilike(pyme.name, `%${searchTerm}%`),
+          ilike(pyme.ruc, `%${searchTerm}%`),
+          ilike(pyme.ownerFirstName, `%${searchTerm}%`),
+          ilike(pyme.ownerLastName, `%${searchTerm}%`),
+          ilike(pyme.ownerEmail, `%${searchTerm}%`),
+        ),
+      );
     }
 
     if (filters?.sector) {

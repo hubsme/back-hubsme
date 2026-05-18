@@ -12,7 +12,9 @@ export const consultant = pgTable(
     userId: integer('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
-    name: varchar('name', { length: 200 }).notNull(),
+    fullName: varchar('full_name', { length: 240 }).notNull(),
+    firstName: varchar('first_name', { length: 120 }),
+    lastName: varchar('last_name', { length: 120 }),
     bio: text('bio'),
     specialties: text('specialties').array().default([]).notNull(),
     sectors: text('sectors').array().default([]).notNull(),
@@ -25,7 +27,9 @@ export const consultant = pgTable(
     validated: varchar('validated', { length: 10 }).default('false').notNull(),
   },
   (t) => [
-    index('consultant_name_idx').using('gin', t.name.op('gin_trgm_ops')),
+    index('consultant_full_name_idx').using('gin', t.fullName.op('gin_trgm_ops')),
+    index('consultant_first_name_idx').using('gin', t.firstName.op('gin_trgm_ops')),
+    index('consultant_last_name_idx').using('gin', t.lastName.op('gin_trgm_ops')),
     index('consultant_specialties_idx').using('gin', t.specialties),
     index('consultant_sectors_idx').using('gin', t.sectors),
     index('consultant_active_idx').on(t.active),

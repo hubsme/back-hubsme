@@ -14,6 +14,11 @@ export const pyme = pgTable(
       .references(() => user.id, { onDelete: 'cascade' }),
     name: varchar('name', { length: 200 }).notNull(),
     ruc: varchar('ruc', { length: 20 }),
+    ownerFirstName: varchar('owner_first_name', { length: 120 }),
+    ownerLastName: varchar('owner_last_name', { length: 120 }),
+    ownerEmail: varchar('owner_email', { length: 255 }),
+    ownerPhone: varchar('owner_phone', { length: 30 }),
+    ownerPosition: varchar('owner_position', { length: 120 }),
     sector: varchar('sector', { length: 120 }),
     numEmployees: integer('num_employees'),
     yearsInOperation: integer('years_in_operation'),
@@ -22,6 +27,8 @@ export const pyme = pgTable(
   },
   (t) => [
     index('pyme_name_idx').using('gin', t.name.op('gin_trgm_ops')),
+    index('pyme_owner_name_idx').using('gin', t.ownerFirstName.op('gin_trgm_ops')),
+    index('pyme_owner_email_idx').on(t.ownerEmail),
     index('pyme_sector_idx').on(t.sector),
     index('pyme_user_id_idx').on(t.userId),
     uniqueIndex('pyme_user_unique_active_idx')

@@ -19,7 +19,14 @@ export class UserRepository {
 
     if (filters?.search) {
       const searchTerm = filters.search.trim();
-      conditions.push(or(ilike(user.name, `%${searchTerm}%`), ilike(user.email, `%${searchTerm}%`)));
+      conditions.push(
+        or(
+          ilike(user.name, `%${searchTerm}%`),
+          ilike(user.firstName, `%${searchTerm}%`),
+          ilike(user.lastName, `%${searchTerm}%`),
+          ilike(user.email, `%${searchTerm}%`),
+        ),
+      );
     }
 
     if (filters?.role) {
@@ -58,6 +65,14 @@ export class UserRepository {
       .select()
       .from(user)
       .where(and(eq(user.email, email), isNull(user.deletedAt)));
+    return result[0];
+  }
+
+  async findByGoogleId(googleId: string) {
+    const result = await database
+      .select()
+      .from(user)
+      .where(and(eq(user.googleId, googleId), isNull(user.deletedAt)));
     return result[0];
   }
 
