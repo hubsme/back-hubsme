@@ -222,7 +222,7 @@ export class AuthService {
 
     if (!clientId || !clientSecret || !redirectUri) {
       throw new BadRequestException(['Google OAuth no esta configurado en el backend']);
-    }
+    } 
 
     const response = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
