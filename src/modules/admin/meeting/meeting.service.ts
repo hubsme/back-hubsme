@@ -47,7 +47,8 @@ export class MeetingService {
       meetingUrl: data.meetingUrl?.trim() || this.generateMeetingUrl(),
       description: data.description?.trim(),
       durationMinutes: data.durationMinutes ?? 60,
-      status: data.status ?? 'solicitada',
+      status: 'solicitada',
+      requestedBy: data.requestedBy ?? 'pyme',
     });
   }
 

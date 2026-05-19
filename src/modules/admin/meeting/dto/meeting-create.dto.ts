@@ -40,8 +40,13 @@ export class MeetingCreateDto {
   @IsOptional()
   description?: string;
 
-  @ApiPropertyOptional({ enum: ['solicitada', 'confirmada', 'finalizada', 'cancelada'], default: 'confirmada' })
+  @ApiPropertyOptional({ enum: ['solicitada', 'confirmada', 'finalizada', 'cancelada'], default: 'solicitada' })
   @IsIn(['solicitada', 'confirmada', 'finalizada', 'cancelada'])
   @IsOptional()
   status?: 'solicitada' | 'confirmada' | 'finalizada' | 'cancelada';
+
+  @ApiPropertyOptional({ enum: ['pyme', 'consultor'], default: 'pyme' })
+  @IsIn(['pyme', 'consultor'])
+  @IsOptional()
+  requestedBy?: 'pyme' | 'consultor';
 }

@@ -2,6 +2,7 @@ import { pgTable, serial, text, timestamp, integer, pgEnum, index } from 'drizzl
 import { user } from './user.table';
 
 export const meetingStatusEnum = pgEnum('meeting_status', ['solicitada', 'confirmada', 'finalizada', 'cancelada']);
+export const meetingRequestedByEnum = pgEnum('meeting_requested_by', ['pyme', 'consultor']);
 
 export const meeting = pgTable(
   'meeting',
@@ -20,7 +21,8 @@ export const meeting = pgTable(
     startTime: timestamp('start_time').notNull(),
     durationMinutes: integer('duration_minutes').default(60).notNull(),
     meetingUrl: text('meeting_url'),
-    status: meetingStatusEnum('status').default('confirmada').notNull(),
+    status: meetingStatusEnum('status').default('solicitada').notNull(),
+    requestedBy: meetingRequestedByEnum('requested_by').default('pyme').notNull(),
     description: text('description'),
     completedAt: timestamp('completed_at'),
   },
