@@ -130,6 +130,43 @@ export class TeamsMeetingService {
     }
   }
 
+  async findMeetingRecordingInOneDrive(
+    title: string,
+  ): Promise<{ name: string; downloadUrl: string; webUrl: string } | null> {
+    this.assertGraphConfig();
+    this.ensureGraphForAppOnlyAuth();
+
+    const organizerUserId = process.env.MS_GRAPH_TEAMS_ORGANIZER_USER_ID;
+
+    try {
+      // Listar archivos en la carpeta de Grabaciones de OneDrive del organizador
+      const response = await this.appGraphClient!
+        .api(`/users/${organizerUserId}/drive/root:/Recordings:/children`)
+        .get();
+
+      if (!response || !response.value) return null;
+
+      // Buscar un archivo que contenga el título de la reunión en su nombre
+      const cleanTitle = title.toLowerCase().trim();
+      const match = response.value.find((file: any) =>
+        file.name.toLowerCase().includes(cleanTitle) && file.name.endsWith('.mp4')
+      );
+
+      if (match) {
+        return {
+          name: match.name,
+          downloadUrl: match['@microsoft.graph.downloadUrl'] || '',
+          webUrl: match.webUrl || '',
+        };
+      }
+
+      return null;
+    } catch (error: any) {
+      this.logger.warn(`Failed to search OneDrive for recordings: ${error.message || error}`);
+      return null;
+    }
+  }
+
   private maskValue(value?: string): string {
     if (!value) return 'missing';
     if (value.length <= 8) return '***';

@@ -89,11 +89,41 @@ export class MeetingService {
       throw new BadRequestException(['La reunion no tiene un enlace de Microsoft Teams']);
     }
 
+    const now = new Date();
+    const startTime = new Date(meeting.startTime);
+    const duration = meeting.durationMinutes ?? 60;
+
+    // Permitir unirse desde 10 minutos antes del inicio de la reunión
+    const allowedStart = new Date(startTime.getTime() - 10 * 60 * 1000);
+    // Permitir unirse hasta 30 minutos después del fin de la reunión
+    const allowedEnd = new Date(startTime.getTime() + (duration + 30) * 60 * 1000);
+
+    if (now < allowedStart) {
+      const allowedStartStr = allowedStart.toLocaleTimeString('es-PE', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      throw new BadRequestException([
+        `La reunión aún no está activa. Podrás unirte a partir de las ${allowedStartStr}.`,
+      ]);
+    }
+
+    if (now > allowedEnd) {
+      throw new BadRequestException([
+        'Esta reunión ha expirado y ya no está activa.',
+      ]);
+    }
+
     return this.teamsMeetingService.createAnonymousJoinToken({
       meetingId: meeting.id,
       meetingUrl: meeting.meetingUrl,
       displayName: data.displayName?.trim() || undefined,
     });
+  }
+
+  async getMeetingRecording(id: number) {
+    const meeting = await this.findOne(id);
+    return this.teamsMeetingService.findMeetingRecordingInOneDrive(meeting.title);
   }
 
   async update(id: number, data: MeetingUpdateDto) {

@@ -60,6 +60,13 @@ export class MeetingController {
     return this.meetingService.createTeamsJoinToken(+id, joinDto);
   }
 
+  @Get('recording/:id')
+  @ApiOperation({ summary: 'Get meeting recording from OneDrive' })
+  @ApiParam({ name: 'id', type: 'number' })
+  getRecording(@Param('id') id: string) {
+    return this.meetingService.getMeetingRecording(+id);
+  }
+
   @Patch('update/:id')
   @ApiOperation({ summary: 'Update a meeting' })
   @ApiParam({ name: 'id', type: 'number' })
