@@ -1,5 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { randomUUID } from 'crypto';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { TaskDTO } from '@db/tables/task.table';
 import { MeetingRepository } from '@repositories/meeting.repository';
 import { PymeConsultantMatchRepository } from '@repositories/pyme-consultant-match.repository';
@@ -7,14 +6,19 @@ import { TaskRepository } from '@repositories/task.repository';
 import { MeetingCreateDto } from './dto/meeting-create.dto';
 import { MeetingFinalizeDto } from './dto/meeting-finalize.dto';
 import { MeetingListFiltersDto } from './dto/meeting-list.dto';
+import { MeetingTeamsJoinDto } from './dto/meeting-teams-join.dto';
 import { MeetingUpdateDto } from './dto/meeting-update.dto';
+import { TeamsMeetingService } from './teams-meeting.service';
 
 @Injectable()
 export class MeetingService {
+  private readonly logger = new Logger(MeetingService.name);
+
   constructor(
     private readonly meetingRepository: MeetingRepository,
     private readonly taskRepository: TaskRepository,
     private readonly matchRepository: PymeConsultantMatchRepository,
+    private readonly teamsMeetingService: TeamsMeetingService,
   ) {}
 
   async findAllPaginated(filters: MeetingListFiltersDto) {
@@ -41,23 +45,69 @@ export class MeetingService {
       throw new BadRequestException(['Para solicitar una reunion debe existir un match aceptado']);
     }
 
+    const title = data.title.trim();
+    const durationMinutes = data.durationMinutes ?? 60;
+
     return this.meetingRepository.create({
       ...data,
-      title: data.title.trim(),
-      meetingUrl: data.meetingUrl?.trim() || this.generateMeetingUrl(),
+      title,
+      meetingUrl: null,
       description: data.description?.trim(),
-      durationMinutes: data.durationMinutes ?? 60,
+      durationMinutes,
       status: 'solicitada',
       requestedBy: data.requestedBy ?? 'pyme',
     });
   }
 
+  async confirm(id: number) {
+    const meeting = await this.findOne(id);
+    this.logger.log(
+      `Confirming meeting ${meeting.id}: status=${meeting.status}, pymeId=${meeting.pymeId}, consultantId=${meeting.consultantId}, startTime=${meeting.startTime.toISOString()}, durationMinutes=${meeting.durationMinutes}`,
+    );
+
+    if (meeting.status !== 'solicitada') {
+      this.logger.warn(`Meeting ${meeting.id} cannot be confirmed because status is ${meeting.status}`);
+      throw new BadRequestException(['Solo se pueden confirmar reuniones solicitadas']);
+    }
+
+    const meetingUrl = await this.createTeamsMeetingUrl({
+      title: meeting.title,
+      startTime: meeting.startTime,
+      durationMinutes: meeting.durationMinutes,
+    });
+    this.logger.log(`Teams meeting URL created for meeting ${meeting.id}`);
+
+    return this.meetingRepository.update(id, {
+      status: 'confirmada',
+      meetingUrl,
+    });
+  }
+
+  async createTeamsJoinToken(id: number, data: MeetingTeamsJoinDto) {
+    const meeting = await this.findOne(id);
+    if (!meeting.meetingUrl?.includes('teams.microsoft.com')) {
+      throw new BadRequestException(['La reunion no tiene un enlace de Microsoft Teams']);
+    }
+
+    return this.teamsMeetingService.createAnonymousJoinToken({
+      meetingId: meeting.id,
+      meetingUrl: meeting.meetingUrl,
+      displayName: data.displayName?.trim() || undefined,
+    });
+  }
+
   async update(id: number, data: MeetingUpdateDto) {
     await this.findOne(id);
+    if (data.status === 'confirmada') {
+      throw new BadRequestException(['Usa el endpoint de confirmacion para aprobar reuniones']);
+    }
+    if (data.status === 'finalizada') {
+      throw new BadRequestException(['Usa el endpoint de finalizacion para cerrar reuniones']);
+    }
+
     return this.meetingRepository.update(id, {
       ...data,
       title: data.title?.trim(),
-      meetingUrl: data.meetingUrl?.trim(),
       description: data.description?.trim(),
     });
   }
@@ -96,7 +146,18 @@ export class MeetingService {
     return this.meetingRepository.delete(id);
   }
 
-  private generateMeetingUrl(): string {
-    return `https://meet.hubsme.app/room/${randomUUID()}`;
+  private async createTeamsMeetingUrl(data: {
+    title: string;
+    startTime: Date;
+    durationMinutes: number;
+  }): Promise<string> {
+    if (!this.teamsMeetingService.isTeamsMeetingCreationEnabled()) {
+      throw new BadRequestException([
+        'Microsoft Teams no esta habilitado. Configura TEAMS_MEETINGS_ENABLED=true para confirmar reuniones.',
+      ]);
+    }
+
+    const teamsMeeting = await this.teamsMeetingService.createOnlineMeeting(data);
+    return teamsMeeting.joinWebUrl;
   }
 }

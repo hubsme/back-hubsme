@@ -6,6 +6,7 @@ import { MeetingCreateDto } from './dto/meeting-create.dto';
 import { MeetingFinalizeDto } from './dto/meeting-finalize.dto';
 import { MeetingListDto, MeetingListFiltersDto } from './dto/meeting-list.dto';
 import { MeetingFinalizeResultDto, MeetingResultDto } from './dto/meeting-result.dto';
+import { MeetingTeamsJoinDto, MeetingTeamsJoinResponseDto } from './dto/meeting-teams-join.dto';
 import { MeetingUpdateDto } from './dto/meeting-update.dto';
 import { MeetingService } from './meeting.service';
 
@@ -39,6 +40,24 @@ export class MeetingController {
   @ApiResponse({ status: 400, type: HttpErrorDto })
   create(@Body() createMeetingDto: MeetingCreateDto) {
     return this.meetingService.create(createMeetingDto);
+  }
+
+  @Post('confirm/:id')
+  @ApiOperation({ summary: 'Confirm a requested meeting and create its Teams meeting URL internally' })
+  @ApiParam({ name: 'id', type: 'number' })
+  @ApiResponse({ status: 200, type: MeetingResultDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  confirm(@Param('id') id: string) {
+    return this.meetingService.confirm(+id);
+  }
+
+  @Post('teams-join/:id')
+  @ApiOperation({ summary: 'Create an anonymous ACS token to join a Teams meeting inside the app' })
+  @ApiParam({ name: 'id', type: 'number' })
+  @ApiResponse({ status: 200, type: MeetingTeamsJoinResponseDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  createTeamsJoinToken(@Param('id') id: string, @Body() joinDto: MeetingTeamsJoinDto) {
+    return this.meetingService.createTeamsJoinToken(+id, joinDto);
   }
 
   @Patch('update/:id')
