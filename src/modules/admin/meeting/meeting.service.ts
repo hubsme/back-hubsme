@@ -146,12 +146,15 @@ export class MeetingService {
   }
 
   async update(id: number, data: MeetingUpdateDto) {
-    await this.findOne(id);
+    const meeting = await this.findOne(id);
     if (data.status === 'confirmada') {
       throw new BadRequestException(['Usa el endpoint de confirmacion para aprobar reuniones']);
     }
     if (data.status === 'finalizada') {
       throw new BadRequestException(['Usa el endpoint de finalizacion para cerrar reuniones']);
+    }
+    if (data.status === 'cancelada' && meeting.status !== 'solicitada') {
+      throw new BadRequestException(['Solo se pueden cancelar reuniones en estado solicitado']);
     }
 
     return this.meetingRepository.update(id, {
@@ -173,6 +176,9 @@ export class MeetingService {
       description,
       completedAt: new Date(),
     });
+
+    // Soft-delete existing tasks for this meeting to prevent duplicates on edit/refinalize
+    await this.taskRepository.deleteByMeetingId(id);
 
     const tasksPayload: TaskDTO[] = (data.tasks ?? []).map((task) => ({
       meetingId: currentMeeting.id,

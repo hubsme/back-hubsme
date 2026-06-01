@@ -94,4 +94,12 @@ export class TaskRepository {
       .returning();
     return result[0];
   }
+
+  async deleteByMeetingId(meetingId: number) {
+    return await database
+      .update(task)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(task.meetingId, meetingId), isNull(task.deletedAt)))
+      .returning();
+  }
 }
