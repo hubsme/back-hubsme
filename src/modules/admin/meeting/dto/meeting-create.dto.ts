@@ -30,18 +30,13 @@ export class MeetingCreateDto {
   @IsOptional()
   durationMinutes?: number;
 
-  @ApiPropertyOptional({ example: 'https://meet.google.com/demo' })
-  @IsString()
-  @IsOptional()
-  meetingUrl?: string;
-
   @ApiPropertyOptional({ example: 'Revisar objetivos, contexto y dudas principales para la sesion.' })
   @IsString()
   @IsOptional()
   description?: string;
 
-  @ApiPropertyOptional({ enum: ['solicitada', 'confirmada', 'finalizada', 'cancelada'], default: 'confirmada' })
-  @IsIn(['solicitada', 'confirmada', 'finalizada', 'cancelada'])
+  @ApiPropertyOptional({ enum: ['pyme', 'consultor'], default: 'pyme' })
+  @IsIn(['pyme', 'consultor'])
   @IsOptional()
-  status?: 'solicitada' | 'confirmada' | 'finalizada' | 'cancelada';
+  requestedBy?: 'pyme' | 'consultor';
 }

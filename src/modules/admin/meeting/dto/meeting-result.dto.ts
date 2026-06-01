@@ -32,8 +32,14 @@ export class MeetingResultDto {
   @ApiProperty({ nullable: true })
   meetingUrl: string | null;
 
+  @ApiProperty({ nullable: true })
+  teamsOnlineMeetingId: string | null;
+
   @ApiProperty({ enum: ['solicitada', 'confirmada', 'finalizada', 'cancelada'] })
   status: 'solicitada' | 'confirmada' | 'finalizada' | 'cancelada';
+
+  @ApiProperty({ enum: ['pyme', 'consultor'] })
+  requestedBy: 'pyme' | 'consultor';
 
   @ApiProperty({ nullable: true })
   description: string | null;
