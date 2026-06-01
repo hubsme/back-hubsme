@@ -21,6 +21,7 @@ export const meeting = pgTable(
     startTime: timestamp('start_time').notNull(),
     durationMinutes: integer('duration_minutes').default(60).notNull(),
     meetingUrl: text('meeting_url'),
+    teamsOnlineMeetingId: text('teams_online_meeting_id'),
     status: meetingStatusEnum('status').default('solicitada').notNull(),
     requestedBy: meetingRequestedByEnum('requested_by').default('pyme').notNull(),
     description: text('description'),

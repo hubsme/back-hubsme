@@ -52,6 +52,7 @@ export class MeetingService {
       ...data,
       title,
       meetingUrl: null,
+      teamsOnlineMeetingId: null,
       description: data.description?.trim(),
       durationMinutes,
       status: 'solicitada',
@@ -70,7 +71,7 @@ export class MeetingService {
       throw new BadRequestException(['Solo se pueden confirmar reuniones solicitadas']);
     }
 
-    const meetingUrl = await this.createTeamsMeetingUrl({
+    const teamsMeeting = await this.createTeamsMeeting({
       title: meeting.title,
       startTime: meeting.startTime,
       durationMinutes: meeting.durationMinutes,
@@ -79,7 +80,8 @@ export class MeetingService {
 
     return this.meetingRepository.update(id, {
       status: 'confirmada',
-      meetingUrl,
+      meetingUrl: teamsMeeting.joinWebUrl,
+      teamsOnlineMeetingId: teamsMeeting.id,
     });
   }
 
@@ -109,9 +111,7 @@ export class MeetingService {
     }
 
     if (now > allowedEnd) {
-      throw new BadRequestException([
-        'Esta reunión ha expirado y ya no está activa.',
-      ]);
+      throw new BadRequestException(['Esta reunión ha expirado y ya no está activa.']);
     }
 
     return this.teamsMeetingService.createAnonymousJoinToken({
@@ -121,9 +121,28 @@ export class MeetingService {
     });
   }
 
-  async getMeetingRecording(id: number) {
+  async listMeetingRecordings(id: number) {
     const meeting = await this.findOne(id);
-    return this.teamsMeetingService.findMeetingRecordingInOneDrive(meeting.title);
+    if (!meeting.teamsOnlineMeetingId) return [];
+
+    try {
+      return await this.teamsMeetingService.listOnlineMeetingRecordings(meeting.teamsOnlineMeetingId);
+    } catch (error: unknown) {
+      if (!this.isInvalidOnlineMeetingIdError(error) || !meeting.meetingUrl) {
+        throw error;
+      }
+
+      const onlineMeeting = await this.teamsMeetingService.resolveOnlineMeetingByJoinWebUrl(meeting.meetingUrl);
+      if (!onlineMeeting?.id) {
+        throw error;
+      }
+
+      await this.meetingRepository.update(meeting.id, {
+        teamsOnlineMeetingId: onlineMeeting.id,
+      });
+
+      return this.teamsMeetingService.listOnlineMeetingRecordings(onlineMeeting.id);
+    }
   }
 
   async update(id: number, data: MeetingUpdateDto) {
@@ -176,18 +195,22 @@ export class MeetingService {
     return this.meetingRepository.delete(id);
   }
 
-  private async createTeamsMeetingUrl(data: {
+  private async createTeamsMeeting(data: {
     title: string;
     startTime: Date;
     durationMinutes: number;
-  }): Promise<string> {
+  }): Promise<{ id: string; joinWebUrl: string }> {
     if (!this.teamsMeetingService.isTeamsMeetingCreationEnabled()) {
       throw new BadRequestException([
         'Microsoft Teams no esta habilitado. Configura TEAMS_MEETINGS_ENABLED=true para confirmar reuniones.',
       ]);
     }
 
-    const teamsMeeting = await this.teamsMeetingService.createOnlineMeeting(data);
-    return teamsMeeting.joinWebUrl;
+    return this.teamsMeetingService.createOnlineMeeting(data);
+  }
+
+  private isInvalidOnlineMeetingIdError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error);
+    return message.toLowerCase().includes('invalid meeting id');
   }
 }

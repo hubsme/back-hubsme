@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '@modules/auth/jwt-auth.guard';
 import { MeetingCreateDto } from './dto/meeting-create.dto';
 import { MeetingFinalizeDto } from './dto/meeting-finalize.dto';
 import { MeetingListDto, MeetingListFiltersDto } from './dto/meeting-list.dto';
+import { MeetingRecordingDto } from './dto/meeting-recording.dto';
 import { MeetingFinalizeResultDto, MeetingResultDto } from './dto/meeting-result.dto';
 import { MeetingTeamsJoinDto, MeetingTeamsJoinResponseDto } from './dto/meeting-teams-join.dto';
 import { MeetingUpdateDto } from './dto/meeting-update.dto';
@@ -60,11 +61,13 @@ export class MeetingController {
     return this.meetingService.createTeamsJoinToken(+id, joinDto);
   }
 
-  @Get('recording/:id')
-  @ApiOperation({ summary: 'Get meeting recording from OneDrive' })
+  @Get('recordings/:id')
+  @ApiOperation({ summary: 'List Microsoft Graph recordings for a meeting' })
   @ApiParam({ name: 'id', type: 'number' })
-  getRecording(@Param('id') id: string) {
-    return this.meetingService.getMeetingRecording(+id);
+  @ApiResponse({ status: 200, type: [MeetingRecordingDto] })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  getRecordings(@Param('id') id: string) {
+    return this.meetingService.listMeetingRecordings(+id);
   }
 
   @Patch('update/:id')

@@ -98,14 +98,24 @@ Para garantizar la privacidad, la automatización y el control de accesos a la s
 
 ### 🎙️ 1. Grabación y Transcripción Automática en la Nube (Opción A)
 * **¿Por qué es automática?** Los usuarios de la web embebida (ACS) entran a la llamada como **invitados anónimos**, por lo que Microsoft Teams no les permite presionar manualmente el botón de "Iniciar Grabación".
-* **Solución y Requerimiento de Endpoint:** La creación de reuniones utiliza el endpoint `/calendar/events` para que los eventos aparezcan automáticamente en el calendario del organizador sin requerir políticas complejas de acceso.
-* **Cómo habilitar la Grabación Automática sin cambiar de endpoint:**
-  1. **A nivel de Teams (Recomendado):** En el panel de Teams Admin Center (`admin.teams.microsoft.com`), ve a **Reuniones > Directivas de reunión** y edita tu política (ej. Global). En la sección *Grabación y transcripción*, activa la opción para que las reuniones de los usuarios con esta política se graben y transcriban de forma automática al iniciar.
-  2. **Vía PowerShell (Para usar onlineMeetings directo):** Si a futuro decides usar el endpoint `/onlineMeetings`, un administrador de TI de tu tenant de Microsoft 365 debe ejecutar los siguientes comandos en PowerShell de Skype/Teams para crear y asignar una política de acceso de aplicación a tu ID de Cliente de Azure:
-     ```powershell
-     New-CsApplicationAccessPolicy -Identity "HubsmeTeamsPolicy" -AppIds "tu-client-id" -Description "Access to online meetings"
-     Grant-CsApplicationAccessPolicy -PolicyName "HubsmeTeamsPolicy" -Identity "organizer-upn-o-object-id"
-     ```
+* **Solución y Requerimiento de Endpoint:** La creación de reuniones utiliza el endpoint directo `/onlineMeetings` para crear y configurar la reunión de forma óptima en una sola petición.
+* **Cómo habilitar la Grabación Automática y Omisión de Sala de Espera de forma directa (PowerShell de Teams):**
+  Dado que la plataforma utiliza el endpoint directo `/onlineMeetings`, un administrador de TI de tu tenant de Microsoft 365 debe ejecutar exactamente los siguientes comandos en PowerShell de Skype/Teams para conceder la política de acceso de aplicación a tu ID de Cliente de Azure AD:
+
+  ```powershell
+  # 1. Instala el módulo oficial de Microsoft Teams (si no lo tienes instalado)
+  Install-Module -Name MicrosoftTeams -Force -AllowClobber
+
+  # 2. Conéctate a tu portal de Microsoft Teams (te pedirá iniciar sesión con tu cuenta de Administrador Global)
+  Connect-MicrosoftTeams
+
+  # 3. Crea la política de acceso de aplicación asociándola a tu App ID de Azure AD
+  New-CsApplicationAccessPolicy -Identity "HubsmeTeamsAccessPolicy" -AppIds "5599cc17-d629-4723-bea2-65d3402b4dec" -Description "Permitir a Hubsme interactuar con las reuniones de Teams"
+
+  # 4. Concede la política creada a tu usuario Organizador de Teams
+  Grant-CsApplicationAccessPolicy -PolicyName "HubsmeTeamsAccessPolicy" -Identity "2908bfbb-da90-4493-a334-8cee5c3510b7"
+  ```
+
 
 ### 📂 2. Obtención de Grabaciones desde OneDrive por API (Implementado)
 * **¿Cómo funciona?** Cuando una reunión de Teams finaliza y ha sido grabada, Teams guarda el archivo `.mp4` automáticamente en la carpeta `Recordings` del OneDrive de la cuenta organizadora (`MS_GRAPH_TEAMS_ORGANIZER_USER_ID`).
