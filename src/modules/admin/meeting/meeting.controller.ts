@@ -71,8 +71,8 @@ export class MeetingController {
     return this.meetingService.listMeetingRecordings(+id);
   }
 
-  @Get('copilot-summary/:id')
-  @ApiOperation({ summary: 'Get Microsoft Copilot AI insights (notes & action items) for a meeting' })
+  @Get('hubsme-ai/:id')
+  @ApiOperation({ summary: 'Get Hubsme AI insights (summary & action tasks) for a meeting' })
   @ApiParam({ name: 'id', type: 'number' })
   @ApiResponse({ status: 200, type: MeetingCopilotSummaryDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })

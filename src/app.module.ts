@@ -11,6 +11,7 @@ import { SubscriptionModule } from './modules/admin/subscription/subscription.mo
 import { DashboardModule } from './modules/admin/dashboard/dashboard.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { StorageModule } from './modules/storage/storage.module';
+import { PowerAutomateModule } from './modules/admin/powerautomate/powerautomate.module';
 @Module({
   imports: [
     AuthModule,
@@ -23,6 +24,7 @@ import { StorageModule } from './modules/storage/storage.module';
     SubscriptionModule,
     DashboardModule,
     StorageModule,
+    PowerAutomateModule,
   ],
   controllers: [AppController],
   providers: [AppService],

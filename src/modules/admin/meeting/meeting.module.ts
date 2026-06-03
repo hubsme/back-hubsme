@@ -5,8 +5,10 @@ import { MeetingRepository } from '@repositories/meeting.repository';
 import { TaskRepository } from '@repositories/task.repository';
 import { PymeConsultantMatchRepository } from '@repositories/pyme-consultant-match.repository';
 import { TeamsMeetingService } from './teams-meeting.service';
+import { PowerAutomateModule } from '../powerautomate/powerautomate.module';
 
 @Module({
+  imports: [PowerAutomateModule],
   controllers: [MeetingController],
   providers: [
     MeetingService,

@@ -9,10 +9,8 @@ import { ConsultantListDto, ConsultantListFiltersDto } from './dto/consultant-li
 import { ConsultantResultDto } from './dto/consultant-result.dto';
 import { ConsultantUpdateDto } from './dto/consultant-update.dto';
 import { ConsultantService } from './consultant.service';
-import { PymeConsultantMatchListDto } from '@modules/admin/pyme-consultant-match/dto/pyme-consultant-match-list.dto';
-import { PymeConsultantMatchResultDto } from '@modules/admin/pyme-consultant-match/dto/pyme-consultant-match-result.dto';
-import { PymeConsultantMessageListDto } from '@modules/admin/pyme-consultant-message/dto/pyme-consultant-message-list.dto';
-import { PymeConsultantMessageResultDto } from '@modules/admin/pyme-consultant-message/dto/pyme-consultant-message-result.dto';
+import { PymeConsultantMatchListDto, PymeConsultantMatchResultDto } from '@modules/admin/pyme/dto/pyme-consultant-match.dto';
+import { PymeConsultantMessageListDto, PymeConsultantMessageResultDto } from '@modules/admin/pyme/dto/pyme-consultant-message.dto';
 
 @ApiTags('consultant')
 @ApiBearerAuth()
