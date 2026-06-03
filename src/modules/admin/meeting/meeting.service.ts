@@ -201,6 +201,15 @@ export class MeetingService {
     return this.meetingRepository.delete(id);
   }
 
+  async getCopilotSummary(id: number) {
+    const meeting = await this.findOne(id);
+    if (!meeting.teamsOnlineMeetingId) {
+      throw new BadRequestException(['Esta reunión no tiene una sesión de Teams asociada.']);
+    }
+
+    return this.teamsMeetingService.getOnlineMeetingAiInsights(meeting.teamsOnlineMeetingId);
+  }
+
   private async createTeamsMeeting(data: {
     title: string;
     startTime: Date;

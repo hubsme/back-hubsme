@@ -67,7 +67,7 @@ export type ApiBody<
 export type ApiQuery<
   Module extends keyof Api<unknown>,
   Method extends keyof Api<unknown>[Module]
-> = ApiArgs<Module, Method> extends [infer Query, ...any[]]
+> = Required<ApiArgs<Module, Method>> extends [infer Query, ...any[]]
   ? Query
   : never;
 
@@ -79,10 +79,10 @@ export type ApiQuery<
 export type ApiParam<
   Module extends keyof Api<unknown>,
   Method extends keyof Api<unknown>[Module],
-  ParamName extends ApiArgs<Module, Method> extends [infer Arg1, ...any[]]
+  ParamName extends Required<ApiArgs<Module, Method>> extends [infer Arg1, ...any[]]
     ? keyof Arg1
     : never
-> = ApiArgs<Module, Method> extends [infer Arg1, ...any[]]
+> = Required<ApiArgs<Module, Method>> extends [infer Arg1, ...any[]]
   ? ParamName extends keyof Arg1
     ? Arg1[ParamName]
     : never
