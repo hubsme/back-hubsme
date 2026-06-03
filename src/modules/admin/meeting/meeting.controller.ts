@@ -9,6 +9,7 @@ import { MeetingRecordingDto } from './dto/meeting-recording.dto';
 import { MeetingFinalizeResultDto, MeetingResultDto } from './dto/meeting-result.dto';
 import { MeetingTeamsJoinDto, MeetingTeamsJoinResponseDto } from './dto/meeting-teams-join.dto';
 import { MeetingUpdateDto } from './dto/meeting-update.dto';
+import { MeetingCopilotSummaryDto } from './dto/meeting-copilot-summary.dto';
 import { MeetingService } from './meeting.service';
 
 @ApiTags('meeting')
@@ -68,6 +69,15 @@ export class MeetingController {
   @ApiResponse({ status: 400, type: HttpErrorDto })
   getRecordings(@Param('id') id: string) {
     return this.meetingService.listMeetingRecordings(+id);
+  }
+
+  @Get('copilot-summary/:id')
+  @ApiOperation({ summary: 'Get Microsoft Copilot AI insights (notes & action items) for a meeting' })
+  @ApiParam({ name: 'id', type: 'number' })
+  @ApiResponse({ status: 200, type: MeetingCopilotSummaryDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  getCopilotSummary(@Param('id') id: string) {
+    return this.meetingService.getCopilotSummary(+id);
   }
 
   @Patch('update/:id')

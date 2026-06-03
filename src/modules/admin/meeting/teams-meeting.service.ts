@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { CommunicationIdentityClient } from '@azure/communication-identity';
 import { ClientSecretCredential } from '@azure/identity';
-import { Client } from '@microsoft/microsoft-graph-client';
+import { Client, ResponseType } from '@microsoft/microsoft-graph-client';
 import { TokenCredentialAuthenticationProvider } from '@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials';
 import { MeetingTeamsJoinResponseDto } from './dto/meeting-teams-join.dto';
 import {
@@ -324,6 +324,196 @@ export class TeamsMeetingService {
       expiresOn,
       displayName: data.displayName,
     };
+  }
+
+  async getOnlineMeetingAiInsights(onlineMeetingId: string): Promise<{ meetingNotes: any[]; actionItems: any[] }> {
+    this.assertGraphConfig();
+    this.ensureGraphForAppOnlyAuth();
+
+    const organizerUserId = process.env.MS_GRAPH_TEAMS_ORGANIZER_USER_ID;
+    this.logger.log(`Obteniendo transcripción para onlineMeetingId: ${onlineMeetingId}`);
+
+    let transcriptContent = '';
+    try {
+      // 1. Listar transcripciones
+      const transcriptsResponse = (await this.appGraphClient!.api(
+        `/users/${organizerUserId}/onlineMeetings/${onlineMeetingId}/transcripts`,
+      ).get()) as GraphListResponse<{ id: string }>;
+
+      const transcripts = transcriptsResponse.value ?? [];
+      if (transcripts.length > 0) {
+        const transcriptId = transcripts[0].id;
+        this.logger.log(`Transcripción encontrada: ${transcriptId}. Descargando contenido...`);
+
+        // 2. Descargar el contenido de la transcripción en formato WebVTT
+        transcriptContent = (await this.appGraphClient!.api(
+          `/users/${organizerUserId}/onlineMeetings/${onlineMeetingId}/transcripts/${transcriptId}/content`,
+        )
+          .query({ '$format': 'text/vtt' })
+          .responseType(ResponseType.TEXT)
+          .get()) as string;
+      }
+    } catch (error: any) {
+      this.logger.warn(`Error al intentar obtener transcripción desde Graph API: ${error.message || error}`);
+    }
+
+    if (!transcriptContent) {
+      throw new BadRequestException([
+        'No se encontró ninguna transcripción activa para esta reunión de Teams. Asegúrate de haber iniciado y guardado la grabación y transcripción en Teams.',
+      ]);
+    }
+
+
+    // 3. Limpiar la transcripción (formato WebVTT -> texto plano)
+    const cleanedText = this.cleanTranscript(transcriptContent);
+    if (!cleanedText) {
+      throw new BadRequestException([
+        'La transcripción de la reunión está vacía. No hay suficiente contenido para resumir.',
+      ]);
+    }
+
+    // 4. Invocar el flujo de Power Automate
+    const powerAutomateUrl = 'https://aa50c4112851ede8b0a69e71b5bf72.e4.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/50a2be3614d84f94a69a55e4aec13362/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=-Z930_es4R6VpwUkyJmg_jmisTBP7ZvSr2FcPig6oz0';
+
+
+    this.logger.log(`Enviando transcripción limpia a Power Automate para su procesamiento...`);
+    try {
+      const response = await fetch(powerAutomateUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: cleanedText,
+          prompt: 'Genera notas de discusión y compromisos',
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Power Automate respondió con estado ${response.status}`);
+      }
+
+      const data = (await response.json()) as { result?: string };
+      const resultText = data.result || '';
+
+      // 5. Parsear la respuesta en la estructura esperada por el frontend
+      return this.parsePowerAutomateResult(resultText);
+    } catch (error: any) {
+      this.logger.error(`Error al invocar la API de Power Automate: ${error.message || error}`);
+      throw new InternalServerErrorException(
+        `Error al procesar el resumen de la reunión con Power Automate (${error.message || error})`,
+      );
+    }
+  }
+
+  private cleanTranscript(vttText: string): string {
+    if (!vttText) return '';
+
+    const lines = vttText.split(/\r?\n/);
+    const cleanLines: string[] = [];
+
+    for (let line of lines) {
+      line = line.trim();
+      if (!line) continue;
+      if (line.startsWith('WEBVTT') || line.startsWith('NOTE ')) continue;
+      if (line.includes('-->')) continue;
+      // Excluir líneas que son solo números (índices de subtítulos)
+      if (/^\d+$/.test(line)) continue;
+
+      // Limpiar etiquetas de orador: <v Nombre>Texto</v> -> Nombre: Texto
+      let cleaned = line.replace(/<v ([^>]+)>/g, '$1: ').replace(/<\/v>/g, '');
+      // Remover cualquier otra etiqueta HTML/VTT restante
+      cleaned = cleaned.replace(/<[^>]*>/g, '').trim();
+
+      if (cleaned) {
+        cleanLines.push(cleaned);
+      }
+    }
+
+    return cleanLines.join('\n');
+  }
+
+  private parsePowerAutomateResult(result: string): {
+    meetingNotes: { title: string; text: string }[];
+    actionItems: { title: string; text: string; ownerDisplayName: string | null }[];
+  } {
+    const meetingNotes: { title: string; text: string }[] = [];
+    const actionItems: { title: string; text: string; ownerDisplayName: string | null }[] = [];
+
+    if (!result) {
+      return { meetingNotes, actionItems };
+    }
+
+    const lines = result.split(/\r?\n/);
+    let currentSection: 'notes' | 'tasks' | null = null;
+
+    for (let line of lines) {
+      line = line.trim();
+      if (!line) continue;
+
+      const normalizedLine = line.toLowerCase();
+      if (
+        normalizedLine.includes('temas discutidos') ||
+        normalizedLine.includes('notas de la reunión') ||
+        normalizedLine.includes('resumen')
+      ) {
+        currentSection = 'notes';
+        continue;
+      } else if (
+        normalizedLine.includes('tareas') ||
+        normalizedLine.includes('compromisos') ||
+        normalizedLine.includes('acciones') ||
+        normalizedLine.includes('action items')
+      ) {
+        currentSection = 'tasks';
+        continue;
+      }
+
+      // Validar si es una viñeta o punto de lista
+      if (line.startsWith('-') || line.startsWith('*') || /^\d+\./.test(line)) {
+        let content = line.replace(/^[-*\s]+/, '').replace(/^\d+\.\s*/, '').trim();
+        if (!content) continue;
+
+        if (currentSection === 'notes') {
+          const colonIdx = content.indexOf(':');
+          if (colonIdx > 0 && colonIdx < 40) {
+            const title = content.substring(0, colonIdx).trim().replace(/\*\*/g, '');
+            const text = content.substring(colonIdx + 1).trim();
+            meetingNotes.push({ title, text });
+          } else {
+            meetingNotes.push({ title: 'Punto clave', text: content });
+          }
+        } else if (currentSection === 'tasks') {
+          let owner: string | null = null;
+
+          // Intentar extraer el nombre del responsable entre paréntesis (ej: "Tarea X (Juan): ...")
+          const parenthesizedMatch = content.match(/\(([^)]+)\)/);
+          if (parenthesizedMatch && parenthesizedMatch.index && parenthesizedMatch.index < 45) {
+            owner = parenthesizedMatch[1].trim();
+            content = content.replace(/\([^)]+\)/, '').trim();
+          }
+
+          const colonIdx = content.indexOf(':');
+          if (colonIdx > 0 && colonIdx < 40) {
+            const title = content.substring(0, colonIdx).trim().replace(/\*\*/g, '');
+            const text = content.substring(colonIdx + 1).trim();
+            actionItems.push({ title, text, ownerDisplayName: owner });
+          } else {
+            actionItems.push({ title: 'Compromiso', text: content, ownerDisplayName: owner });
+          }
+        }
+      }
+    }
+
+    // Fallback: Si no se estructuró nada, volcar todo el texto en una nota general
+    if (meetingNotes.length === 0 && actionItems.length === 0) {
+      meetingNotes.push({
+        title: 'Resumen General',
+        text: result.trim(),
+      });
+    }
+
+    return { meetingNotes, actionItems };
   }
 
   private getIdentityClient(): CommunicationIdentityClient {
