@@ -1,28 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-
-class CopilotActionItemDto {
-  @ApiProperty()
-  title: string;
-
-  @ApiProperty()
-  text: string;
-
-  @ApiProperty({ nullable: true })
-  ownerDisplayName: string | null;
-}
-
-class CopilotMeetingNoteDto {
-  @ApiProperty()
-  title: string;
-
-  @ApiProperty()
-  text: string;
-}
+import { TaskSuggestionDto } from '../../powerautomate/dto/hubsme-ai/hubsme-ai-result.dto';
 
 export class MeetingCopilotSummaryDto {
-  @ApiProperty({ type: [CopilotMeetingNoteDto] })
-  meetingNotes: CopilotMeetingNoteDto[];
+  @ApiProperty({ description: 'Resumen en texto plano de la reunión' })
+  summary: string;
 
-  @ApiProperty({ type: [CopilotActionItemDto] })
-  actionItems: CopilotActionItemDto[];
+  @ApiProperty({ type: [TaskSuggestionDto], description: 'Listado de tareas sugeridas extraídas por IA' })
+  tasks: TaskSuggestionDto[];
 }
