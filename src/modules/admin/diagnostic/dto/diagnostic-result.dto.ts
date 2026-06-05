@@ -46,6 +46,9 @@ export class DiagnosticPayloadDto {
   @ApiProperty()
   puntajeGeneral: number;
 
+  @ApiProperty()
+  feedbackIa: string;
+
   @ApiProperty({ type: [DiagnosticAreaDto] })
   areasEvaluadas: DiagnosticAreaDto[];
 

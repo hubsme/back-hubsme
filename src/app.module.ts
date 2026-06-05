@@ -7,6 +7,7 @@ import { ConsultantModule } from './modules/admin/consultant/consultant.module';
 import { MeetingModule } from './modules/admin/meeting/meeting.module';
 import { TaskModule } from './modules/admin/task/task.module';
 import { DiagnosticModule } from './modules/admin/diagnostic/diagnostic.module';
+import { DiagnosticDocumentModule } from './modules/admin/diagnostic-document/diagnostic-document.module';
 import { SubscriptionModule } from './modules/admin/subscription/subscription.module';
 import { DashboardModule } from './modules/admin/dashboard/dashboard.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -21,6 +22,7 @@ import { PowerAutomateModule } from './modules/admin/powerautomate/powerautomate
     MeetingModule,
     TaskModule,
     DiagnosticModule,
+    DiagnosticDocumentModule,
     SubscriptionModule,
     DashboardModule,
     StorageModule,

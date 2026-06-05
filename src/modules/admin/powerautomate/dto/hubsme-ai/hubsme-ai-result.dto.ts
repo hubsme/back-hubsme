@@ -18,9 +18,9 @@ export class TaskSuggestionDto {
 }
 
 export class HubsmeAiResultDto {
-  @ApiProperty({ description: 'Resumen ejecutivo de la reunión' })
+  @ApiProperty({ description: 'Acta de reunion estructurada en Markdown' })
   summary: string;
 
-  @ApiProperty({ type: [TaskSuggestionDto], description: 'Listado de tareas sugeridas extraídas por IA' })
+  @ApiProperty({ type: [TaskSuggestionDto], description: 'Listado de compromisos sugeridos para la PYME' })
   tasks: TaskSuggestionDto[];
 }
