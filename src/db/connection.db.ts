@@ -7,6 +7,7 @@ import { user } from '@db/tables/user.table';
 import { pyme } from '@db/tables/pyme.table';
 import { subscription } from '@db/tables/subscription.table';
 import { diagnostic } from '@db/tables/diagnostic.table';
+import { diagnosticDocument } from '@db/tables/diagnostic-document.table';
 import { consultant } from '@db/tables/consultant.table';
 import { task } from '@db/tables/task.table';
 import { pymeConsultantMatch } from '@db/tables/pyme-consultant-match.table';
@@ -21,6 +22,7 @@ const schema = {
   pyme,
   subscription,
   diagnostic,
+  diagnosticDocument,
   consultant,
   task,
   pymeConsultantMatch,

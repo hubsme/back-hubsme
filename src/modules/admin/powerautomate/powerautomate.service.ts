@@ -39,17 +39,19 @@ export class PowerAutomateService {
 
   async runHubsmeAiPrompt(text: string, prompt?: string): Promise<HubsmeAiResultDto> {
     const defaultCopilotAiPrompt =
-      'Analiza la siguiente transcripción de reunión de consultoría y extrae:\n' +
-      '1. Un resumen ejecutivo corrido, fluido y en texto plano (en español, en párrafos cohesivos, sin viñetas ni divisiones artificiales).\n' +
-      '2. Un listado de tareas de seguimiento accionables.\n\n' +
+      'Analiza la siguiente transcripción de reunión de consultoría y redacta un ACTA DE REUNIÓN, no un resumen narrativo.\n' +
+      'El acta debe ser objetiva, verificable, breve en deliberaciones y fuerte en acuerdos. Debe conservar decisiones, acuerdos, responsables, fechas, pendientes y próximos pasos.\n' +
+      'Estructura el campo summary en Markdown con estos apartados: # Acta de reunion, ## Datos de la sesion, ## Asistentes mencionados, ## Orden del dia o temas tratados, ## Deliberaciones principales, ## Acuerdos y decisiones, ## Compromisos de la PYME, ## Pendientes y riesgos, ## Proxima reunion, ## Cierre.\n' +
+      'Si un dato no aparece en la transcripción, escribe "No especificado" en vez de inventarlo.\n' +
+      'Extrae tareas accionables SOLO para la PYME. No crees tareas asignadas al consultor. Si un compromiso corresponde al consultor, registralo dentro del acta como acuerdo o pendiente, pero no lo devuelvas en tasks.\n\n' +
       'Debes responder ÚNICAMENTE con un objeto JSON válido con la siguiente estructura y en español:\n' +
       '{\n' +
-      '  "summary": "Texto del resumen ejecutivo aquí...",\n' +
+      '  "summary": "Markdown completo del acta aquí...",\n' +
       '  "tasks": [\n' +
       '    {\n' +
-      '      "title": "Título accionable de la tarea...",\n' +
-      '      "description": "Descripción detallada...",\n' +
-      '      "assignedTo": "pyme" o "consultor",\n' +
+      '      "title": "Título accionable para la PYME...",\n' +
+      '      "description": "Descripción detallada del compromiso de la PYME...",\n' +
+      '      "assignedTo": "pyme",\n' +
       '      "priority": "alta", "media" o "baja",\n' +
       '      "dueDate": "YYYY-MM-DD" o null\n' +
       '    }\n' +
@@ -70,7 +72,7 @@ export class PowerAutomateService {
       const parsed = JSON.parse(jsonMatch[0]) as HubsmeAiResultDto;
       return {
         summary: parsed.summary || '',
-        tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
+        tasks: Array.isArray(parsed.tasks) ? parsed.tasks.filter((task) => task.assignedTo === 'pyme') : [],
       };
     } catch (error: any) {
       this.logger.error(

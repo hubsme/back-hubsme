@@ -4,6 +4,7 @@ import { user } from './user.table';
 export type DiagnosticResult = {
   resumenEjecutivo: string;
   puntajeGeneral: number;
+  feedbackIa: string;
   areasEvaluadas: { area: string; puntaje: number; estado: string; hallazgo: string }[];
   problemasCriticos: { problema: string; impacto: string; urgencia: string }[];
   recomendaciones: { accion: string; beneficioEsperado: string; plazo: string; prioridad: string }[];

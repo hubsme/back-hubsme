@@ -180,17 +180,19 @@ export class MeetingService {
     // Soft-delete existing tasks for this meeting to prevent duplicates on edit/refinalize
     await this.taskRepository.deleteByMeetingId(id);
 
-    const tasksPayload: TaskDTO[] = (data.tasks ?? []).map((task) => ({
-      meetingId: currentMeeting.id,
-      pymeId: currentMeeting.pymeId,
-      consultantId: currentMeeting.consultantId,
-      title: task.title.trim(),
-      description: task.description.trim(),
-      assignedTo: task.assignedTo,
-      priority: task.priority,
-      status: 'pendiente',
-      dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
-    }));
+    const tasksPayload: TaskDTO[] = (data.tasks ?? [])
+      .filter((task) => task.assignedTo === 'pyme')
+      .map((task) => ({
+        meetingId: currentMeeting.id,
+        pymeId: currentMeeting.pymeId,
+        consultantId: currentMeeting.consultantId,
+        title: task.title.trim(),
+        description: task.description.trim(),
+        assignedTo: 'pyme',
+        priority: task.priority,
+        status: 'pendiente',
+        dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
+      }));
 
     const tasks = await this.taskRepository.createMany(tasksPayload);
     return { meeting, tasks };
