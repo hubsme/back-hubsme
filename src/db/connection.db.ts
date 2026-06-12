@@ -13,6 +13,7 @@ import { task } from '@db/tables/task.table';
 import { pymeConsultantMatch } from '@db/tables/pyme-consultant-match.table';
 import { pymeConsultantMessage } from '@db/tables/pyme-consultant-message.table';
 import { dashboardAlert } from '@db/tables/dashboard-alert.table';
+import { consultantAvailability } from '@db/tables/consultant-availability.table';
 
 const pool = new Pool(dbConfig);
 
@@ -28,6 +29,7 @@ const schema = {
   pymeConsultantMatch,
   pymeConsultantMessage,
   dashboardAlert,
+  consultantAvailability,
 };
 
 export const database = drizzle(pool, { schema: schema });

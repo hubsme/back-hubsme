@@ -9,6 +9,7 @@ import { MeetingListFiltersDto } from './dto/meeting-list.dto';
 import { MeetingTeamsJoinDto } from './dto/meeting-teams-join.dto';
 import { MeetingUpdateDto } from './dto/meeting-update.dto';
 import { TeamsMeetingService } from './teams-meeting.service';
+import { ConsultantAvailabilityService } from '../consultant-availability/consultant-availability.service';
 
 @Injectable()
 export class MeetingService {
@@ -19,6 +20,7 @@ export class MeetingService {
     private readonly taskRepository: TaskRepository,
     private readonly matchRepository: PymeConsultantMatchRepository,
     private readonly teamsMeetingService: TeamsMeetingService,
+    private readonly consultantAvailabilityService: ConsultantAvailabilityService,
   ) {}
 
   async findAllPaginated(filters: MeetingListFiltersDto) {
@@ -47,6 +49,11 @@ export class MeetingService {
 
     const title = data.title.trim();
     const durationMinutes = data.durationMinutes ?? 60;
+    await this.consultantAvailabilityService.assertAvailableForMeeting(
+      data.consultantId,
+      data.startTime,
+      durationMinutes,
+    );
 
     return this.meetingRepository.create({
       ...data,
@@ -66,9 +73,13 @@ export class MeetingService {
       `Confirming meeting ${meeting.id}: status=${meeting.status}, pymeId=${meeting.pymeId}, consultantId=${meeting.consultantId}, startTime=${meeting.startTime.toISOString()}, durationMinutes=${meeting.durationMinutes}`,
     );
 
-    if (meeting.status !== 'solicitada') {
+    if (!['solicitada', 'pago_pendiente'].includes(meeting.status)) {
       this.logger.warn(`Meeting ${meeting.id} cannot be confirmed because status is ${meeting.status}`);
-      throw new BadRequestException(['Solo se pueden confirmar reuniones solicitadas']);
+      throw new BadRequestException(['Solo se pueden confirmar reuniones solicitadas o pendientes de pago']);
+    }
+
+    if (meeting.status === 'solicitada' && meeting.requestedBy === 'pyme') {
+      throw new BadRequestException(['El consultor debe aceptar la solicitud antes de habilitar el pago']);
     }
 
     const teamsMeeting = await this.createTeamsMeeting({
@@ -153,8 +164,13 @@ export class MeetingService {
     if (data.status === 'finalizada') {
       throw new BadRequestException(['Usa el endpoint de finalizacion para cerrar reuniones']);
     }
-    if (data.status === 'cancelada' && meeting.status !== 'solicitada') {
-      throw new BadRequestException(['Solo se pueden cancelar reuniones en estado solicitado']);
+    if (data.status === 'pago_pendiente') {
+      if (meeting.status !== 'solicitada' || meeting.requestedBy !== 'pyme') {
+        throw new BadRequestException(['Solo el consultor puede aceptar solicitudes creadas por la PYME']);
+      }
+    }
+    if (data.status === 'cancelada' && !['solicitada', 'pago_pendiente'].includes(meeting.status)) {
+      throw new BadRequestException(['Solo se pueden cancelar reuniones solicitadas o pendientes de pago']);
     }
 
     return this.meetingRepository.update(id, {

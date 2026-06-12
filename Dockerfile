@@ -40,7 +40,7 @@ COPY --from=builder /app/dist ./dist
 RUN ls -la dist/
 
 # Exponer el puerto
-EXPOSE 3000
+EXPOSE 6001
 
 # Comando para iniciar la aplicación
 CMD ["node", "dist/main.js"]

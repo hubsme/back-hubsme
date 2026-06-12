@@ -13,6 +13,7 @@ import { DashboardModule } from './modules/admin/dashboard/dashboard.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { PowerAutomateModule } from './modules/admin/powerautomate/powerautomate.module';
+import { ConsultantAvailabilityModule } from './modules/admin/consultant-availability/consultant-availability.module';
 @Module({
   imports: [
     AuthModule,
@@ -27,6 +28,7 @@ import { PowerAutomateModule } from './modules/admin/powerautomate/powerautomate
     DashboardModule,
     StorageModule,
     PowerAutomateModule,
+    ConsultantAvailabilityModule,
   ],
   controllers: [AppController],
   providers: [AppService],

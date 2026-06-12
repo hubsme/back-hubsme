@@ -1,15 +1,18 @@
-# Backend Hubsme 🐕
+# Backend Hubsme
 
-API REST desarrollada con NestJS para la gestión de una veterinaria especializada en el cuidado de mascotas. El sistema permite administrar clientes, mascotas, baños y tratamientos.
+API REST desarrollada con NestJS para la plataforma Hubsme, enfocada en diagnostico empresarial, consultoria para PYMES, reuniones, tareas, documentos y suscripciones.
 
 ## 📋 Descripción
 
 Sistema backend que proporciona una API para gestionar:
 
-- **Clientes**: Registro y gestión de propietarios de mascotas
-- **Mascotas**: Información de las mascotas (razas, especies, etc.)
-- **Baños**: Tipos de baños y servicios de limpieza
-- **Tratamientos**: Tipos de tratamientos médicos y seguimiento
+- **Usuarios**: Registro, autenticacion, roles y perfiles.
+- **PYMES**: Datos de empresa, responsables, sector y contacto.
+- **Consultores**: Perfil profesional, especialidades, sectores y validacion.
+- **Contactos**: Match, aceptacion, rechazo y mensajes entre PYMES y consultores.
+- **Diagnosticos**: Evaluacion empresarial asistida por IA y documentos derivados.
+- **Reuniones**: Solicitudes, confirmaciones, integracion con Teams, actas y tareas.
+- **Suscripciones**: Planes y estado de acceso a la plataforma.
 
 ## 🛠️ Tecnologías
 
@@ -31,7 +34,7 @@ Sistema backend que proporciona una API para gestionar:
 
 ```bash
 git clone <url-del-repositorio>
-cd backend-cachorros
+cd backend-hubsme
 ```
 
 2. **Instalar dependencias**
@@ -89,7 +92,7 @@ npm run format
 
 ## 🌐 API
 
-El servidor se ejecuta por defecto en `http://localhost:3000`
+El servidor se ejecuta por defecto en `http://localhost:6001`
 
 ### Endpoints principales
 
@@ -109,14 +112,17 @@ _(Por definir según implementación de controladores)_
 
 ## 📝 Modelos de Datos
 
-- **Customer**: Clientes/propietarios de mascotas
-- **Pet**: Mascotas registradas en el sistema
-- **Specie**: Especies de animales (perro, gato, etc.)
-- **Breed**: Razas de mascotas
-- **Bath**: Registros de baños realizados
-- **BathType**: Tipos de servicios de baño
-- **Treatment**: Tratamientos médicos aplicados
-- **TreatmentType**: Tipos de tratamientos disponibles
+- **User**: Usuarios de la plataforma.
+- **Pyme**: Empresas registradas.
+- **Consultant**: Consultores disponibles en la plataforma.
+- **PymeConsultantMatch**: Relacion/contacto entre PYME y consultor.
+- **PymeConsultantMessage**: Mensajes dentro de un contacto.
+- **Diagnostic**: Diagnosticos empresariales.
+- **DiagnosticDocument**: Documentos generados desde diagnosticos.
+- **Meeting**: Reuniones entre PYME y consultor.
+- **Task**: Tareas asociadas al seguimiento.
+- **Subscription**: Planes y estados de suscripcion.
+- **DashboardAlert**: Alertas del tablero.
 
 ## 🤝 Contribuir
 

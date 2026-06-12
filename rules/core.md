@@ -1,6 +1,6 @@
 # Core Module Rules
 
-Este archivo define las reglas para la implementación y mantenimiento del directorio `src/core` en el proyecto **backend-cachorros**.
+Este archivo define las reglas para la implementación y mantenimiento del directorio `src/core` en el proyecto **backend-hubsme**.
 
 ## 1. Propósito General
 

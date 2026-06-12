@@ -2,7 +2,7 @@
 trigger: always_on
 ---
 
-# REGLAS DEL PROYECTO - Backend Transporte Terrestre
+# REGLAS DEL PROYECTO - Backend Hubsme
 
 ## 🌐 IDIOMA
 
@@ -73,7 +73,7 @@ Usar siempre los aliases definidos en tsconfig.json:
 - Ubicación: `src/seeds/*.seed.ts`
 - Exportar función `async seedEntidad()`
 - Retornar datos insertados con `.returning()` si hay dependencias
-- Registrar en [src/db/seed.db.ts](cci:7://file:///d:/CHAMBA/transporte_terrestre/back-transporte/src/db/seed.db.ts:0:0-0:0) en orden de dependencia
+- Registrar en `src/db/seed.db.ts` en orden de dependencia
 
 ## 🛠️ COMANDOS SQL Y MIGRACIONES
 
@@ -85,7 +85,7 @@ Usar siempre los aliases definidos en tsconfig.json:
 ## ✅ CONVENCIONES DE CÓDIGO
 
 - Inyección de dependencias: `private readonly nombreRepository: NombreRepository`
-- Métodos de repositorio: [findAll](cci:1://file:///d:/CHAMBA/transporte_terrestre/back-transporte/src/repositories/vehiculo.repository.ts:20:2-30:3), [findAllPaginated](cci:1://file:///d:/CHAMBA/transporte_terrestre/back-transporte/src/repositories/vehiculo.repository.ts:32:2-115:3), [findOne](cci:1://file:///d:/CHAMBA/transporte_terrestre/back-transporte/src/repositories/vehiculo.repository.ts:117:2-156:3), [create](cci:1://file:///d:/CHAMBA/transporte_terrestre/back-transporte/src/repositories/vehiculo.repository.ts:158:2-187:3), [update](cci:1://file:///d:/CHAMBA/transporte_terrestre/back-transporte/src/repositories/vehiculo.repository.ts:189:2-245:3), [delete](cci:1://file:///d:/CHAMBA/transporte_terrestre/back-transporte/src/repositories/vehiculo.repository.ts:247:2-250:3)
+- Métodos de repositorio: `findAll`, `findAllPaginated`, `findOne`, `create`, `update`, `delete`.
 - Paginación: recibe `page`, `limit`, `filters` → retorna `{ data, total }`
 - Soft delete: actualizar `eliminadoEn` con timestamp, no borrar físicamente
 
