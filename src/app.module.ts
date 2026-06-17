@@ -14,6 +14,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { PowerAutomateModule } from './modules/admin/powerautomate/powerautomate.module';
 import { ConsultantAvailabilityModule } from './modules/admin/consultant-availability/consultant-availability.module';
+import { ConsultantGoogleCalendarModule } from './modules/admin/consultant-google-calendar/consultant-google-calendar.module';
 @Module({
   imports: [
     AuthModule,
@@ -29,6 +30,7 @@ import { ConsultantAvailabilityModule } from './modules/admin/consultant-availab
     StorageModule,
     PowerAutomateModule,
     ConsultantAvailabilityModule,
+    ConsultantGoogleCalendarModule,
   ],
   controllers: [AppController],
   providers: [AppService],

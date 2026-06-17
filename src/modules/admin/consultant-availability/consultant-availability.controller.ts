@@ -22,7 +22,7 @@ export class ConsultantAvailabilityController {
   constructor(private readonly availabilityService: ConsultantAvailabilityService) {}
 
   @Get('find-all')
-  @ApiOperation({ summary: 'Get consultant availability slots paginated' })
+  @ApiOperation({ summary: 'Get consultant availability months paginated' })
   @ApiResponse({ status: 200, type: ConsultantAvailabilityListDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
   findAll(@Query() filters: ConsultantAvailabilityListFiltersDto) {
@@ -30,7 +30,7 @@ export class ConsultantAvailabilityController {
   }
 
   @Get('find-month')
-  @ApiOperation({ summary: 'Get consultant availability slots for a month' })
+  @ApiOperation({ summary: 'Get consultant availability for a month' })
   @ApiResponse({ status: 200, type: ConsultantAvailabilityMonthDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
   findMonth(@Query() filters: ConsultantAvailabilityMonthFiltersDto) {
@@ -38,7 +38,7 @@ export class ConsultantAvailabilityController {
   }
 
   @Get('visible-month')
-  @ApiOperation({ summary: 'Get available consultant slots visible for PYMES in a month' })
+  @ApiOperation({ summary: 'Get consultant availability visible for PYMES in a month' })
   @ApiResponse({ status: 200, type: ConsultantAvailabilityMonthDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
   visibleMonth(@Query() filters: ConsultantAvailabilityMonthFiltersDto) {
@@ -46,7 +46,7 @@ export class ConsultantAvailabilityController {
   }
 
   @Get('find-one/:id')
-  @ApiOperation({ summary: 'Get a consultant availability slot by ID' })
+  @ApiOperation({ summary: 'Get a consultant availability month by ID' })
   @ApiParam({ name: 'id', type: 'number' })
   @ApiResponse({ status: 200, type: ConsultantAvailabilityResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
@@ -55,7 +55,7 @@ export class ConsultantAvailabilityController {
   }
 
   @Post('create')
-  @ApiOperation({ summary: 'Create a consultant availability slot' })
+  @ApiOperation({ summary: 'Create a consultant availability month' })
   @ApiResponse({ status: 200, type: ConsultantAvailabilityResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
   create(@Body() createDto: ConsultantAvailabilityCreateDto) {
@@ -63,7 +63,7 @@ export class ConsultantAvailabilityController {
   }
 
   @Post('replace-month')
-  @ApiOperation({ summary: 'Replace all consultant availability slots for a month' })
+  @ApiOperation({ summary: 'Replace consultant availability for a month' })
   @ApiResponse({ status: 200, type: ConsultantAvailabilityMonthDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
   replaceMonth(@Body() replaceMonthDto: ConsultantAvailabilityReplaceMonthDto) {
@@ -71,7 +71,7 @@ export class ConsultantAvailabilityController {
   }
 
   @Patch('update/:id')
-  @ApiOperation({ summary: 'Update a consultant availability slot' })
+  @ApiOperation({ summary: 'Update a consultant availability month' })
   @ApiParam({ name: 'id', type: 'number' })
   @ApiResponse({ status: 200, type: ConsultantAvailabilityResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
@@ -80,7 +80,7 @@ export class ConsultantAvailabilityController {
   }
 
   @Delete('delete/:id')
-  @ApiOperation({ summary: 'Soft-delete a consultant availability slot' })
+  @ApiOperation({ summary: 'Soft-delete a consultant availability month' })
   @ApiParam({ name: 'id', type: 'number' })
   @ApiResponse({ status: 200, type: ConsultantAvailabilityResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })

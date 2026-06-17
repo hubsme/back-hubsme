@@ -1,11 +1,8 @@
-import { pgTable, serial, text, timestamp, integer, pgEnum, index, uniqueIndex } from 'drizzle-orm/pg-core';
+import { date, index, integer, jsonb, pgTable, serial, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { user } from './user.table';
 
-export const consultantAvailabilityStatusEnum = pgEnum('consultant_availability_status', [
-  'disponible',
-  'bloqueado',
-]);
+export type ConsultantAvailabilitySchedule = Record<string, string[]>;
 
 export const consultantAvailability = pgTable(
   'consultant_availability',
@@ -17,18 +14,14 @@ export const consultantAvailability = pgTable(
     consultantId: integer('consultant_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
-    startTime: timestamp('start_time').notNull(),
-    endTime: timestamp('end_time').notNull(),
-    status: consultantAvailabilityStatusEnum('status').default('disponible').notNull(),
-    notes: text('notes'),
+    month: date('month', { mode: 'date' }).notNull(),
+    availableSchedule: jsonb('available_schedule').$type<ConsultantAvailabilitySchedule>().default({}).notNull(),
   },
   (t) => [
     index('consultant_availability_consultant_id_idx').on(t.consultantId),
-    index('consultant_availability_start_time_idx').on(t.startTime),
-    index('consultant_availability_end_time_idx').on(t.endTime),
-    index('consultant_availability_status_idx').on(t.status),
-    uniqueIndex('consultant_availability_slot_unique_active_idx')
-      .on(t.consultantId, t.startTime, t.endTime)
+    index('consultant_availability_month_idx').on(t.month),
+    uniqueIndex('consultant_availability_month_unique_active_idx')
+      .on(t.consultantId, t.month)
       .where(sql`${t.deletedAt} IS NULL`),
   ],
 );

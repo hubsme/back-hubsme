@@ -1,6 +1,7 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsDate, IsIn, IsInt, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsInt, IsObject } from 'class-validator';
+import type { ConsultantAvailabilitySchedule } from '@db/tables/consultant-availability.table';
 
 export class ConsultantAvailabilityCreateDto {
   @ApiProperty({ example: 3 })
@@ -8,23 +9,21 @@ export class ConsultantAvailabilityCreateDto {
   @IsInt()
   consultantId: number;
 
-  @ApiProperty({ example: '2026-06-15T14:00:00.000Z' })
-  @Type(() => Date)
-  @IsDate()
-  startTime: Date;
+  @ApiProperty({ example: '2026-06-01', format: 'date' })
+  @IsDateString()
+  month: string;
 
-  @ApiProperty({ example: '2026-06-15T16:00:00.000Z' })
-  @Type(() => Date)
-  @IsDate()
-  endTime: Date;
-
-  @ApiPropertyOptional({ enum: ['disponible', 'bloqueado'], default: 'disponible' })
-  @IsIn(['disponible', 'bloqueado'])
-  @IsOptional()
-  status?: 'disponible' | 'bloqueado';
-
-  @ApiPropertyOptional({ example: 'Horario disponible para consultoria estrategica.' })
-  @IsString()
-  @IsOptional()
-  notes?: string;
+  @ApiProperty({
+    type: 'object',
+    additionalProperties: {
+      type: 'array',
+      items: { type: 'string', example: '08:00' },
+    },
+    example: {
+      '23': ['08:00', '08:30'],
+    },
+    description: 'Dias del mes con horas disponibles en bloques de 30 minutos. Cada hora representa el inicio del bloque.',
+  })
+  @IsObject()
+  availableSchedule: ConsultantAvailabilitySchedule;
 }

@@ -4,7 +4,7 @@ import { database } from '@db/connection.db';
 import {
   consultantAvailability,
   ConsultantAvailabilityDTO,
-  consultantAvailabilityStatusEnum,
+  ConsultantAvailabilitySchedule,
 } from '@db/tables/consultant-availability.table';
 import { meeting } from '@db/tables/meeting.table';
 
@@ -17,19 +17,18 @@ export class ConsultantAvailabilityRepository {
       consultantId?: number;
       startFrom?: Date;
       startTo?: Date;
-      status?: (typeof consultantAvailabilityStatusEnum.enumValues)[number];
     },
   ) {
     const offset = (page - 1) * limit;
     const conditions = this.buildConditions(filters);
-
     const whereClause = and(...conditions);
+
     const [{ total }] = await database.select({ total: count() }).from(consultantAvailability).where(whereClause);
     const data = await database
       .select()
       .from(consultantAvailability)
       .where(whereClause)
-      .orderBy(desc(consultantAvailability.startTime))
+      .orderBy(desc(consultantAvailability.month))
       .limit(limit)
       .offset(offset);
 
@@ -44,49 +43,33 @@ export class ConsultantAvailabilityRepository {
     return result[0];
   }
 
-  async findByRange(
-    consultantId: number,
-    startFrom: Date,
-    startTo: Date,
-    status?: (typeof consultantAvailabilityStatusEnum.enumValues)[number],
-  ) {
+  async findByMonth(consultantId: number, month: Date) {
+    const result = await database
+      .select()
+      .from(consultantAvailability)
+      .where(
+        and(
+          eq(consultantAvailability.consultantId, consultantId),
+          eq(consultantAvailability.month, month),
+          isNull(consultantAvailability.deletedAt),
+        ),
+      );
+    return result[0];
+  }
+
+  async findByMonthRange(consultantId: number, startMonth: Date, endMonth: Date) {
     return database
       .select()
       .from(consultantAvailability)
-      .where(and(...this.buildConditions({ consultantId, startFrom, startTo, status })))
-      .orderBy(consultantAvailability.startTime);
-  }
-
-  async findCoveringSlot(consultantId: number, startTime: Date, endTime: Date) {
-    const result = await database
-      .select()
-      .from(consultantAvailability)
       .where(
         and(
           eq(consultantAvailability.consultantId, consultantId),
-          eq(sql`${consultantAvailability.status}::text`, 'disponible'),
-          lte(consultantAvailability.startTime, startTime),
-          gte(consultantAvailability.endTime, endTime),
+          gte(consultantAvailability.month, startMonth),
+          lte(consultantAvailability.month, endMonth),
           isNull(consultantAvailability.deletedAt),
         ),
-      );
-    return result[0];
-  }
-
-  async findOverlappingAvailability(consultantId: number, startTime: Date, endTime: Date, excludeId?: number) {
-    const result = await database
-      .select()
-      .from(consultantAvailability)
-      .where(
-        and(
-          eq(consultantAvailability.consultantId, consultantId),
-          sql`${consultantAvailability.startTime} < ${endTime}`,
-          sql`${consultantAvailability.endTime} > ${startTime}`,
-          excludeId ? sql`${consultantAvailability.id} <> ${excludeId}` : sql`true`,
-          isNull(consultantAvailability.deletedAt),
-        ),
-      );
-    return result[0];
+      )
+      .orderBy(consultantAvailability.month);
   }
 
   async findMeetingConflicts(consultantId: number, startFrom: Date, startTo: Date) {
@@ -115,9 +98,19 @@ export class ConsultantAvailabilityRepository {
     return result[0];
   }
 
-  async createMany(data: ConsultantAvailabilityDTO[]) {
-    if (data.length === 0) return [];
-    return database.insert(consultantAvailability).values(data).returning();
+  async upsertMonth(consultantId: number, month: Date, availableSchedule: ConsultantAvailabilitySchedule) {
+    const current = await this.findByMonth(consultantId, month);
+
+    if (current) {
+      const result = await database
+        .update(consultantAvailability)
+        .set({ availableSchedule, updatedAt: new Date() })
+        .where(and(eq(consultantAvailability.id, current.id), isNull(consultantAvailability.deletedAt)))
+        .returning();
+      return result[0];
+    }
+
+    return this.create({ consultantId, month, availableSchedule });
   }
 
   async update(id: number, data: Partial<ConsultantAvailabilityDTO>) {
@@ -138,19 +131,10 @@ export class ConsultantAvailabilityRepository {
     return result[0];
   }
 
-  async deleteByRange(consultantId: number, startFrom: Date, startTo: Date) {
-    return database
-      .update(consultantAvailability)
-      .set({ deletedAt: new Date(), updatedAt: new Date() })
-      .where(and(...this.buildConditions({ consultantId, startFrom, startTo })))
-      .returning();
-  }
-
   private buildConditions(filters?: {
     consultantId?: number;
     startFrom?: Date;
     startTo?: Date;
-    status?: (typeof consultantAvailabilityStatusEnum.enumValues)[number];
   }) {
     const conditions = [];
 
@@ -159,18 +143,18 @@ export class ConsultantAvailabilityRepository {
     }
 
     if (filters?.startFrom) {
-      conditions.push(gte(consultantAvailability.startTime, filters.startFrom));
+      conditions.push(gte(consultantAvailability.month, this.getMonthStart(filters.startFrom)));
     }
 
     if (filters?.startTo) {
-      conditions.push(lte(consultantAvailability.startTime, filters.startTo));
-    }
-
-    if (filters?.status) {
-      conditions.push(eq(sql`${consultantAvailability.status}::text`, filters.status));
+      conditions.push(lte(consultantAvailability.month, this.getMonthStart(filters.startTo)));
     }
 
     conditions.push(isNull(consultantAvailability.deletedAt));
     return conditions;
+  }
+
+  private getMonthStart(date: Date) {
+    return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1, 0, 0, 0, 0));
   }
 }

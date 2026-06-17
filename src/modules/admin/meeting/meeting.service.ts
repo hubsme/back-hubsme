@@ -1,7 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { TaskDTO } from '@db/tables/task.table';
 import { MeetingRepository } from '@repositories/meeting.repository';
-import { PymeConsultantMatchRepository } from '@repositories/pyme-consultant-match.repository';
 import { TaskRepository } from '@repositories/task.repository';
 import { MeetingCreateDto } from './dto/meeting-create.dto';
 import { MeetingFinalizeDto } from './dto/meeting-finalize.dto';
@@ -18,7 +17,6 @@ export class MeetingService {
   constructor(
     private readonly meetingRepository: MeetingRepository,
     private readonly taskRepository: TaskRepository,
-    private readonly matchRepository: PymeConsultantMatchRepository,
     private readonly teamsMeetingService: TeamsMeetingService,
     private readonly consultantAvailabilityService: ConsultantAvailabilityService,
   ) {}
@@ -42,13 +40,9 @@ export class MeetingService {
   }
 
   async create(data: MeetingCreateDto) {
-    const acceptedMatch = await this.matchRepository.findAcceptedByPair(data.pymeId, data.consultantId);
-    if (!acceptedMatch) {
-      throw new BadRequestException(['Para solicitar una reunion debe existir un match aceptado']);
-    }
-
     const title = data.title.trim();
     const durationMinutes = data.durationMinutes ?? 60;
+    const requestedBy = data.requestedBy ?? 'pyme';
     await this.consultantAvailabilityService.assertAvailableForMeeting(
       data.consultantId,
       data.startTime,
@@ -62,8 +56,8 @@ export class MeetingService {
       teamsOnlineMeetingId: null,
       description: data.description?.trim(),
       durationMinutes,
-      status: 'solicitada',
-      requestedBy: data.requestedBy ?? 'pyme',
+      status: requestedBy === 'pyme' ? 'pago_pendiente' : 'solicitada',
+      requestedBy,
     });
   }
 
@@ -76,10 +70,6 @@ export class MeetingService {
     if (!['solicitada', 'pago_pendiente'].includes(meeting.status)) {
       this.logger.warn(`Meeting ${meeting.id} cannot be confirmed because status is ${meeting.status}`);
       throw new BadRequestException(['Solo se pueden confirmar reuniones solicitadas o pendientes de pago']);
-    }
-
-    if (meeting.status === 'solicitada' && meeting.requestedBy === 'pyme') {
-      throw new BadRequestException(['El consultor debe aceptar la solicitud antes de habilitar el pago']);
     }
 
     const teamsMeeting = await this.createTeamsMeeting({

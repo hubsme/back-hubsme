@@ -1,7 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsDate, IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsDate, IsInt, IsOptional, Max, Min } from 'class-validator';
 import { PaginationFiltersDto, PaginationMetaDto } from '@modules/admin/common/pagination.dto';
+import { ConsultantAvailabilityResultDto } from './consultant-availability-result.dto';
 
 export class ConsultantAvailabilityListFiltersDto extends PaginationFiltersDto {
   @ApiPropertyOptional({ example: 3 })
@@ -21,11 +22,6 @@ export class ConsultantAvailabilityListFiltersDto extends PaginationFiltersDto {
   @IsDate()
   @IsOptional()
   startTo?: Date;
-
-  @ApiPropertyOptional({ enum: ['disponible', 'bloqueado'] })
-  @IsIn(['disponible', 'bloqueado'])
-  @IsOptional()
-  status?: 'disponible' | 'bloqueado';
 }
 
 export class ConsultantAvailabilityMonthFiltersDto {
@@ -46,45 +42,17 @@ export class ConsultantAvailabilityMonthFiltersDto {
   @Min(1)
   @Max(12)
   month: number;
-
-  @ApiPropertyOptional({ enum: ['disponible', 'bloqueado'] })
-  @IsIn(['disponible', 'bloqueado'])
-  @IsOptional()
-  status?: 'disponible' | 'bloqueado';
-}
-
-export class ConsultantAvailabilityListItemDto {
-  @ApiProperty()
-  id: number;
-
-  @ApiProperty()
-  consultantId: number;
-
-  @ApiProperty()
-  startTime: Date;
-
-  @ApiProperty()
-  endTime: Date;
-
-  @ApiProperty({ enum: ['disponible', 'bloqueado'] })
-  status: 'disponible' | 'bloqueado';
-
-  @ApiProperty({ nullable: true })
-  notes: string | null;
-
-  @ApiProperty()
-  createdAt: Date;
 }
 
 export class ConsultantAvailabilityListDto {
-  @ApiProperty({ type: [ConsultantAvailabilityListItemDto] })
-  data: ConsultantAvailabilityListItemDto[];
+  @ApiProperty({ type: [ConsultantAvailabilityResultDto] })
+  data: ConsultantAvailabilityResultDto[];
 
   @ApiProperty({ type: PaginationMetaDto })
   meta: PaginationMetaDto;
 }
 
 export class ConsultantAvailabilityMonthDto {
-  @ApiProperty({ type: [ConsultantAvailabilityListItemDto] })
-  data: ConsultantAvailabilityListItemDto[];
+  @ApiProperty({ type: [ConsultantAvailabilityResultDto] })
+  data: ConsultantAvailabilityResultDto[];
 }

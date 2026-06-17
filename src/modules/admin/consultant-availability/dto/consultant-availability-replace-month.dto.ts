@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsInt, Max, Min, ValidateNested } from 'class-validator';
-import { ConsultantAvailabilityCreateDto } from './consultant-availability-create.dto';
+import { IsInt, IsObject, Max, Min } from 'class-validator';
+import type { ConsultantAvailabilitySchedule } from '@db/tables/consultant-availability.table';
 
 export class ConsultantAvailabilityReplaceMonthDto {
   @ApiProperty({ example: 3 })
@@ -22,9 +22,17 @@ export class ConsultantAvailabilityReplaceMonthDto {
   @Max(12)
   month: number;
 
-  @ApiProperty({ type: [ConsultantAvailabilityCreateDto] })
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => ConsultantAvailabilityCreateDto)
-  slots: ConsultantAvailabilityCreateDto[];
+  @ApiProperty({
+    type: 'object',
+    additionalProperties: {
+      type: 'array',
+      items: { type: 'string', example: '08:00' },
+    },
+    example: {
+      '23': ['08:00', '08:30'],
+    },
+    description: 'Dias del mes con horas disponibles en bloques de 30 minutos. Cada hora representa el inicio del bloque.',
+  })
+  @IsObject()
+  availableSchedule: ConsultantAvailabilitySchedule;
 }
