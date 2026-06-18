@@ -25,7 +25,7 @@ export async function seedPymes(users: { byEmail: Record<string, User> }) {
       if (!user) return null;
       return {
         ...item.data,
-        userId: user.id,
+        id: user.id,
       };
     })
     .filter((item): item is NonNullable<typeof item> => item !== null);
@@ -38,15 +38,15 @@ export async function seedPymes(users: { byEmail: Record<string, User> }) {
     .where(
       and(
         inArray(
-          pyme.userId,
-          valuesToInsert.map((v) => v.userId),
+          pyme.id,
+          valuesToInsert.map((v) => v.id),
         ),
         isNull(pyme.deletedAt),
       ),
     );
 
-  const existingUserIds = existingPymes.map((p) => p.userId);
-  const newValues = valuesToInsert.filter((v) => !existingUserIds.includes(v.userId));
+  const existingUserIds = existingPymes.map((p) => p.id);
+  const newValues = valuesToInsert.filter((v) => !existingUserIds.includes(v.id));
 
   if (newValues.length > 0) {
     await database.insert(pyme).values(newValues);

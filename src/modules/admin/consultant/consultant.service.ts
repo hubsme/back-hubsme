@@ -54,7 +54,12 @@ export class ConsultantService {
 
   async create(data: ConsultantCreateDto) {
     try {
-      return await this.consultantRepository.create(this.clean(data) as ConsultantDTO);
+      const { userId, ...rest } = data;
+      const cleanData = this.clean(rest);
+      return await this.consultantRepository.create({
+        id: userId,
+        ...cleanData,
+      } as ConsultantDTO);
     } catch (error) {
       handleDbError(error);
     }

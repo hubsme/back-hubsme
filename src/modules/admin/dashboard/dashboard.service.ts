@@ -122,9 +122,9 @@ export class DashboardService {
     const pymeRows =
       pymeIds.length > 0
         ? await database
-            .select({ userId: pyme.userId, pymeName: pyme.name, userName: user.name })
+            .select({ userId: pyme.id, pymeName: pyme.name, userName: user.name })
             .from(user)
-            .leftJoin(pyme, eq(pyme.userId, user.id))
+            .leftJoin(pyme, eq(pyme.id, user.id))
             .where(and(inArray(user.id, pymeIds), isNull(user.deletedAt)))
         : [];
     const pymeNameByUserId = pymeRows.reduce<Record<number, string>>((acc, row) => {

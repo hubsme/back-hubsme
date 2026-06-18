@@ -51,8 +51,8 @@ export class PymeConsultantMatchRepository {
     const [{ total }] = await database
       .select({ total: count() })
       .from(pymeConsultantMatch)
-      .leftJoin(pyme, eq(pymeConsultantMatch.pymeId, pyme.userId))
-      .leftJoin(consultant, eq(pymeConsultantMatch.consultantId, consultant.userId))
+      .leftJoin(pyme, eq(pymeConsultantMatch.pymeId, pyme.id))
+      .leftJoin(consultant, eq(pymeConsultantMatch.consultantId, consultant.id))
       .where(whereClause);
 
     const data = await database
@@ -80,8 +80,8 @@ export class PymeConsultantMatchRepository {
         notes: pymeConsultantMatch.notes,
       })
       .from(pymeConsultantMatch)
-      .leftJoin(pyme, eq(pymeConsultantMatch.pymeId, pyme.userId))
-      .leftJoin(consultant, eq(pymeConsultantMatch.consultantId, consultant.userId))
+      .leftJoin(pyme, eq(pymeConsultantMatch.pymeId, pyme.id))
+      .leftJoin(consultant, eq(pymeConsultantMatch.consultantId, consultant.id))
       .where(whereClause)
       .orderBy(desc(pymeConsultantMatch.createdAt))
       .limit(limit)
@@ -116,8 +116,8 @@ export class PymeConsultantMatchRepository {
         notes: pymeConsultantMatch.notes,
       })
       .from(pymeConsultantMatch)
-      .leftJoin(pyme, eq(pymeConsultantMatch.pymeId, pyme.userId))
-      .leftJoin(consultant, eq(pymeConsultantMatch.consultantId, consultant.userId))
+      .leftJoin(pyme, eq(pymeConsultantMatch.pymeId, pyme.id))
+      .leftJoin(consultant, eq(pymeConsultantMatch.consultantId, consultant.id))
       .where(and(eq(pymeConsultantMatch.id, id), isNull(pymeConsultantMatch.deletedAt)));
     return result[0];
   }

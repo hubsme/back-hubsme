@@ -35,7 +35,12 @@ export class PymeService {
 
   async create(data: PymeCreateDto) {
     try {
-      return await this.pymeRepository.create(this.clean(data));
+      const { userId, ...rest } = data;
+      const cleanData = this.clean(rest);
+      return await this.pymeRepository.create({
+        id: userId,
+        ...cleanData,
+      } as any);
     } catch (error) {
       handleDbError(error);
     }

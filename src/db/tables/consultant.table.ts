@@ -5,13 +5,12 @@ import { user } from './user.table';
 export const consultant = pgTable(
   'consultant',
   {
-    id: serial('id').primaryKey(),
+    id: integer('id')
+      .primaryKey()
+      .references(() => user.id, { onDelete: 'cascade' }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
     deletedAt: timestamp('deleted_at'),
-    userId: integer('user_id')
-      .notNull()
-      .references(() => user.id, { onDelete: 'cascade' }),
     fullName: varchar('full_name', { length: 240 }).notNull(),
     firstName: varchar('first_name', { length: 120 }),
     lastName: varchar('last_name', { length: 120 }),
@@ -33,9 +32,8 @@ export const consultant = pgTable(
     index('consultant_specialties_idx').using('gin', t.specialties),
     index('consultant_sectors_idx').using('gin', t.sectors),
     index('consultant_active_idx').on(t.active),
-    index('consultant_user_id_idx').on(t.userId),
     uniqueIndex('consultant_user_unique_active_idx')
-      .on(t.userId)
+      .on(t.id)
       .where(sql`${t.deletedAt} IS NULL`),
   ],
 );

@@ -50,7 +50,10 @@ export class ConsultantRepository {
       .limit(limit)
       .offset(offset);
 
-    return { data, total: Number(total) };
+    return {
+      data: data.map((item) => ({ ...item, userId: item.id })),
+      total: Number(total),
+    };
   }
 
   async findOne(id: number) {
@@ -58,20 +61,16 @@ export class ConsultantRepository {
       .select()
       .from(consultant)
       .where(and(eq(consultant.id, id), isNull(consultant.deletedAt)));
-    return result[0];
+    return result[0] ? { ...result[0], userId: result[0].id } : undefined;
   }
 
   async findByUserId(userId: number) {
-    const result = await database
-      .select()
-      .from(consultant)
-      .where(and(eq(consultant.userId, userId), isNull(consultant.deletedAt)));
-    return result[0];
+    return this.findOne(userId);
   }
 
   async create(data: ConsultantDTO) {
     const result = await database.insert(consultant).values(data).returning();
-    return result[0];
+    return result[0] ? { ...result[0], userId: result[0].id } : undefined;
   }
 
   async update(id: number, data: Partial<ConsultantDTO>) {
@@ -80,7 +79,7 @@ export class ConsultantRepository {
       .set({ ...data, updatedAt: new Date() })
       .where(and(eq(consultant.id, id), isNull(consultant.deletedAt)))
       .returning();
-    return result[0];
+    return result[0] ? { ...result[0], userId: result[0].id } : undefined;
   }
 
   async delete(id: number) {
@@ -89,6 +88,7 @@ export class ConsultantRepository {
       .set({ deletedAt: new Date(), updatedAt: new Date() })
       .where(eq(consultant.id, id))
       .returning();
-    return result[0];
+    return result[0] ? { ...result[0], userId: result[0].id } : undefined;
   }
 }
+
