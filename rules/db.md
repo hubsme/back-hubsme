@@ -27,14 +27,14 @@ Todas las tablas, columnas, archivos y códigos deben estar escritos estrictamen
 
 ### 1. Tablas
 
-- **Variable Exportada**: camelCase, **Singular** (ej. `user`, `bath`).
-- **Nombre en DB (`pgTable`)**: snake_case, **Singular** (ej. `user`, `bath`).
+- **Variable Exportada**: camelCase, **Singular** (ej. `user`, `pyme`).
+- **Nombre en DB (`pgTable`)**: snake_case, **Singular** (ej. `app_user`, `pyme`).
 - **Archivo**: kebab-case, Singular + `.table.ts` (ej. `user.table.ts`).
 
 ### 2. Enums
 
-- **Variable Exportada**: camelCase, NombreTablaSingular + Propiedad + `Enum` (ej. `userStatusEnum`, `customerTypeEnum`).
-- **Nombre en DB (`pgEnum`)**: snake*case, nombre_tabla_singular + `*`+ propiedad_snake (ej.`user_status`, `customer_type`).
+- **Variable Exportada**: camelCase, NombreTablaSingular + Propiedad + `Enum` (ej. `userRoleEnum`, `meetingStatusEnum`).
+- **Nombre en DB (`pgEnum`)**: snake*case, nombre_tabla_singular + `*`+ propiedad_snake (ej.`user_role`, `meeting_status`).
 
 ### 3. Columnas
 
@@ -84,7 +84,7 @@ El rendimiento es clave. Se deben definir índices explícitos en el callback de
 1.  **Claves Foráneas (FK)**:
 
     - Postgres **NO** indexa FKs automáticamente.
-    - **Regla**: Indexar SIEMPRE columnas `_id` que se usen en JOINs o filtros (ej. `customerId`, `breedId`).
+    - **Regla**: Indexar SIEMPRE columnas `_id` que se usen en JOINs o filtros (ej. `pymeId`, `consultantId`).
     - `index('table_column_idx').on(t.columnId)`
 
 2.  **Búsqueda y Ordenamiento**:

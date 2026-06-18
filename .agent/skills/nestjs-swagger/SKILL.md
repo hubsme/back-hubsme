@@ -35,7 +35,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 export function setupSwagger(app: INestApplication) {
   const config = new DocumentBuilder()
     .setTitle('API Documentation')
-    .setDescription('API endpoints for backend-cachorros')
+    .setDescription('API endpoints for the Hubsme consulting platform')
     .setVersion('1.0')
     .addBearerAuth()
     .build();
@@ -81,7 +81,7 @@ async function bootstrap() {
   setupTransformer(app);
   setupSwagger(app);
 
-  await app.listen(3000);
+  await app.listen(6001);
 }
 bootstrap();
 ```

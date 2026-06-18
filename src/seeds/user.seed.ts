@@ -12,7 +12,9 @@ type SeededUserGroup = {
 
 const adminUsers: { email: string; name: string; firstName?: string; lastName?: string; role: 'admin' }[] = [];
 
-const pymeUsers: { email: string; name: string; firstName?: string; lastName?: string; role: 'pyme' }[] = [];
+const pymeUsers: { email: string; name: string; firstName?: string; lastName?: string; role: 'pyme' }[] = [
+  { email: 'xerickcua@gmail.com', name: 'Erick Flores Santos', firstName: 'Erick', lastName: 'Flores Santos Flores Santos', role: 'pyme' },
+];
 
 const consultantUsers = [
   { email: 'miguel.salinas@hubsme.com', name: 'Miguel Salinas', firstName: 'Miguel', lastName: 'Salinas', role: 'consultor' as const },

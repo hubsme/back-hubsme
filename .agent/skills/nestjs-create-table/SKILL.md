@@ -64,32 +64,39 @@ export type UserDTO = typeof user.$inferInsert;
 
 ### Relational Table (Foreign Keys & Arrays)
 
-Example: `pet.table.ts`
+Example: `pyme-consultant-match.table.ts`
 
 ```typescript
-import { pgTable, serial, varchar, integer, timestamp, pgEnum, index } from 'drizzle-orm/pg-core';
-import { breed } from './breed.table';
-import { customer } from './customer.table';
+import { pgTable, serial, text, integer, pgEnum, index } from 'drizzle-orm/pg-core';
+import { user } from './user.table';
 
-export const pet = pgTable(
-  'pet',
+export const pymeConsultantMatchStatusEnum = pgEnum('pyme_consultant_match_status', [
+  'pendiente',
+  'aceptado',
+  'rechazado',
+  'finalizado',
+]);
+
+export const pymeConsultantMatch = pgTable(
+  'pyme_consultant_match',
   {
     id: serial('id').primaryKey(),
     // ... standard timestamp columns ...
-    name: varchar('name', { length: 100 }).notNull(),
-    photos: text('photos').array(), // Array type
+    status: pymeConsultantMatchStatusEnum('status').default('pendiente').notNull(),
+    source: text('source').default('manual').notNull(),
 
     // Foreign Keys
-    breedId: integer('breed_id')
+    pymeId: integer('pyme_id')
       .notNull()
-      .references(() => breed.id),
-    customerId: integer('customer_id')
+      .references(() => user.id, { onDelete: 'cascade' }),
+    consultantId: integer('consultant_id')
       .notNull()
-      .references(() => customer.id, { onDelete: 'cascade' }),
+      .references(() => user.id, { onDelete: 'cascade' }),
   },
   (t) => [
     // Index Foreign Keys for performance
-    index('pet_customer_id_idx').on(t.customerId),
+    index('pyme_consultant_match_pyme_id_idx').on(t.pymeId),
+    index('pyme_consultant_match_consultant_id_idx').on(t.consultantId),
   ],
 );
 ```
@@ -188,7 +195,9 @@ Add the table to the schema object so Drizzle knows about it.
 ```typescript
 const schema = {
   user,
-  pet,
+  pyme,
+  consultant,
+  pymeConsultantMatch,
   // ...
 };
 ```
@@ -199,15 +208,17 @@ Run the seed function in the correct order. Pass data if needed.
 
 ```typescript
 import { seedUsers } from '@seeds/user.seed';
-import { seedPets } from '@seeds/pet.seed';
+import { seedPymes } from '@seeds/pyme.seed';
+import { seedConsultants } from '@seeds/consultant.seed';
+import { seedPymeConsultantMatches } from '@seeds/pyme-consultant-match.seed';
 
 async function seed() {
   // 1. Run independent seeds
   const users = await seedUsers();
-  const customers = await seedCustomers();
-  const breeds = await seedBreeds();
+  const pymes = await seedPymes(users);
+  const consultants = await seedConsultants(users);
 
   // 2. Run dependent seeds (passing IDs/Objects)
-  await seedPets(customers, breeds);
+  await seedPymeConsultantMatches(pymes, consultants);
 }
 ```

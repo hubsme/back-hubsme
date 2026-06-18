@@ -1,4 +1,5 @@
 import { seedUsers } from '@seeds/user.seed';
+import { seedPymes } from '@seeds/pyme.seed';
 import { seedConsultants } from '@seeds/consultant.seed';
 import { seedSubscriptions } from '@seeds/subscription.seed';
 
@@ -8,6 +9,9 @@ async function seed() {
 
     console.log('🌱 Seeding Users...');
     const seededUsers = await seedUsers();
+
+    console.log('🌱 Seeding Pymes...');
+    await seedPymes(seededUsers);
 
     console.log('🌱 Seeding Consultants...');
     await seedConsultants(seededUsers);

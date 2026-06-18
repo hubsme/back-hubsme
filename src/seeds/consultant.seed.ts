@@ -12,7 +12,7 @@ export async function seedConsultants(seededUsers: { byEmail: Record<string, Use
 
   const consultantValues: ConsultantDTO[] = [
     {
-      userId: getUser('miguel.salinas@hubsme.com').id,
+      id: getUser('miguel.salinas@hubsme.com').id,
       firstName: 'Miguel',
       lastName: 'Salinas',
       fullName: 'Miguel Salinas',
@@ -30,7 +30,7 @@ export async function seedConsultants(seededUsers: { byEmail: Record<string, Use
       validated: 'true',
     },
     {
-      userId: getUser('ana.torres@hubsme.com').id,
+      id: getUser('ana.torres@hubsme.com').id,
       firstName: 'Ana Lucia',
       lastName: 'Torres',
       fullName: 'Ana Lucia Torres',
@@ -48,7 +48,7 @@ export async function seedConsultants(seededUsers: { byEmail: Record<string, Use
       validated: 'true',
     },
     {
-      userId: getUser('roberto.sanchez@hubsme.com').id,
+      id: getUser('roberto.sanchez@hubsme.com').id,
       firstName: 'Roberto',
       lastName: 'Sanchez',
       fullName: 'Roberto Sanchez',
@@ -66,7 +66,7 @@ export async function seedConsultants(seededUsers: { byEmail: Record<string, Use
       validated: 'true',
     },
     {
-      userId: getUser('elena.rivas@hubsme.com').id,
+      id: getUser('elena.rivas@hubsme.com').id,
       firstName: 'Elena',
       lastName: 'Rivas',
       fullName: 'Elena Rivas',
@@ -91,18 +91,18 @@ export async function seedConsultants(seededUsers: { byEmail: Record<string, Use
     .where(
       and(
         inArray(
-          consultant.userId,
-          consultantValues.map((item) => item.userId),
+          consultant.id,
+          consultantValues.map((item) => item.id),
         ),
         isNull(consultant.deletedAt),
       ),
     );
-  const existingConsultantUserIds = new Set(existingConsultants.map((item) => item.userId));
+  const existingConsultantUserIds = new Set(existingConsultants.map((item) => item.id));
 
-  if (consultantValues.some((item) => !existingConsultantUserIds.has(item.userId))) {
+  if (consultantValues.some((item) => !existingConsultantUserIds.has(item.id))) {
     await database
       .insert(consultant)
-      .values(consultantValues.filter((item) => !existingConsultantUserIds.has(item.userId)));
+      .values(consultantValues.filter((item) => !existingConsultantUserIds.has(item.id)));
   }
 
   const consultantRows = await database
@@ -111,8 +111,8 @@ export async function seedConsultants(seededUsers: { byEmail: Record<string, Use
     .where(
       and(
         inArray(
-          consultant.userId,
-          consultantValues.map((item) => item.userId),
+          consultant.id,
+          consultantValues.map((item) => item.id),
         ),
         isNull(consultant.deletedAt),
       ),

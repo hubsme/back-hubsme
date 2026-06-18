@@ -13,7 +13,7 @@ export class DiagnosticGenerateDto {
   @IsOptional()
   pymeData?: Record<string, unknown>;
 
-  @ApiProperty({ type: Object, example: { revenue: '500000', techLevel: 6, challenges: 'Falta de liquidez' } })
+  @ApiProperty({ type: Object, example: { revenue: '600000', techLevel: 6, challenges: 'Falta de liquidez' } })
   @IsObject()
   responses: Record<string, unknown>;
 }

@@ -1,16 +1,17 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { HttpErrorDto } from '@core/dto/http-error.dto';
+import { User } from '@db/tables/user.table';
 import { JwtAuthGuard } from '@modules/auth/jwt-auth.guard';
+import { PymeListDto } from '@modules/admin/pyme/dto/pyme-list.dto';
 import { ConsultantCreateDto } from './dto/consultant-create.dto';
-import { ConsultantPymeActionDto, ConsultantPymeMessageActionDto } from './dto/consultant-pyme-action.dto';
-import { ConsultantPymeListFiltersDto, ConsultantPymeMessageListFiltersDto } from './dto/consultant-pyme-list.dto';
 import { ConsultantListDto, ConsultantListFiltersDto } from './dto/consultant-list.dto';
+import { ConsultantMeetingPymesFiltersDto } from './dto/consultant-meeting-pymes.dto';
 import { ConsultantResultDto } from './dto/consultant-result.dto';
 import { ConsultantUpdateDto } from './dto/consultant-update.dto';
 import { ConsultantService } from './consultant.service';
-import { PymeConsultantMatchListDto, PymeConsultantMatchResultDto } from '@modules/admin/pyme/dto/pyme-consultant-match.dto';
-import { PymeConsultantMessageListDto, PymeConsultantMessageResultDto } from '@modules/admin/pyme/dto/pyme-consultant-message.dto';
+
+type AuthenticatedRequest = { user: User };
 
 @ApiTags('consultant')
 @ApiBearerAuth()
@@ -25,6 +26,14 @@ export class ConsultantController {
   @ApiResponse({ status: 400, type: HttpErrorDto })
   findAll(@Query() filters: ConsultantListFiltersDto) {
     return this.consultantService.findAllPaginated(filters);
+  }
+
+  @Get('meeting-pymes')
+  @ApiOperation({ summary: 'Get PYMEs with at least one meeting with current consultant' })
+  @ApiResponse({ status: 200, type: PymeListDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  meetingPymes(@Request() req: AuthenticatedRequest, @Query() filters: ConsultantMeetingPymesFiltersDto) {
+    return this.consultantService.findMeetingPymes(req.user.id, filters);
   }
 
   @Get('find-one/:id')
@@ -51,54 +60,6 @@ export class ConsultantController {
   @ApiResponse({ status: 400, type: HttpErrorDto })
   create(@Body() createConsultantDto: ConsultantCreateDto) {
     return this.consultantService.create(createConsultantDto);
-  }
-
-  @Post('contact-pyme')
-  @ApiOperation({ summary: 'Request contact with a PYME from a consultant' })
-  @ApiResponse({ status: 200, type: PymeConsultantMatchResultDto })
-  @ApiResponse({ status: 400, type: HttpErrorDto })
-  contactPyme(@Body() contactDto: ConsultantPymeActionDto) {
-    return this.consultantService.contactPyme(contactDto);
-  }
-
-  @Get('pyme-contacts')
-  @ApiOperation({ summary: 'Get PYME contacts for a consultant' })
-  @ApiResponse({ status: 200, type: PymeConsultantMatchListDto })
-  @ApiResponse({ status: 400, type: HttpErrorDto })
-  pymeContacts(@Query() filters: ConsultantPymeListFiltersDto) {
-    return this.consultantService.listPymeContacts(filters);
-  }
-
-  @Patch('accept-pyme-contact')
-  @ApiOperation({ summary: 'Accept a PYME contact request from a consultant' })
-  @ApiResponse({ status: 200, type: PymeConsultantMatchResultDto })
-  @ApiResponse({ status: 400, type: HttpErrorDto })
-  acceptPymeContact(@Body() contactDto: ConsultantPymeActionDto) {
-    return this.consultantService.acceptPymeContact(contactDto);
-  }
-
-  @Patch('reject-pyme-contact')
-  @ApiOperation({ summary: 'Reject a PYME contact request from a consultant' })
-  @ApiResponse({ status: 200, type: PymeConsultantMatchResultDto })
-  @ApiResponse({ status: 400, type: HttpErrorDto })
-  rejectPymeContact(@Body() contactDto: ConsultantPymeActionDto) {
-    return this.consultantService.rejectPymeContact(contactDto);
-  }
-
-  @Get('pyme-messages')
-  @ApiOperation({ summary: 'Get messages with a PYME from a consultant' })
-  @ApiResponse({ status: 200, type: PymeConsultantMessageListDto })
-  @ApiResponse({ status: 400, type: HttpErrorDto })
-  pymeMessages(@Query() filters: ConsultantPymeMessageListFiltersDto) {
-    return this.consultantService.listPymeMessages(filters);
-  }
-
-  @Post('send-pyme-message')
-  @ApiOperation({ summary: 'Send a message from a consultant to a PYME' })
-  @ApiResponse({ status: 200, type: PymeConsultantMessageResultDto })
-  @ApiResponse({ status: 400, type: HttpErrorDto })
-  sendPymeMessage(@Body() messageDto: ConsultantPymeMessageActionDto) {
-    return this.consultantService.sendPymeMessage(messageDto);
   }
 
   @Patch('update/:id')

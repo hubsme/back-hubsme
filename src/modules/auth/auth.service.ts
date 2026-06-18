@@ -111,7 +111,7 @@ export class AuthService {
 
       if (user.role === 'consultor') {
         await this.consultantRepository.create({
-          userId: user.id,
+          id: user.id,
           fullName: user.name,
           firstName,
           lastName,
@@ -120,7 +120,7 @@ export class AuthService {
         });
       } else if (user.role === 'pyme') {
         await this.pymeRepository.create({
-          userId: user.id,
+          id: user.id,
           name: registerDto.name.trim(),
           ruc: registerDto.ruc?.trim(),
           ownerFirstName: firstName,
@@ -327,7 +327,7 @@ export class AuthService {
         const profile = await this.consultantRepository.findByUserId(user.id);
         if (!profile) {
           await this.consultantRepository.create({
-            userId: user.id,
+            id: user.id,
             fullName: user.name,
             firstName: user.firstName ?? firstName,
             lastName: user.lastName ?? lastName,
@@ -346,7 +346,7 @@ export class AuthService {
         const profile = await this.pymeRepository.findByUserId(user.id);
         if (!profile) {
           await this.pymeRepository.create({
-            userId: user.id,
+            id: user.id,
             name: user.name,
             ownerFirstName: user.firstName ?? firstName,
             ownerLastName: user.lastName ?? lastName,

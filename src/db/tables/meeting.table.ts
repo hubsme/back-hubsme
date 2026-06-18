@@ -1,7 +1,13 @@
 import { pgTable, serial, text, timestamp, integer, pgEnum, index } from 'drizzle-orm/pg-core';
 import { user } from './user.table';
 
-export const meetingStatusEnum = pgEnum('meeting_status', ['solicitada', 'confirmada', 'finalizada', 'cancelada']);
+export const meetingStatusEnum = pgEnum('meeting_status', [
+  'solicitada',
+  'pago_pendiente',
+  'confirmada',
+  'finalizada',
+  'cancelada',
+]);
 export const meetingRequestedByEnum = pgEnum('meeting_requested_by', ['pyme', 'consultor']);
 
 export const meeting = pgTable(

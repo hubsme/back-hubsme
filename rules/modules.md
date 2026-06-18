@@ -84,8 +84,8 @@ export class EntityController {
 
 ### DTOs (`dto/`)
 
-- **Nomenclatura Archivos**: `[entidad]-[acción].dto.ts` (ej. `bath-create.dto.ts`).
-- **Nomenclatura Clases**: `[Entity][Action]Dto` (ej. `BathCreateDto`).
+- **Nomenclatura Archivos**: `[entidad]-[acción].dto.ts` (ej. `meeting-create.dto.ts`).
+- **Nomenclatura Clases**: `[Entity][Action]Dto` (ej. `MeetingCreateDto`).
 - **Estándar de DTOs**:
   1.  **`[entidad]-create.dto.ts`**: Campos necesarios para creación.
   2.  **`[entidad]-update.dto.ts`**: Extiende de `Create` usando `PartialType`.
@@ -321,270 +321,18 @@ Para crear un nuevo módulo "Order":
 
 ## 5. Múltiples Entidades Relacionadas en un Módulo
 
-Cuando tienes entidades estrechamente relacionadas (ej. `bath` y `bath-type`), puedes agruparlas en un mismo módulo para mantener la cohesión del dominio.
+Cuando tienes entidades estrechamente relacionadas (ej. `pyme-consultant-match` y `pyme-consultant-message`), puedes agruparlas en un mismo módulo para mantener la cohesión del dominio.
 
-### 5.1 Estructura de Directorios
+Ejemplo en Hubsme: el módulo `pyme` expone endpoints de la PYME y también los flujos de contacto con consultores:
 
-```
-src/modules/admin/bath/
-├── dto/
-│   ├── bath/                      # DTOs de la entidad principal
-│   │   ├── bath-create.dto.ts
-│   │   ├── bath-update.dto.ts
-│   │   ├── bath-list.dto.ts
-│   │   └── bath-result.dto.ts
-│   └── bath-type/                 # DTOs de la entidad relacionada
-│       ├── bath-type-create.dto.ts
-│       ├── bath-type-update.dto.ts
-│       ├── bath-type-list.dto.ts
-│       └── bath-type-result.dto.ts
-├── bath.controller.ts             # Controlador único con endpoints de ambas entidades
-├── bath.service.ts                # Servicio único que maneja ambas entidades
-└── bath.module.ts                 # Módulo que registra ambos repositorios
-```
+- `POST /admin/pyme/contact-consultant` - Contactar consultor.
+- `GET /admin/pyme/consultant-contacts` - Listar contactos.
+- `PATCH /admin/pyme/accept-consultant-contact` - Aceptar contacto.
+- `PATCH /admin/pyme/reject-consultant-contact` - Rechazar contacto.
+- `GET /admin/pyme/consultant-messages` - Listar mensajes.
+- `POST /admin/pyme/send-consultant-message` - Enviar mensaje.
 
-### 5.2 Implementación del Service
-
-El servicio debe inyectar ambos repositorios y proporcionar métodos para cada entidad:
-
-```typescript
-import { Injectable } from '@nestjs/common';
-import { BathRepository } from '@repositories/bath.repository';
-import { BathTypeRepository } from '@repositories/bath-type.repository';
-import { BathCreateDto } from './dto/bath/bath-create.dto';
-import { BathUpdateDto } from './dto/bath/bath-update.dto';
-import { BathListFiltersDto } from './dto/bath/bath-list.dto';
-import { BathTypeCreateDto } from './dto/bath-type/bath-type-create.dto';
-import { BathTypeUpdateDto } from './dto/bath-type/bath-type-update.dto';
-import { BathTypeListFiltersDto } from './dto/bath-type/bath-type-list.dto';
-
-@Injectable()
-export class BathService {
-  constructor(
-    private readonly bathRepository: BathRepository,
-    private readonly bathTypeRepository: BathTypeRepository,
-  ) {}
-
-  // Bath methods
-  async findAllPaginated(filters: BathListFiltersDto) {
-    const { page, limit, ...rest } = filters;
-    const { data, total } = await this.bathRepository.findAllPaginated(page, limit, rest);
-
-    const totalPages = Math.ceil(total / limit);
-    const hasNextPage = page < totalPages;
-    const hasPreviousPage = page > 1;
-
-    return {
-      data,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages,
-        hasNextPage,
-        hasPreviousPage,
-      },
-    };
-  }
-
-  findOne(id: number) {
-    return this.bathRepository.findOne(id);
-  }
-
-  create(data: BathCreateDto) {
-    return this.bathRepository.create(data);
-  }
-
-  update(id: number, data: BathUpdateDto) {
-    return this.bathRepository.update(id, data);
-  }
-
-  delete(id: number) {
-    return this.bathRepository.delete(id);
-  }
-
-  // Bath Type methods
-  async findAllBathTypesPaginated(filters: BathTypeListFiltersDto) {
-    const { page, limit, ...rest } = filters;
-    const { data, total } = await this.bathTypeRepository.findAllPaginated(page, limit, rest);
-
-    const totalPages = Math.ceil(total / limit);
-    const hasNextPage = page < totalPages;
-    const hasPreviousPage = page > 1;
-
-    return {
-      data,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages,
-        hasNextPage,
-        hasPreviousPage,
-      },
-    };
-  }
-
-  findOneBathType(id: number) {
-    return this.bathTypeRepository.findOne(id);
-  }
-
-  createBathType(data: BathTypeCreateDto) {
-    return this.bathTypeRepository.create(data);
-  }
-
-  updateBathType(id: number, data: BathTypeUpdateDto) {
-    return this.bathTypeRepository.update(id, data);
-  }
-
-  deleteBathType(id: number) {
-    return this.bathTypeRepository.delete(id);
-  }
-}
-```
-
-### 5.3 Implementación del Controller
-
-El controlador agrupa los endpoints de ambas entidades usando prefijos de ruta:
-
-```typescript
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiParam, ApiOkResponse, ApiBearerAuth } from '@nestjs/swagger';
-import { BathService } from './bath.service';
-import { BathCreateDto } from './dto/bath/bath-create.dto';
-import { BathUpdateDto } from './dto/bath/bath-update.dto';
-import { BathListDto, BathListFiltersDto } from './dto/bath/bath-list.dto';
-import { BathResultDto } from './dto/bath/bath-result.dto';
-import { BathTypeCreateDto } from './dto/bath-type/bath-type-create.dto';
-import { BathTypeUpdateDto } from './dto/bath-type/bath-type-update.dto';
-import { BathTypeListDto, BathTypeListFiltersDto } from './dto/bath-type/bath-type-list.dto';
-import { BathTypeResultDto } from './dto/bath-type/bath-type-result.dto';
-import { JwtAuthGuard } from '@modules/auth/jwt-auth.guard';
-
-@ApiTags('bath')
-@ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
-@Controller('admin/bath')
-export class BathController {
-  constructor(private readonly bathService: BathService) {}
-
-  // Bath endpoints
-  @Get('find-all')
-  @ApiOperation({ summary: 'Get all baths paginated' })
-  @ApiOkResponse({ type: BathListDto })
-  findAll(@Query() filters: BathListFiltersDto) {
-    return this.bathService.findAllPaginated(filters);
-  }
-
-  @Get('find-one/:id')
-  @ApiOperation({ summary: 'Get a bath by ID' })
-  @ApiParam({ name: 'id', type: 'number', description: 'Bath ID' })
-  @ApiOkResponse({ type: BathResultDto })
-  async findOne(@Param('id') id: string) {
-    return await this.bathService.findOne(+id);
-  }
-
-  @Post('create')
-  @ApiOperation({ summary: 'Create a new bath' })
-  @ApiOkResponse({ type: BathResultDto })
-  create(@Body() createBathDto: BathCreateDto) {
-    return this.bathService.create(createBathDto);
-  }
-
-  @Patch('update/:id')
-  @ApiOperation({ summary: 'Update a bath' })
-  @ApiParam({ name: 'id', type: 'number', description: 'Bath ID' })
-  @ApiOkResponse({ type: BathResultDto })
-  update(@Param('id') id: string, @Body() updateBathDto: BathUpdateDto) {
-    return this.bathService.update(+id, updateBathDto);
-  }
-
-  @Delete('delete/:id')
-  @ApiOperation({ summary: 'Delete a bath' })
-  @ApiParam({ name: 'id', type: 'number', description: 'Bath ID' })
-  @ApiOkResponse({ type: BathResultDto })
-  remove(@Param('id') id: string) {
-    return this.bathService.delete(+id);
-  }
-
-  // Bath Type endpoints - Usar prefijo 'type/' para diferenciar
-  @Get('type/find-all')
-  @ApiOperation({ summary: 'Get all bath types paginated' })
-  @ApiOkResponse({ type: BathTypeListDto })
-  findAllBathTypes(@Query() filters: BathTypeListFiltersDto) {
-    return this.bathService.findAllBathTypesPaginated(filters);
-  }
-
-  @Get('type/find-one/:id')
-  @ApiOperation({ summary: 'Get a bath type by ID' })
-  @ApiParam({ name: 'id', type: 'number', description: 'Bath Type ID' })
-  @ApiOkResponse({ type: BathTypeResultDto })
-  async findOneBathType(@Param('id') id: string) {
-    return await this.bathService.findOneBathType(+id);
-  }
-
-  @Post('type/create')
-  @ApiOperation({ summary: 'Create a new bath type' })
-  @ApiOkResponse({ type: BathTypeResultDto })
-  createBathType(@Body() createBathTypeDto: BathTypeCreateDto) {
-    return this.bathService.createBathType(createBathTypeDto);
-  }
-
-  @Patch('type/update/:id')
-  @ApiOperation({ summary: 'Update a bath type' })
-  @ApiParam({ name: 'id', type: 'number', description: 'Bath Type ID' })
-  @ApiOkResponse({ type: BathTypeResultDto })
-  updateBathType(@Param('id') id: string, @Body() updateBathTypeDto: BathTypeUpdateDto) {
-    return this.bathService.updateBathType(+id, updateBathTypeDto);
-  }
-
-  @Delete('type/delete/:id')
-  @ApiOperation({ summary: 'Delete a bath type' })
-  @ApiParam({ name: 'id', type: 'number', description: 'Bath Type ID' })
-  @ApiOkResponse({ type: BathTypeResultDto })
-  removeBathType(@Param('id') id: string) {
-    return this.bathService.deleteBathType(+id);
-  }
-}
-```
-
-### 5.4 Implementación del Module
-
-El módulo debe registrar ambos repositorios en los providers:
-
-```typescript
-import { Module } from '@nestjs/common';
-import { BathService } from './bath.service';
-import { BathController } from './bath.controller';
-import { BathRepository } from '@repositories/bath.repository';
-import { BathTypeRepository } from '@repositories/bath-type.repository';
-
-@Module({
-  controllers: [BathController],
-  providers: [BathService, BathRepository, BathTypeRepository],
-})
-export class BathModule {}
-```
-
-### 5.5 Endpoints Resultantes
-
-Con esta estructura, los endpoints quedan organizados así:
-
-**Entidad Principal (Bath):**
-
-- `GET /admin/bath/find-all` - Listar baños
-- `GET /admin/bath/find-one/:id` - Obtener un baño
-- `POST /admin/bath/create` - Crear baño
-- `PATCH /admin/bath/update/:id` - Actualizar baño
-- `DELETE /admin/bath/delete/:id` - Eliminar baño
-
-**Entidad Relacionada (Bath Type):**
-
-- `GET /admin/bath/type/find-all` - Listar tipos de baño
-- `GET /admin/bath/type/find-one/:id` - Obtener un tipo de baño
-- `POST /admin/bath/type/create` - Crear tipo de baño
-- `PATCH /admin/bath/type/update/:id` - Actualizar tipo de baño
-- `DELETE /admin/bath/type/delete/:id` - Eliminar tipo de baño
+El servicio debe inyectar los repositorios relacionados y mantener la regla de capas: la lógica queda en service, el acceso a datos queda en repository y el controller solo enruta/documenta.
 
 ### 5.6 Ventajas de este Enfoque
 
@@ -598,8 +346,8 @@ Con esta estructura, los endpoints quedan organizados así:
 
 Usa múltiples entidades en un módulo cuando:
 
-- Las entidades están **estrechamente relacionadas** (ej. `bath` y `bath-type`)
-- Una entidad es **dependiente** de la otra (ej. `treatment` y `treatment-type`)
+- Las entidades están **estrechamente relacionadas** (ej. `pyme-consultant-match` y `pyme-consultant-message`)
+- Una entidad es **dependiente** de la otra (ej. `diagnostic` y `diagnostic-document`)
 - Comparten **lógica de negocio** común
 - Forman parte del **mismo contexto de dominio**
 

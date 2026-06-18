@@ -1,7 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { TaskDTO } from '@db/tables/task.table';
 import { MeetingRepository } from '@repositories/meeting.repository';
-import { PymeConsultantMatchRepository } from '@repositories/pyme-consultant-match.repository';
 import { TaskRepository } from '@repositories/task.repository';
 import { MeetingCreateDto } from './dto/meeting-create.dto';
 import { MeetingFinalizeDto } from './dto/meeting-finalize.dto';
@@ -9,6 +8,7 @@ import { MeetingListFiltersDto } from './dto/meeting-list.dto';
 import { MeetingTeamsJoinDto } from './dto/meeting-teams-join.dto';
 import { MeetingUpdateDto } from './dto/meeting-update.dto';
 import { TeamsMeetingService } from './teams-meeting.service';
+import { ConsultantAvailabilityService } from '../consultant-availability/consultant-availability.service';
 
 @Injectable()
 export class MeetingService {
@@ -17,8 +17,8 @@ export class MeetingService {
   constructor(
     private readonly meetingRepository: MeetingRepository,
     private readonly taskRepository: TaskRepository,
-    private readonly matchRepository: PymeConsultantMatchRepository,
     private readonly teamsMeetingService: TeamsMeetingService,
+    private readonly consultantAvailabilityService: ConsultantAvailabilityService,
   ) {}
 
   async findAllPaginated(filters: MeetingListFiltersDto) {
@@ -40,13 +40,14 @@ export class MeetingService {
   }
 
   async create(data: MeetingCreateDto) {
-    const acceptedMatch = await this.matchRepository.findAcceptedByPair(data.pymeId, data.consultantId);
-    if (!acceptedMatch) {
-      throw new BadRequestException(['Para solicitar una reunion debe existir un match aceptado']);
-    }
-
     const title = data.title.trim();
     const durationMinutes = data.durationMinutes ?? 60;
+    const requestedBy = data.requestedBy ?? 'pyme';
+    await this.consultantAvailabilityService.assertAvailableForMeeting(
+      data.consultantId,
+      data.startTime,
+      durationMinutes,
+    );
 
     return this.meetingRepository.create({
       ...data,
@@ -55,8 +56,8 @@ export class MeetingService {
       teamsOnlineMeetingId: null,
       description: data.description?.trim(),
       durationMinutes,
-      status: 'solicitada',
-      requestedBy: data.requestedBy ?? 'pyme',
+      status: requestedBy === 'pyme' ? 'pago_pendiente' : 'solicitada',
+      requestedBy,
     });
   }
 
@@ -66,9 +67,9 @@ export class MeetingService {
       `Confirming meeting ${meeting.id}: status=${meeting.status}, pymeId=${meeting.pymeId}, consultantId=${meeting.consultantId}, startTime=${meeting.startTime.toISOString()}, durationMinutes=${meeting.durationMinutes}`,
     );
 
-    if (meeting.status !== 'solicitada') {
+    if (!['solicitada', 'pago_pendiente'].includes(meeting.status)) {
       this.logger.warn(`Meeting ${meeting.id} cannot be confirmed because status is ${meeting.status}`);
-      throw new BadRequestException(['Solo se pueden confirmar reuniones solicitadas']);
+      throw new BadRequestException(['Solo se pueden confirmar reuniones solicitadas o pendientes de pago']);
     }
 
     const teamsMeeting = await this.createTeamsMeeting({
@@ -153,8 +154,13 @@ export class MeetingService {
     if (data.status === 'finalizada') {
       throw new BadRequestException(['Usa el endpoint de finalizacion para cerrar reuniones']);
     }
-    if (data.status === 'cancelada' && meeting.status !== 'solicitada') {
-      throw new BadRequestException(['Solo se pueden cancelar reuniones en estado solicitado']);
+    if (data.status === 'pago_pendiente') {
+      if (meeting.status !== 'solicitada' || meeting.requestedBy !== 'pyme') {
+        throw new BadRequestException(['Solo el consultor puede aceptar solicitudes creadas por la PYME']);
+      }
+    }
+    if (data.status === 'cancelada' && !['solicitada', 'pago_pendiente'].includes(meeting.status)) {
+      throw new BadRequestException(['Solo se pueden cancelar reuniones solicitadas o pendientes de pago']);
     }
 
     return this.meetingRepository.update(id, {
