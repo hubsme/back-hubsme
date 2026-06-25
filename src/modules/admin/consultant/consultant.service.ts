@@ -7,12 +7,18 @@ import { ConsultantListFiltersDto } from './dto/consultant-list.dto';
 import { ConsultantMeetingPymesFiltersDto } from './dto/consultant-meeting-pymes.dto';
 import { ConsultantUpdateDto } from './dto/consultant-update.dto';
 import { ConsultantDTO } from '@db/tables/consultant.table';
+import { UserService } from '../user/user.service';
+import { WhatsappService } from '../whatsapp/whatsapp.service';
+import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class ConsultantService {
   constructor(
     private readonly consultantRepository: ConsultantRepository,
     private readonly pymeRepository: PymeRepository,
+    private readonly userService: UserService,
+    private readonly whatsappService: WhatsappService,
+    private readonly emailService: EmailService,
   ) {}
 
   async findAllPaginated(filters: ConsultantListFiltersDto) {
@@ -95,6 +101,7 @@ export class ConsultantService {
       firstName: data.firstName?.trim(),
       lastName: data.lastName?.trim(),
       fullName: this.buildFullName(data),
+      ownerPhone: data.ownerPhone?.trim(),
       bio: data.bio?.trim(),
       specialties: data.specialties?.map((item) => item.trim()).filter(Boolean),
       sectors: data.sectors?.map((item) => item.trim()).filter(Boolean),
@@ -109,5 +116,66 @@ export class ConsultantService {
     if (explicitFullName) return explicitFullName;
 
     return [data.firstName?.trim(), data.lastName?.trim()].filter(Boolean).join(' ');
+  }
+
+  async sendMeetingNotification(
+    consultantId: number,
+    pymeName: string,
+    meetingTitle: string,
+    startTime: Date,
+    durationMinutes: number,
+  ) {
+    try {
+      const consultant = await this.consultantRepository.findOne(consultantId);
+      if (!consultant) return;
+
+      const user = await this.userService.findOne(consultantId);
+      if (!user) return;
+
+      const dateStr = startTime.toLocaleString('es-PE', {
+        timeZone: 'America/Lima',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+
+      // 1. WhatsApp notification
+      if (consultant.ownerPhone?.trim()) {
+        const message = `🎉 *¡Nueva asesoría agendada, ${consultant.fullName}!* 🚀\n\n` +
+          `Hola, nos complace informarte que se ha agendado y confirmado una sesión de consultoría a través de *HUBSME*. Tienes una cita pendiente:\n\n` +
+          `🏢 *PYME:* ${pymeName}\n` +
+          `📝 *Tipo de sesión:* ${meetingTitle}\n` +
+          `📅 *Fecha y hora:* ${dateStr} (hora de Perú)\n` +
+          `⏱️ *Duración:* ${durationMinutes} minutos\n\n` +
+          `¡Éxitos en tu sesión! 💪✨`;
+        try {
+          await this.whatsappService.sendMessage({
+            phone: consultant.ownerPhone,
+            message,
+          });
+        } catch (error) {
+          console.error('Error sending WhatsApp notification:', error);
+        }
+      }
+
+      // 2. Email notification
+      if (user.email?.trim()) {
+        const emailSubject = `Nueva sesión de consultoría agendada - HUBSME`;
+        const emailText = `Hola ${consultant.fullName},\n\n¡Felicidades! Se ha agendado y confirmado una nueva reunión de consultoría de tipo "${meetingTitle}" con la PYME "${pymeName}".\n\nDetalles de la reunión:\n- Fecha y hora: ${dateStr}\n- Duración: ${durationMinutes} minutos\n\nSaludos,\nEl equipo de HUBSME`;
+        try {
+          await this.emailService.sendEmail({
+            to: user.email,
+            subject: emailSubject,
+            text: emailText,
+          });
+        } catch (error) {
+          console.error('Error sending email notification:', error);
+        }
+      }
+    } catch (error) {
+      // General silent catch to ensure fire-and-forget safety
+    }
   }
 }

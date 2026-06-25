@@ -26,6 +26,9 @@ export class ConsultantResultDto {
   lastName: string | null;
 
   @ApiProperty({ nullable: true })
+  ownerPhone: string | null;
+
+  @ApiProperty({ nullable: true })
   bio: string | null;
 
   @ApiProperty({ type: [String] })
