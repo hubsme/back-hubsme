@@ -85,16 +85,44 @@ export class MercadoPagoCheckoutDto {
   meetingDetails?: CheckoutMeetingDetailsDto | null;
 }
 
-export class MercadoPagoPaymentWebhookDto {
-  @ApiProperty({ example: 'payment', required: false })
+export class MercadoPagoPaymentWebhookQueryDto {
+  @ApiPropertyOptional({ example: 'payment' })
+  @IsString()
+  @IsOptional()
   type?: string;
 
-  @ApiProperty({ example: 'payment', required: false })
+  @ApiPropertyOptional({ example: 'payment' })
+  @IsString()
+  @IsOptional()
   topic?: string;
 
-  @ApiProperty({ example: { id: '123456789' }, required: false })
-  data?: { id?: string };
-
-  @ApiProperty({ example: '123456789', required: false })
+  @ApiPropertyOptional({ example: '123456789' })
+  @IsString()
+  @IsOptional()
   id?: string;
+
+  @ApiPropertyOptional({ example: '123456789' })
+  @IsString()
+  @IsOptional()
+  payment_id?: string;
+
+  @ApiPropertyOptional({ example: '123456789' })
+  @IsString()
+  @IsOptional()
+  'data.id'?: string;
+
+  @ApiPropertyOptional({ example: 'https://api.mercadopago.com/v1/payments/123456789' })
+  @IsString()
+  @IsOptional()
+  resource?: string;
+
+  @ApiPropertyOptional({ example: 'payment.created' })
+  @IsString()
+  @IsOptional()
+  action?: string;
+
+  @ApiPropertyOptional({ example: 'pending:1:2:1792500000000' })
+  @IsString()
+  @IsOptional()
+  externalReference?: string;
 }

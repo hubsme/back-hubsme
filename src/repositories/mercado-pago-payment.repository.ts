@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, ne } from 'drizzle-orm';
 import { database } from '@db/connection.db';
 import { mercadoPagoPayment, MercadoPagoPaymentDTO } from '@db/tables/mercado-pago-payment.table';
 
@@ -47,6 +47,15 @@ export class MercadoPagoPaymentRepository {
       .update(mercadoPagoPayment)
       .set({ ...data, updatedAt: new Date() })
       .where(and(eq(mercadoPagoPayment.id, id), isNull(mercadoPagoPayment.deletedAt)))
+      .returning();
+    return result[0];
+  }
+
+  async approveIfUnprocessed(id: number, data: Partial<MercadoPagoPaymentDTO>) {
+    const result = await database
+      .update(mercadoPagoPayment)
+      .set({ ...data, status: 'approved', updatedAt: new Date() })
+      .where(and(eq(mercadoPagoPayment.id, id), ne(mercadoPagoPayment.status, 'approved'), isNull(mercadoPagoPayment.deletedAt)))
       .returning();
     return result[0];
   }

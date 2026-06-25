@@ -57,9 +57,6 @@ export class DiagnosticPayloadDto {
 
   @ApiProperty({ type: [DiagnosticRecommendationDto] })
   recomendaciones: DiagnosticRecommendationDto[];
-
-  @ApiProperty({ type: [String] })
-  proximosPasos: string[];
 }
 
 export class DiagnosticResultDto {

@@ -141,11 +141,6 @@ export class DiagnosticService {
       areasEvaluadas,
       problemasCriticos,
       recomendaciones,
-      proximosPasos: [
-        'Crear las primeras tareas de mejora con fecha limite.',
-        'Elegir consultor segun especialidad y sector.',
-        'Revisar el avance del tablero en la siguiente reunion.',
-      ],
     };
   }
 
@@ -154,9 +149,12 @@ export class DiagnosticService {
       Eres un consultor empresarial senior especializado en PYMES latinoamericanas.
       Analiza los datos, respuestas cerradas y abiertas de la PYME. Ya existe un score base calculado por Hubsme.
       Usa ese score como referencia, ajustalo solo si las respuestas abiertas justifican claramente un cambio.
-      El campo feedbackIa debe ser el DIAGNOSTICO GENERAL: un analisis consultivo concreto de 2 a 4 parrafos cortos,
-      basado en las respuestas reales, conectando finanzas, operaciones, equipo y mercado. No repitas el resumen ejecutivo.
-      Evita texto generico y evita promesas legales, financieras o tributarias absolutas.
+      El campo feedbackIa debe ser el DIAGNOSTICO GENERAL y debe estar estructurado en español con los siguientes apartados (usando títulos en negritas y párrafos separados):
+      - **Puntos Positivos:** Análisis de las fortalezas y aciertos del negocio basados en sus respuestas.
+      - **Puntos Negativos y Oportunidades de Mejora:** Análisis de las debilidades, riesgos, cuellos de botella e ineficiencias encontradas.
+      - **Conclusión y Ruta Estratégica:** Síntesis consultiva del camino sugerido para estabilizar y crecer.
+      
+      No repitas el resumen ejecutivo. Evita texto genérico y evita promesas legales o financieras absolutas.
       areasEvaluadas debe contener exactamente estas 4 areas y en este orden: Finanzas, Operaciones, Equipo, Mercado.
       Debes responder ÚNICAMENTE con un objeto JSON válido con la siguiente estructura y en español. No incluyas introducciones, explicaciones ni bloques de código markdown (como \`\`\`json). Solo devuelve el JSON puro:
       {
@@ -171,8 +169,7 @@ export class DiagnosticService {
         ],
         "recomendaciones": [
           { "accion": "string", "beneficioEsperado": "string", "plazo": "inmediato|30dias|90dias|6meses", "prioridad": "alta|media|baja" }
-        ],
-        "proximosPasos": ["string"]
+        ]
       }
     `;
 
@@ -221,8 +218,6 @@ export class DiagnosticService {
           `- **${recommendation.accion}** (${recommendation.prioridad}, ${recommendation.plazo}): ${recommendation.beneficioEsperado}`,
       )
       .join('\n');
-    const nextSteps = result.proximosPasos.map((step) => `- ${step}`).join('\n');
-
     return [
       {
         diagnosticId,
@@ -251,9 +246,6 @@ ${problems}
 ## Recomendaciones priorizadas
 ${recommendations}
 
-## Proximos pasos
-${nextSteps}
-
 ## Respuestas registradas
 ${responses}
 `,
@@ -278,9 +270,6 @@ ${responses}
       recomendaciones: Array.isArray(result.recomendaciones) && result.recomendaciones.length
         ? result.recomendaciones
         : fallback.recomendaciones,
-      proximosPasos: Array.isArray(result.proximosPasos) && result.proximosPasos.length
-        ? result.proximosPasos
-        : fallback.proximosPasos,
     };
   }
 

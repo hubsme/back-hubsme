@@ -1,10 +1,14 @@
-import { Body, Controller, Delete, Get, Header, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Header, HttpCode, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { HttpErrorDto } from '@core/dto/http-error.dto';
 import { User } from '@db/tables/user.table';
 import { JwtAuthGuard } from '@modules/auth/jwt-auth.guard';
 import { MercadoPagoAuthUrlDto, MercadoPagoAuthUrlResponseDto, MercadoPagoCallbackDto } from './dto/mercado-pago-auth.dto';
-import { MercadoPagoCheckoutDto, MercadoPagoCreateCheckoutDto, MercadoPagoPaymentWebhookDto } from './dto/mercado-pago-checkout.dto';
+import {
+  MercadoPagoCheckoutDto,
+  MercadoPagoCreateCheckoutDto,
+  MercadoPagoPaymentWebhookQueryDto,
+} from './dto/mercado-pago-checkout.dto';
 import { MercadoPagoStatusDto } from './dto/mercado-pago-status.dto';
 import { MercadoPagoService } from './mercado-pago.service';
 
@@ -75,9 +79,10 @@ export class MercadoPagoController {
   }
 
   @Post('webhook')
+  @HttpCode(200)
   @ApiOperation({ summary: 'Mercado Pago payment webhook' })
   @ApiResponse({ status: 200, description: 'Webhook processed' })
-  webhook(@Body() body: MercadoPagoPaymentWebhookDto) {
-    return this.mercadoPagoService.handleWebhook(body);
+  webhook(@Query() query: MercadoPagoPaymentWebhookQueryDto) {
+    return this.mercadoPagoService.handleWebhook(query);
   }
 }

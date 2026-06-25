@@ -9,7 +9,10 @@ import { MercadoPagoPaymentRepository } from '@repositories/mercado-pago-payment
 import { MeetingService } from '../meeting/meeting.service';
 import { ConsultantAvailabilityService } from '../consultant-availability/consultant-availability.service';
 import { MercadoPagoAuthUrlDto, MercadoPagoCallbackDto } from './dto/mercado-pago-auth.dto';
-import { MercadoPagoCreateCheckoutDto, MercadoPagoPaymentWebhookDto } from './dto/mercado-pago-checkout.dto';
+import {
+  MercadoPagoCreateCheckoutDto,
+  MercadoPagoPaymentWebhookQueryDto,
+} from './dto/mercado-pago-checkout.dto';
 
 type MercadoPagoState = {
   flow: 'consultant-mercado-pago';
@@ -212,61 +215,83 @@ export class MercadoPagoService {
     return checkout;
   }
 
-  async handleWebhook(body: MercadoPagoPaymentWebhookDto) {
-    const paymentId = body.data?.id ?? body.id;
-    const topic = body.type ?? body.topic;
+  async handleWebhook(query: MercadoPagoPaymentWebhookQueryDto = {}) {
+    const paymentId = this.getPaymentIdFromWebhookQuery(query);
+    const topic = (query.type ?? query.topic ?? this.getTopicFromWebhookAction(query.action))?.toLowerCase();
+    const queryExternalReference = query.externalReference?.trim();
+
+    this.logger.log(
+      `Mercado Pago webhook received: topic=${topic ?? 'unknown'}, paymentId=${paymentId ?? 'missing'}, externalReference=${queryExternalReference ?? 'missing'}`,
+    );
 
     if (!paymentId || topic !== 'payment') {
       return { received: true };
     }
 
-    const payment = await this.getPayment(paymentId);
-    const externalReference = payment.external_reference;
+    const checkoutFromQuery = queryExternalReference
+      ? await this.paymentRepository.findByExternalReference(queryExternalReference)
+      : undefined;
+    const consultantToken = checkoutFromQuery
+      ? await this.getPaymentAccessTokenForCheckout(checkoutFromQuery.consultantId)
+      : undefined;
+    const payment = await this.getPayment(paymentId, consultantToken);
+    const externalReference = payment.external_reference ?? queryExternalReference;
     if (!externalReference) {
+      this.logger.warn(`Mercado Pago webhook ${paymentId} ignored because external_reference is missing`);
       return { received: true };
     }
 
-    const checkout = await this.paymentRepository.findByExternalReference(externalReference);
+    const checkout = checkoutFromQuery ?? await this.paymentRepository.findByExternalReference(externalReference);
     if (!checkout) {
+      this.logger.warn(`Mercado Pago webhook ${paymentId} ignored because checkout ${externalReference} was not found`);
       return { received: true };
     }
 
     const status = this.mapPaymentStatus(payment.status);
+    this.logger.log(`Mercado Pago checkout ${checkout.id} mapped payment ${paymentId} to status=${status}`);
 
-    if (checkout.status === 'approved') {
+    if (status !== 'approved') {
+      await this.paymentRepository.update(checkout.id, {
+        mercadoPagoPaymentId: this.stringifyId(payment.id),
+        status,
+        rawPayment: payment,
+      });
       return { received: true };
     }
 
-    await this.paymentRepository.update(checkout.id, {
+    const approvedCheckout = await this.paymentRepository.approveIfUnprocessed(checkout.id, {
       mercadoPagoPaymentId: this.stringifyId(payment.id),
-      status,
       rawPayment: payment,
     });
 
-    if (status === 'approved') {
-      try {
-        if (checkout.meetingId) {
-          await this.meetingService.confirm(checkout.meetingId);
-        } else if (checkout.meetingDetails) {
-          const newMeeting = await this.meetingService.create({
-            pymeId: checkout.pymeId,
-            consultantId: checkout.consultantId,
-            startTime: new Date(checkout.meetingDetails.startTime),
-            durationMinutes: checkout.meetingDetails.durationMinutes,
-            title: checkout.meetingDetails.title,
-            description: checkout.meetingDetails.description || undefined,
-            requestedBy: 'pyme',
-          });
+    if (!approvedCheckout) {
+      this.logger.log(`Mercado Pago checkout ${checkout.id} already processed, skipping duplicated webhook ${paymentId}`);
+      return { received: true };
+    }
 
-          await this.meetingService.confirm(newMeeting.id);
+    try {
+      if (approvedCheckout.meetingId) {
+        await this.meetingService.confirm(approvedCheckout.meetingId);
+      } else if (approvedCheckout.meetingDetails) {
+        const newMeeting = await this.meetingService.create({
+          pymeId: approvedCheckout.pymeId,
+          consultantId: approvedCheckout.consultantId,
+          startTime: new Date(approvedCheckout.meetingDetails.startTime),
+          durationMinutes: approvedCheckout.meetingDetails.durationMinutes,
+          title: approvedCheckout.meetingDetails.title,
+          description: approvedCheckout.meetingDetails.description || undefined,
+          requestedBy: 'pyme',
+        });
 
-          await this.paymentRepository.update(checkout.id, {
-            meetingId: newMeeting.id,
-          });
-        }
-      } catch (error) {
-        this.logger.error(`No se pudo confirmar o crear la reunion para el checkout ${checkout.id}: ${String(error)}`);
+        await this.meetingService.confirm(newMeeting.id);
+
+        await this.paymentRepository.update(approvedCheckout.id, {
+          meetingId: newMeeting.id,
+        });
+        this.logger.log(`Mercado Pago checkout ${approvedCheckout.id} created and confirmed meeting ${newMeeting.id}`);
       }
+    } catch (error) {
+      this.logger.error(`No se pudo confirmar o crear la reunion para el checkout ${approvedCheckout.id}: ${String(error)}`);
     }
 
     return { received: true };
@@ -378,7 +403,7 @@ export class MercadoPagoService {
         ],
         marketplace_fee: data.marketplaceFee,
         external_reference: data.externalReference,
-        notification_url: this.getWebhookUrl(),
+        notification_url: this.getWebhookUrl(data.externalReference),
         back_urls: backUrls,
         ...(isHttps ? { auto_return: 'approved' } : {}),
         metadata: {
@@ -396,22 +421,31 @@ export class MercadoPagoService {
     return { ...preference, id: preference.id };
   }
 
-  private async getPayment(paymentId: string): Promise<MercadoPagoPaymentResponse> {
-    const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
-    if (!accessToken) {
+  private async getPayment(paymentId: string, consultantAccessToken?: string): Promise<MercadoPagoPaymentResponse> {
+    const platformAccessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
+    const accessTokens = [consultantAccessToken, platformAccessToken].filter(
+      (token, index, tokens): token is string => Boolean(token) && tokens.indexOf(token) === index,
+    );
+
+    if (!accessTokens.length) {
       throw new BadRequestException(['Configura MERCADO_PAGO_ACCESS_TOKEN para procesar webhooks']);
     }
 
-    const response = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    let lastMessage = 'No se pudo consultar el pago en Mercado Pago';
+    for (const accessToken of accessTokens) {
+      const response = await fetch(`https://api.mercadopago.com/v1/payments/${encodeURIComponent(paymentId)}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
 
-    const payment = (await response.json()) as MercadoPagoPaymentResponse;
-    if (!response.ok) {
-      throw new BadRequestException(['No se pudo consultar el pago en Mercado Pago']);
+      const payment = (await response.json()) as MercadoPagoPaymentResponse;
+      if (response.ok) {
+        return payment;
+      }
+
+      lastMessage = typeof payment.message === 'string' ? payment.message : lastMessage;
     }
 
-    return payment;
+    throw new BadRequestException([lastMessage]);
   }
 
   private calculateAmount(consultant: Consultant, durationMinutes: number) {
@@ -451,16 +485,47 @@ export class MercadoPagoService {
     return String(value);
   }
 
+  private getPaymentIdFromWebhookQuery(query: MercadoPagoPaymentWebhookQueryDto) {
+    if (query['data.id']) return query['data.id'];
+    if (query.id) return query.id;
+    if (query.payment_id) return query.payment_id;
+    if (!query.resource) return undefined;
+
+    const match = query.resource.match(/\/payments\/([^/?#]+)/);
+    return match?.[1];
+  }
+
+  private getTopicFromWebhookAction(action?: string) {
+    return action?.split('.')[0];
+  }
+
   private getCurrency() {
     return process.env.MERCADO_PAGO_CURRENCY ?? 'PEN';
   }
 
-  private getWebhookUrl() {
+  private getWebhookUrl(externalReference?: string) {
     const explicit = process.env.MERCADO_PAGO_WEBHOOK_URL;
-    if (explicit) return explicit;
+    const baseUrl = explicit || this.getDefaultWebhookUrl();
+    if (!baseUrl || !externalReference) return baseUrl;
 
+    try {
+      const url = new URL(baseUrl);
+      url.searchParams.set('externalReference', externalReference);
+      return url.toString();
+    } catch {
+      const separator = baseUrl.includes('?') ? '&' : '?';
+      return `${baseUrl}${separator}externalReference=${encodeURIComponent(externalReference)}`;
+    }
+  }
+
+  private getDefaultWebhookUrl() {
     const backendUrl = process.env.BACKEND_URL;
     return backendUrl ? `${backendUrl.replace(/\/$/, '')}/admin/mercado-pago/webhook` : undefined;
+  }
+
+  private async getPaymentAccessTokenForCheckout(consultantId: number) {
+    const account = await this.accountRepository.findByConsultantId(consultantId);
+    return account ? this.getValidAccessToken(account) : undefined;
   }
 
   private getBackUrls(meetingId?: number) {

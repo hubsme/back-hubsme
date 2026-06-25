@@ -8,7 +8,6 @@ export type DiagnosticResult = {
   areasEvaluadas: { area: string; puntaje: number; estado: string; hallazgo: string }[];
   problemasCriticos: { problema: string; impacto: string; urgencia: string }[];
   recomendaciones: { accion: string; beneficioEsperado: string; plazo: string; prioridad: string }[];
-  proximosPasos: string[];
 };
 
 export const diagnostic = pgTable(
