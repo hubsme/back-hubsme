@@ -5,9 +5,12 @@ import { ConsultantMercadoPagoAccount } from '@db/tables/consultant-mercado-pago
 import { MercadoPagoPaymentRaw } from '@db/tables/mercado-pago-payment.table';
 import { ConsultantMercadoPagoAccountRepository } from '@repositories/consultant-mercado-pago-account.repository';
 import { ConsultantRepository } from '@repositories/consultant.repository';
+import { PymeRepository } from '@repositories/pyme.repository';
 import { MercadoPagoPaymentRepository } from '@repositories/mercado-pago-payment.repository';
 import { MeetingService } from '../meeting/meeting.service';
 import { ConsultantAvailabilityService } from '../consultant-availability/consultant-availability.service';
+import { ConsultantService } from '../consultant/consultant.service';
+import { PymeService } from '../pyme/pyme.service';
 import { MercadoPagoAuthUrlDto, MercadoPagoCallbackDto } from './dto/mercado-pago-auth.dto';
 import {
   MercadoPagoCreateCheckoutDto,
@@ -58,10 +61,13 @@ export class MercadoPagoService {
   constructor(
     private readonly accountRepository: ConsultantMercadoPagoAccountRepository,
     private readonly consultantRepository: ConsultantRepository,
+    private readonly pymeRepository: PymeRepository,
     private readonly paymentRepository: MercadoPagoPaymentRepository,
     private readonly meetingService: MeetingService,
     private readonly jwtService: JwtService,
     private readonly consultantAvailabilityService: ConsultantAvailabilityService,
+    private readonly consultantService: ConsultantService,
+    private readonly pymeService: PymeService,
   ) {}
 
   async getAuthUrl(query: MercadoPagoAuthUrlDto) {
@@ -220,10 +226,6 @@ export class MercadoPagoService {
     const topic = (query.type ?? query.topic ?? this.getTopicFromWebhookAction(query.action))?.toLowerCase();
     const queryExternalReference = query.externalReference?.trim();
 
-    this.logger.log(
-      `Mercado Pago webhook received: topic=${topic ?? 'unknown'}, paymentId=${paymentId ?? 'missing'}, externalReference=${queryExternalReference ?? 'missing'}`,
-    );
-
     if (!paymentId || topic !== 'payment') {
       return { received: true };
     }
@@ -237,18 +239,15 @@ export class MercadoPagoService {
     const payment = await this.getPayment(paymentId, consultantToken);
     const externalReference = payment.external_reference ?? queryExternalReference;
     if (!externalReference) {
-      this.logger.warn(`Mercado Pago webhook ${paymentId} ignored because external_reference is missing`);
       return { received: true };
     }
 
     const checkout = checkoutFromQuery ?? await this.paymentRepository.findByExternalReference(externalReference);
     if (!checkout) {
-      this.logger.warn(`Mercado Pago webhook ${paymentId} ignored because checkout ${externalReference} was not found`);
       return { received: true };
     }
 
     const status = this.mapPaymentStatus(payment.status);
-    this.logger.log(`Mercado Pago checkout ${checkout.id} mapped payment ${paymentId} to status=${status}`);
 
     if (status !== 'approved') {
       await this.paymentRepository.update(checkout.id, {
@@ -265,13 +264,13 @@ export class MercadoPagoService {
     });
 
     if (!approvedCheckout) {
-      this.logger.log(`Mercado Pago checkout ${checkout.id} already processed, skipping duplicated webhook ${paymentId}`);
       return { received: true };
     }
 
     try {
-      if (approvedCheckout.meetingId) {
-        await this.meetingService.confirm(approvedCheckout.meetingId);
+      let meetingId = approvedCheckout.meetingId;
+      if (meetingId) {
+        await this.meetingService.confirm(meetingId);
       } else if (approvedCheckout.meetingDetails) {
         const newMeeting = await this.meetingService.create({
           pymeId: approvedCheckout.pymeId,
@@ -288,13 +287,53 @@ export class MercadoPagoService {
         await this.paymentRepository.update(approvedCheckout.id, {
           meetingId: newMeeting.id,
         });
-        this.logger.log(`Mercado Pago checkout ${approvedCheckout.id} created and confirmed meeting ${newMeeting.id}`);
+        meetingId = newMeeting.id;
+      }
+
+      if (meetingId) {
+        this.sendMeetingNotifications(meetingId, approvedCheckout).catch(() => undefined);
       }
     } catch (error) {
-      this.logger.error(`No se pudo confirmar o crear la reunion para el checkout ${approvedCheckout.id}: ${String(error)}`);
+      // Ignorar errores silenciosamente
     }
 
     return { received: true };
+  }
+
+  private async sendMeetingNotifications(meetingId: number, approvedCheckout: any) {
+    try {
+      const meeting = await this.meetingService.findOne(meetingId);
+      if (!meeting) return;
+
+      const consultant = await this.consultantRepository.findOne(approvedCheckout.consultantId);
+      const pyme = await this.pymeRepository.findOne(approvedCheckout.pymeId);
+
+      const consultantName = consultant?.fullName || 'Consultor';
+      const pymeName = pyme?.name || 'PYME';
+
+      const startTime = meeting.startTime ? new Date(meeting.startTime) : new Date();
+      const durationMinutes = meeting.durationMinutes || 60;
+      const title = meeting.title || 'Sesión de consultoría';
+
+      // Disparar notificaciones en segundo plano sin esperar (fire-and-forget)
+      this.consultantService.sendMeetingNotification(
+        approvedCheckout.consultantId,
+        pymeName,
+        title,
+        startTime,
+        durationMinutes
+      ).catch(() => undefined);
+
+      this.pymeService.sendMeetingNotification(
+        approvedCheckout.pymeId,
+        consultantName,
+        title,
+        startTime,
+        durationMinutes
+      ).catch(() => undefined);
+    } catch {
+      // Catch general para evitar fallas colaterales
+    }
   }
 
   private async validateConsultant(consultantId: number): Promise<Consultant> {

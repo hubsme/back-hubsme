@@ -4,10 +4,16 @@ import { handleDbError } from '@functions/db-error.function';
 import { PymeCreateDto } from './dto/pyme-create.dto';
 import { PymeListFiltersDto } from './dto/pyme-list.dto';
 import { PymeUpdateDto } from './dto/pyme-update.dto';
+import { WhatsappService } from '../whatsapp/whatsapp.service';
+import { EmailService } from '../email/email.service';
 
 @Injectable()
 export class PymeService {
-  constructor(private readonly pymeRepository: PymeRepository) {}
+  constructor(
+    private readonly pymeRepository: PymeRepository,
+    private readonly whatsappService: WhatsappService,
+    private readonly emailService: EmailService,
+  ) {}
 
   async findAllPaginated(filters: PymeListFiltersDto) {
     const page = filters.page ?? 1;
@@ -74,5 +80,63 @@ export class PymeService {
       description: data.description?.trim(),
       logoUrl: data.logoUrl?.trim(),
     };
+  }
+
+  async sendMeetingNotification(
+    pymeId: number,
+    consultantName: string,
+    meetingTitle: string,
+    startTime: Date,
+    durationMinutes: number,
+  ) {
+    try {
+      const pyme = await this.pymeRepository.findOne(pymeId);
+      if (!pyme) return;
+
+      const dateStr = startTime.toLocaleString('es-PE', {
+        timeZone: 'America/Lima',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+
+      // 1. WhatsApp notification
+      if (pyme.ownerPhone?.trim()) {
+        const message = `✅ *¡Sesión de consultoría confirmada!* 💼\n\n` +
+          `Hola ${pyme.ownerFirstName || pyme.name}, tu sesión ha sido agendada con éxito a través de *HUBSME*. Aquí tienes el resumen de tu cita:\n\n` +
+          `👤 *Consultor:* ${consultantName}\n` +
+          `📝 *Tipo de sesión:* ${meetingTitle}\n` +
+          `📅 *Fecha y hora:* ${dateStr} (hora de Perú)\n` +
+          `⏱️ *Duración:* ${durationMinutes} minutos\n\n` +
+          `Pronto recibirás el enlace para conectarte. ¡Que tengas una excelente sesión! 🚀✨`;
+        try {
+          await this.whatsappService.sendMessage({
+            phone: pyme.ownerPhone,
+            message,
+          });
+        } catch (error) {
+          console.error('Error sending WhatsApp notification:', error);
+        }
+      }
+
+      // 2. Email notification
+      if (pyme.ownerEmail?.trim()) {
+        const emailSubject = `Confirmación de sesión de consultoría agendada - HUBSME`;
+        const emailText = `Hola ${pyme.ownerFirstName || pyme.name},\n\nTe confirmamos que tu sesión de consultoría de tipo "${meetingTitle}" con el consultor "${consultantName}" ha sido agendada con éxito.\n\nDetalles de la reunión:\n- Fecha y hora: ${dateStr}\n- Duración: ${durationMinutes} minutos\n\nSaludos,\nEl equipo de HUBSME`;
+        try {
+          await this.emailService.sendEmail({
+            to: pyme.ownerEmail,
+            subject: emailSubject,
+            text: emailText,
+          });
+        } catch (error) {
+          console.error('Error sending email notification:', error);
+        }
+      }
+    } catch {
+      // General silent catch to ensure fire-and-forget safety
+    }
   }
 }

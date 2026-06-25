@@ -23,6 +23,11 @@ export class ConsultantCreateDto {
   @IsOptional()
   fullName?: string;
 
+  @ApiPropertyOptional({ example: '51929073820' })
+  @IsString()
+  @IsOptional()
+  ownerPhone?: string;
+
   @ApiPropertyOptional({ example: 'Consultor en transformacion digital para PYMES.' })
   @IsString()
   @IsOptional()

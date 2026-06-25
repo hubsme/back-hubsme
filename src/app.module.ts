@@ -16,6 +16,8 @@ import { PowerAutomateModule } from './modules/admin/powerautomate/powerautomate
 import { ConsultantAvailabilityModule } from './modules/admin/consultant-availability/consultant-availability.module';
 import { ConsultantGoogleCalendarModule } from './modules/admin/consultant-google-calendar/consultant-google-calendar.module';
 import { MercadoPagoModule } from './modules/admin/mercado-pago/mercado-pago.module';
+import { EmailModule } from './modules/admin/email/email.module';
+import { WhatsappModule } from './modules/admin/whatsapp/whatsapp.module';
 import { PublicConsultantModule } from './modules/public/consultant/public-consultant.module';
 
 @Module({
@@ -35,6 +37,8 @@ import { PublicConsultantModule } from './modules/public/consultant/public-consu
     ConsultantAvailabilityModule,
     ConsultantGoogleCalendarModule,
     MercadoPagoModule,
+    EmailModule,
+    WhatsappModule,
     PublicConsultantModule,
   ],
   controllers: [AppController],

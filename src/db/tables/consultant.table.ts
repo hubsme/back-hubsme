@@ -14,6 +14,7 @@ export const consultant = pgTable(
     fullName: varchar('full_name', { length: 240 }).notNull(),
     firstName: varchar('first_name', { length: 120 }),
     lastName: varchar('last_name', { length: 120 }),
+    ownerPhone: varchar('owner_phone', { length: 30 }),
     bio: text('bio'),
     specialties: text('specialties').array().default([]).notNull(),
     sectors: text('sectors').array().default([]).notNull(),
