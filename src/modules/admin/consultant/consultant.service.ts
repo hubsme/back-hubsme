@@ -56,9 +56,11 @@ export class ConsultantService {
     try {
       const { userId, ...rest } = data;
       const cleanData = this.clean(rest);
+      const validated = (cleanData.photoUrl && cleanData.videoUrl) ? 'true' : 'false';
       return await this.consultantRepository.create({
         id: userId,
         ...cleanData,
+        validated,
       } as ConsultantDTO);
     } catch (error) {
       handleDbError(error);
@@ -66,9 +68,17 @@ export class ConsultantService {
   }
 
   async update(id: number, data: ConsultantUpdateDto) {
-    await this.findOne(id);
+    const existing = await this.findOne(id);
     try {
-      return await this.consultantRepository.update(id, this.clean(data));
+      const cleanedUpdates = this.clean(data);
+      const photoUrl = cleanedUpdates.photoUrl !== undefined ? cleanedUpdates.photoUrl : existing.photoUrl;
+      const videoUrl = cleanedUpdates.videoUrl !== undefined ? cleanedUpdates.videoUrl : existing.videoUrl;
+      const validated = (photoUrl && videoUrl) ? 'true' : 'false';
+      
+      return await this.consultantRepository.update(id, {
+        ...cleanedUpdates,
+        validated,
+      });
     } catch (error) {
       handleDbError(error);
     }
