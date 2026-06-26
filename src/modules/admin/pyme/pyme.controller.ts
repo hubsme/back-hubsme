@@ -1,12 +1,17 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { HttpErrorDto } from '@core/dto/http-error.dto';
+import { User } from '@db/tables/user.table';
 import { JwtAuthGuard } from '@modules/auth/jwt-auth.guard';
+import { ConsultantListDto } from '@modules/admin/consultant/dto/consultant-list.dto';
 import { PymeCreateDto } from './dto/pyme-create.dto';
 import { PymeListDto, PymeListFiltersDto } from './dto/pyme-list.dto';
+import { PymeMeetingConsultantsFiltersDto } from './dto/pyme-meeting-consultants.dto';
 import { PymeResultDto } from './dto/pyme-result.dto';
 import { PymeUpdateDto } from './dto/pyme-update.dto';
 import { PymeService } from './pyme.service';
+
+type AuthenticatedRequest = { user: User };
 
 @ApiTags('pyme')
 @ApiBearerAuth()
@@ -21,6 +26,14 @@ export class PymeController {
   @ApiResponse({ status: 400, type: HttpErrorDto })
   findAll(@Query() filters: PymeListFiltersDto) {
     return this.pymeService.findAllPaginated(filters);
+  }
+
+  @Get('meeting-consultants')
+  @ApiOperation({ summary: 'Get consultants with at least one meeting with current PYME' })
+  @ApiResponse({ status: 200, type: ConsultantListDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  meetingConsultants(@Request() req: AuthenticatedRequest, @Query() filters: PymeMeetingConsultantsFiltersDto) {
+    return this.pymeService.findMeetingConsultants(req.user.id, filters);
   }
 
   @Get('find-one/:id')

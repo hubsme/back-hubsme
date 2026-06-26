@@ -1,8 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConsultantRepository } from '@repositories/consultant.repository';
 import { PymeRepository } from '@repositories/pyme.repository';
 import { handleDbError } from '@functions/db-error.function';
 import { PymeCreateDto } from './dto/pyme-create.dto';
 import { PymeListFiltersDto } from './dto/pyme-list.dto';
+import { PymeMeetingConsultantsFiltersDto } from './dto/pyme-meeting-consultants.dto';
 import { PymeUpdateDto } from './dto/pyme-update.dto';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { EmailService } from '../email/email.service';
@@ -11,6 +13,7 @@ import { EmailService } from '../email/email.service';
 export class PymeService {
   constructor(
     private readonly pymeRepository: PymeRepository,
+    private readonly consultantRepository: ConsultantRepository,
     private readonly whatsappService: WhatsappService,
     private readonly emailService: EmailService,
   ) {}
@@ -37,6 +40,19 @@ export class PymeService {
     const pyme = await this.pymeRepository.findByUserId(userId);
     if (!pyme) throw new NotFoundException(`PYME profile for user ID ${userId} not found`);
     return pyme;
+  }
+
+  async findMeetingConsultants(userId: number, filters: PymeMeetingConsultantsFiltersDto) {
+    await this.findByUserId(userId);
+    const page = filters.page ?? 1;
+    const limit = filters.limit ?? 10;
+    const { data, total } = await this.consultantRepository.findByPymeMeetingsPaginated(userId, page, limit, filters);
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      data,
+      meta: { total, page, limit, totalPages, hasNextPage: page < totalPages, hasPreviousPage: page > 1 },
+    };
   }
 
   async create(data: PymeCreateDto) {
