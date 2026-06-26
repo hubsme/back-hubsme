@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { eq, ilike, or, and, isNull, count, desc, sql } from 'drizzle-orm';
+import { eq, ilike, or, and, isNull, isNotNull, count, desc, sql } from 'drizzle-orm';
 import { database } from '@db/connection.db';
 import { pyme, PymeDTO } from '@db/tables/pyme.table';
 import { meeting } from '@db/tables/meeting.table';
+import { task } from '@db/tables/task.table';
 
 @Injectable()
 export class PymeRepository {
@@ -52,7 +53,10 @@ export class PymeRepository {
     filters?: { search?: string; sector?: string },
   ) {
     const offset = (page - 1) * limit;
-    const conditions = [eq(meeting.consultantId, consultantId), isNull(meeting.deletedAt), isNull(pyme.deletedAt)];
+    const conditions = [
+      or(isNotNull(meeting.id), isNotNull(task.id)),
+      isNull(pyme.deletedAt),
+    ];
 
     if (filters?.search) {
       const searchTerm = filters.search.trim();
@@ -75,7 +79,14 @@ export class PymeRepository {
     const [{ total }] = await database
       .select({ total: sql<number>`count(distinct ${pyme.id})` })
       .from(pyme)
-      .innerJoin(meeting, eq(meeting.pymeId, pyme.id))
+      .leftJoin(
+        meeting,
+        and(eq(meeting.pymeId, pyme.id), eq(meeting.consultantId, consultantId), isNull(meeting.deletedAt)),
+      )
+      .leftJoin(
+        task,
+        and(eq(task.pymeId, pyme.id), eq(task.consultantId, consultantId), isNull(task.deletedAt)),
+      )
       .where(whereClause);
 
     const data = await database
@@ -92,7 +103,14 @@ export class PymeRepository {
         createdAt: pyme.createdAt,
       })
       .from(pyme)
-      .innerJoin(meeting, eq(meeting.pymeId, pyme.id))
+      .leftJoin(
+        meeting,
+        and(eq(meeting.pymeId, pyme.id), eq(meeting.consultantId, consultantId), isNull(meeting.deletedAt)),
+      )
+      .leftJoin(
+        task,
+        and(eq(task.pymeId, pyme.id), eq(task.consultantId, consultantId), isNull(task.deletedAt)),
+      )
       .where(whereClause)
       .orderBy(desc(pyme.createdAt))
       .limit(limit)

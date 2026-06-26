@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { eq, ilike, or, and, isNull, count, desc, sql } from 'drizzle-orm';
+import { eq, ilike, or, and, isNull, isNotNull, count, desc, sql } from 'drizzle-orm';
 import { database } from '@db/connection.db';
 import { consultant, ConsultantDTO } from '@db/tables/consultant.table';
+import { meeting } from '@db/tables/meeting.table';
+import { task } from '@db/tables/task.table';
 
 @Injectable()
 export class ConsultantRepository {
@@ -56,6 +58,93 @@ export class ConsultantRepository {
     };
   }
 
+  async findByPymeMeetingsPaginated(
+    pymeId: number,
+    page: number = 1,
+    limit: number = 10,
+    filters?: { search?: string; active?: string; validated?: string; sector?: string },
+  ) {
+    const offset = (page - 1) * limit;
+    const conditions = [
+      or(isNotNull(meeting.id), isNotNull(task.id)),
+      isNull(consultant.deletedAt),
+    ];
+
+    if (filters?.search) {
+      const searchTerm = filters.search.trim();
+      conditions.push(
+        or(
+          ilike(consultant.fullName, `%${searchTerm}%`),
+          ilike(consultant.firstName, `%${searchTerm}%`),
+          ilike(consultant.lastName, `%${searchTerm}%`),
+          ilike(consultant.bio, `%${searchTerm}%`),
+          sql`${consultant.specialties}::text ILIKE ${`%${searchTerm}%`}`,
+        ),
+      );
+    }
+
+    if (filters?.active) {
+      conditions.push(eq(consultant.active, filters.active));
+    }
+
+    if (filters?.validated) {
+      conditions.push(eq(consultant.validated, filters.validated));
+    }
+
+    if (filters?.sector) {
+      conditions.push(sql`${consultant.sectors}::text ILIKE ${`%${filters.sector.trim()}%`}`);
+    }
+
+    const whereClause = and(...conditions);
+    const [{ total }] = await database
+      .select({ total: sql<number>`count(distinct ${consultant.id})` })
+      .from(consultant)
+      .leftJoin(
+        meeting,
+        and(eq(meeting.consultantId, consultant.id), eq(meeting.pymeId, pymeId), isNull(meeting.deletedAt)),
+      )
+      .leftJoin(
+        task,
+        and(eq(task.consultantId, consultant.id), eq(task.pymeId, pymeId), isNull(task.deletedAt)),
+      )
+      .where(whereClause);
+
+    const data = await database
+      .selectDistinct({
+        id: consultant.id,
+        userId: consultant.id,
+        fullName: consultant.fullName,
+        firstName: consultant.firstName,
+        lastName: consultant.lastName,
+        ownerPhone: consultant.ownerPhone,
+        bio: consultant.bio,
+        specialties: consultant.specialties,
+        sectors: consultant.sectors,
+        photoUrl: consultant.photoUrl,
+        videoUrl: consultant.videoUrl,
+        pricePerHour: consultant.pricePerHour,
+        rating: consultant.rating,
+        totalReviews: consultant.totalReviews,
+        active: consultant.active,
+        createdAt: consultant.createdAt,
+      })
+      .from(consultant)
+      .leftJoin(
+        meeting,
+        and(eq(meeting.consultantId, consultant.id), eq(meeting.pymeId, pymeId), isNull(meeting.deletedAt)),
+      )
+      .leftJoin(
+        task,
+        and(eq(task.consultantId, consultant.id), eq(task.pymeId, pymeId), isNull(task.deletedAt)),
+      )
+      .where(whereClause)
+      .orderBy(desc(consultant.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    return { data, total: Number(total) };
+  }
+
   async findOne(id: number) {
     const result = await database
       .select()
@@ -91,4 +180,3 @@ export class ConsultantRepository {
     return result[0] ? { ...result[0], userId: result[0].id } : undefined;
   }
 }
-
