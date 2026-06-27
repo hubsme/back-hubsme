@@ -57,48 +57,97 @@ export class DiagnosticService {
   }
 
   private buildDiagnostic(pymeData: Record<string, unknown>, responses: Record<string, unknown>): DiagnosticResult {
-    const responseValues = Object.values(responses).map((value) => String(value ?? ''));
-    const averageClosedScore = this.averageClosedScore(responseValues);
-    const revenue = this.toNumber(responses.revenue);
-    const techLevel = this.toNumber(responses.techLevel) || Math.round(averageClosedScore / 10);
-    const employees = this.toNumber(responses.employees ?? pymeData.employees);
-    const years = this.toNumber(responses.years ?? pymeData.years);
-    const challenges = responseValues.join(' ').toLowerCase();
+    // 1. Estratégica (Q1, Q2, Q3) -> Max 15
+    const q1 = this.getScoreFor(responses, ['objetivos', '12 meses']);
+    const q2 = this.getScoreFor(responses, ['resultados', 'revisa']);
+    const q3 = this.getScoreFor(responses, ['preparada', 'crecer']);
+    const estrategicaSum = q1 + q2 + q3;
+    const estrategicaScore = Math.round((estrategicaSum / 15) * 100);
 
-    const financeScore = this.mixScores(revenue > 1000000 ? 82 : revenue > 300000 ? 68 : 58, averageClosedScore);
-    const operationsScore = this.mixScores(Math.min(95, Math.max(35, techLevel * 9 + 20)), averageClosedScore);
-    const teamScore = this.mixScores(employees > 20 ? 74 : employees > 5 ? 64 : 56, averageClosedScore);
-    const marketScore = this.mixScores(years > 5 ? 76 : years > 2 ? 64 : 58, averageClosedScore);
-    const score = Math.round((financeScore + operationsScore + teamScore + marketScore) / 4);
+    // 2. Financiera (Q4, Q5, Q6) -> Max 15
+    const q4 = this.getScoreFor(responses, ['exactitud', 'gana']);
+    const q5 = this.getScoreFor(responses, ['caja', 'cobranzas']);
+    const q6 = this.getScoreFor(responses, ['financia', 'crecimiento']);
+    const financieraSum = q4 + q5 + q6;
+    const financieraScore = Math.round((financieraSum / 15) * 100);
+
+    // 3. Comercial / Ventas (Q7, Q8, Q9) -> Max 15
+    const q7 = this.getScoreFor(responses, ['depende', 'pocos clientes']);
+    const q8 = this.getScoreFor(responses, ['conseguir', 'cotizar']);
+    const q9 = this.getScoreFor(responses, ['seguimiento', 'potenciales']);
+    const comercialSum = q7 + q8 + q9;
+    const comercialScore = Math.round((comercialSum / 15) * 100);
+
+    // 4. Marketing (Q10) -> Max 5
+    const q10 = this.getScoreFor(responses, ['presencia digital', 'marketing']);
+    const marketingScore = Math.round((q10 / 5) * 100);
+
+    // 5. Servicio al cliente (Q11) -> Max 5
+    const q11 = this.getScoreFor(responses, ['satisfaccion', 'clientes']);
+    const servicioScore = Math.round((q11 / 5) * 100);
+
+    // 6. Operaciones (Q12, Q13*, Q14) -> Max 15 o 10
+    const q12 = this.getScoreFor(responses, ['procesos', 'ordenados', 'repetibles']);
+    const q13 = this.getScoreFor(responses, ['inventarios', 'entrega']);
+    const q14 = this.getScoreFor(responses, ['problemas', 'errores', 'reprocesos']);
+    
+    let operacionesSum = q12 + q14;
+    let operacionesMax = 10;
+    if (q13 !== -1) {
+      operacionesSum += q13;
+      operacionesMax = 15;
+    }
+    const operacionesScore = Math.round((operacionesSum / operacionesMax) * 100);
+
+    // 7. Organizacional / RRHH (Q15, Q16, Q17) -> Max 15
+    const q15 = this.getScoreFor(responses, ['funciones', 'responsabilidades']);
+    const q16 = this.getScoreFor(responses, ['dueno no esta', 'semana']);
+    const q17 = this.getScoreFor(responses, ['capacita', 'personal']);
+    const rrhhSum = q15 + q16 + q17;
+    const rrhhScore = Math.round((rrhhSum / 15) * 100);
+
+    // 8. Tecnología (Q18) -> Max 5
+    const q18 = this.getScoreFor(responses, ['herramientas digitales', 'gestionar']);
+    const tecnologiaScore = Math.round((q18 / 5) * 100);
+
+    // 9. Legal (Q19) -> Max 5
+    const q19 = this.getScoreFor(responses, ['contratos', 'documentos legales']);
+    const legalScore = Math.round((q19 / 5) * 100);
+
+    // 10. Laboral (Q20) -> Max 5
+    const q20 = this.getScoreFor(responses, ['obligaciones laborales', 'planilla']);
+    const laboralScore = Math.round((q20 / 5) * 100);
+
+    // 11. Tributario / Contable (Q21) -> Max 5
+    const q21 = this.getScoreFor(responses, ['obligaciones tributarias', 'sunat']);
+    const tributarioScore = Math.round((q21 / 5) * 100);
+
+    const totalObtained = estrategicaSum + financieraSum + comercialSum + q10 + q11 + operacionesSum + rrhhSum + q18 + q19 + q20 + q21;
+    const totalMax = 15 + 15 + 15 + 5 + 5 + operacionesMax + 15 + 5 + 5 + 5 + 5;
+    const score = Math.round((totalObtained / totalMax) * 100);
+
     const businessName = String(pymeData.name ?? 'La PYME');
 
     const areasEvaluadas = [
-      this.area(
-        'Finanzas',
-        financeScore,
-        'Los ingresos muestran capacidad de sostener mejoras si se ordena la gestion financiera.',
-      ),
-      this.area(
-        'Operaciones',
-        operationsScore,
-        'El nivel de digitalizacion define el mayor potencial de productividad inmediata.',
-      ),
-      this.area(
-        'Equipo',
-        teamScore,
-        'La estructura del equipo requiere rituales de seguimiento y responsables claros.',
-      ),
-      this.area(
-        'Mercado',
-        marketScore,
-        'La posicion comercial puede fortalecerse con segmentacion y oferta consultiva.',
-      ),
+      this.area('Estratégica', estrategicaScore, `El negocio cuenta con un nivel de madurez estratégica calificado como: ${this.getEstrategicaStatus(estrategicaSum)}.`),
+      this.area('Financiera', financieraScore, `El control financiero actual se interpreta como: ${this.getFinancieraStatus(financieraSum)}.`),
+      this.area('Comercial / Ventas', comercialScore, `La estructura del área comercial se evalúa como: ${this.getComercialStatus(comercialSum)}.`),
+      this.area('Marketing', marketingScore, `La presencia de marketing se cataloga como: ${this.getMarketingStatus(q10)}.`),
+      this.area('Servicio al cliente', servicioScore, `La gestión del servicio al cliente se define como: ${this.getServicioStatus(q11)}.`),
+      this.area('Operaciones', operacionesScore, `La eficiencia y control operativo se interpreta como: ${this.getOperacionesStatus(operacionesSum, operacionesMax)}.`),
+      this.area('Organizacional / RRHH', rrhhScore, `La estructura organizacional del equipo es calificada como: ${this.getRrhhStatus(rrhhSum)}.`),
+      this.area('Tecnología', tecnologiaScore, `El nivel de digitalización tecnológica actual es: ${this.getTecnologiaStatus(q18)}.`),
+      this.area('Legal', legalScore, `La documentación legal del negocio se evalúa como: ${this.getLegalStatus(q19)}.`),
+      this.area('Laboral', laboralScore, `El cumplimiento de obligaciones laborales es: ${this.getLaboralStatus(q20)}.`),
+      this.area('Tributario / Contable', tributarioScore, `El cumplimiento tributario ante SUNAT se evalúa como: ${this.getTributarioStatus(q21)}.`),
     ];
+
+    const challenges = Object.values(responses).map((val) => String(val)).join(' ').toLowerCase();
 
     const problemasCriticos = [
       {
-        problema: challenges.includes('liquidez') ? 'Presion de liquidez' : 'Falta de foco operativo',
-        impacto: challenges || 'Puede ralentizar la ejecucion de iniciativas estrategicas.',
+        problema: challenges.includes('liquidez') ? 'Presión de liquidez' : 'Falta de foco operativo',
+        impacto: 'Puede ralentizar la ejecución de iniciativas estratégicas y la toma de decisiones.',
         urgencia: score < 60 ? 'alta' : 'media',
       },
       {
@@ -111,18 +160,18 @@ export class DiagnosticService {
     const recomendaciones = [
       {
         accion: 'Priorizar un tablero de tareas con responsables y fechas de cierre',
-        beneficioEsperado: 'Mayor continuidad entre diagnostico, reuniones y ejecucion.',
+        beneficioEsperado: 'Mayor continuidad entre diagnóstico, reuniones y ejecución.',
         plazo: 'inmediato',
         prioridad: 'alta',
       },
       {
-        accion: 'Estandarizar metricas semanales de ventas, caja y operaciones',
+        accion: 'Estandarizar métricas semanales de ventas, caja y operaciones',
         beneficioEsperado: 'Mejor visibilidad para decidir con datos y detectar bloqueos temprano.',
         plazo: '30dias',
         prioridad: 'alta',
       },
       {
-        accion: 'Agendar una sesion con consultor especialista del sector',
+        accion: 'Agendar una sesión con consultor especialista del sector',
         beneficioEsperado: 'Validar oportunidades de mejora con experiencia externa puntual.',
         plazo: '30dias',
         prioridad: 'media',
@@ -136,8 +185,8 @@ export class DiagnosticService {
         score >= 75
           ? 'La empresa muestra bases saludables para acelerar crecimiento con mejoras puntuales y seguimiento disciplinado.'
           : score >= 60
-            ? 'La empresa tiene avances relevantes, pero necesita ordenar prioridades, responsables e indicadores para crecer con menor friccion.'
-            : 'La empresa requiere estabilizar gestion, caja y procesos antes de escalar nuevas iniciativas.',
+            ? 'La empresa tiene avances relevantes, pero necesita ordenar prioridades, responsables e indicadores para crecer con menor fricción.'
+            : 'La empresa requiere estabilizar gestión, caja y procesos antes de escalar nuevas iniciativas.',
       areasEvaluadas,
       problemasCriticos,
       recomendaciones,
@@ -155,7 +204,7 @@ export class DiagnosticService {
       - **Conclusión y Ruta Estratégica:** Síntesis consultiva del camino sugerido para estabilizar y crecer.
       
       No repitas el resumen ejecutivo. Evita texto genérico y evita promesas legales o financieras absolutas.
-      areasEvaluadas debe contener exactamente estas 4 areas y en este orden: Finanzas, Operaciones, Equipo, Mercado.
+      areasEvaluadas debe contener exactamente estas 11 areas y en este orden: Estratégica, Financiera, Comercial / Ventas, Marketing, Servicio al cliente, Operaciones, Organizacional / RRHH, Tecnología, Legal, Laboral, Tributario / Contable.
       Debes responder ÚNICAMENTE con un objeto JSON válido con la siguiente estructura y en español. No incluyas introducciones, explicaciones ni bloques de código markdown (como \`\`\`json). Solo devuelve el JSON puro:
       {
         "resumenEjecutivo": "string",
@@ -225,27 +274,27 @@ export class DiagnosticService {
         title: 'Diagnostico empresarial Hubsme',
         type: 'informe',
         content: `# Diagnostico empresarial Hubsme
-
+ 
 ## Datos del documento
 - **Empresa:** ${businessName}
 - **Fecha de generacion:** ${createdAt}
 - **Puntaje general:** ${result.puntajeGeneral}/100
-
+ 
 ## Resumen ejecutivo
 ${result.resumenEjecutivo}
-
+ 
 ## Diagnostico general
 ${result.feedbackIa}
-
+ 
 ## Areas evaluadas
 ${areas}
-
+ 
 ## Problemas criticos
 ${problems}
-
+ 
 ## Recomendaciones priorizadas
 ${recommendations}
-
+ 
 ## Respuestas registradas
 ${responses}
 `,
@@ -286,7 +335,19 @@ ${responses}
     areas: DiagnosticResult['areasEvaluadas'] | undefined,
     fallbackAreas: DiagnosticResult['areasEvaluadas'],
   ) {
-    const desiredAreas = ['Finanzas', 'Operaciones', 'Equipo', 'Mercado'];
+    const desiredAreas = [
+      'Estratégica',
+      'Financiera',
+      'Comercial / Ventas',
+      'Marketing',
+      'Servicio al cliente',
+      'Operaciones',
+      'Organizacional / RRHH',
+      'Tecnología',
+      'Legal',
+      'Laboral',
+      'Tributario / Contable',
+    ];
     const source = Array.isArray(areas) ? areas : [];
 
     return desiredAreas.map((desiredArea) => {
@@ -295,13 +356,100 @@ ${responses}
         const normalizedArea = this.normalizeText(item.area);
         return (
           normalizedArea.includes(normalizedDesired) ||
-          (desiredArea === 'Mercado' && normalizedArea.includes('comercial')) ||
-          (desiredArea === 'Equipo' && normalizedArea.includes('rrhh'))
+          (desiredArea === 'Comercial / Ventas' && normalizedArea.includes('comerc')) ||
+          (desiredArea === 'Organizacional / RRHH' && (normalizedArea.includes('rrhh') || normalizedArea.includes('organi'))) ||
+          (desiredArea === 'Tributario / Contable' && normalizedArea.includes('tribut'))
         );
       });
 
       return area ?? fallbackAreas.find((item) => item.area === desiredArea) ?? this.area(desiredArea, 50, 'Sin hallazgo disponible.');
     });
+  }
+
+  private getScoreFor(responses: Record<string, unknown>, keywords: string[]): number {
+    const entry = Object.entries(responses).find(([key]) => {
+      const normalizedKey = this.normalizeText(key);
+      return keywords.every(kw => normalizedKey.includes(kw));
+    });
+    if (!entry) return 3;
+    const value = String(entry[1] ?? '');
+    if (value.includes('N/A')) return -1;
+    const match = value.match(/\((\d)\)/);
+    return match ? Number(match[1]) : 3;
+  }
+
+  private getEstrategicaStatus(sum: number): string {
+    if (sum >= 13) return 'Visión clara';
+    if (sum >= 9) return 'Parcialmente estructurada';
+    if (sum >= 5) return 'Reactiva';
+    return 'Sin dirección';
+  }
+
+  private getFinancieraStatus(sum: number): string {
+    if (sum >= 13) return 'Gestión sólida';
+    if (sum >= 9) return 'Gestión aceptable';
+    if (sum >= 5) return 'Control básico';
+    return 'Riesgo financiero alto';
+  }
+
+  private getComercialStatus(sum: number): string {
+    if (sum >= 13) return 'Organizada';
+    if (sum >= 9) return 'Parcialmente estructurada';
+    if (sum >= 5) return 'Informal';
+    return 'Ventas desordenadas';
+  }
+
+  private getMarketingStatus(sum: number): string {
+    if (sum >= 4) return 'Activo y funcional';
+    if (sum >= 2) return 'Básico';
+    return 'Sin presencia';
+  }
+
+  private getServicioStatus(sum: number): string {
+    if (sum >= 4) return 'Activo';
+    if (sum >= 2) return 'Reactivo';
+    return 'Sin gestión';
+  }
+
+  private getOperacionesStatus(sum: number, max: number): string {
+    const scaled = (sum / max) * 15;
+    if (scaled >= 13) return 'Eficiente';
+    if (scaled >= 9) return 'Parcialmente organizada';
+    if (scaled >= 5) return 'Control básico';
+    return 'Desordenada';
+  }
+
+  private getRrhhStatus(sum: number): string {
+    if (sum >= 13) return 'Sólida';
+    if (sum >= 9) return 'Parcialmente estructurada';
+    if (sum >= 5) return 'Informal';
+    return 'Dependiente del dueño';
+  }
+
+  private getTecnologiaStatus(sum: number): string {
+    if (sum >= 5) return 'Sistema integrado';
+    if (sum >= 4) return 'Software especializado';
+    if (sum >= 3) return 'Apps básicas';
+    if (sum >= 2) return 'Excel';
+    return 'Manual';
+  }
+
+  private getLegalStatus(sum: number): string {
+    if (sum >= 4) return 'Ordenada';
+    if (sum >= 2) return 'Básico';
+    return 'Riesgo alto';
+  }
+
+  private getLaboralStatus(sum: number): string {
+    if (sum >= 4) return 'Cumplimiento adecuado';
+    if (sum >= 2) return 'Parcial';
+    return 'Riesgo alto';
+  }
+
+  private getTributarioStatus(sum: number): string {
+    if (sum >= 4) return 'Ordenado';
+    if (sum >= 2) return 'Parcial';
+    return 'Riesgo alto';
   }
 
   private normalizeText(value: string) {

@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsArray, IsIn, IsInt, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { ConsultantCaseStudyDto, ConsultantEducationDto } from './consultant-profile-fields.dto';
 
 export class ConsultantCreateDto {
   @ApiProperty({ example: 3 })
@@ -28,6 +29,26 @@ export class ConsultantCreateDto {
   @IsOptional()
   ownerPhone?: string;
 
+  @ApiPropertyOptional({ example: 'Consultor financiero y tributario para PYMES' })
+  @IsString()
+  @IsOptional()
+  headline?: string;
+
+  @ApiPropertyOptional({ example: 'Lima, Perú' })
+  @IsString()
+  @IsOptional()
+  location?: string;
+
+  @ApiPropertyOptional({ example: 'Presencial en Lima y remoto a nivel nacional' })
+  @IsString()
+  @IsOptional()
+  workModality?: string;
+
+  @ApiPropertyOptional({ example: 'https://www.linkedin.com/in/carlos-mendoza' })
+  @IsString()
+  @IsOptional()
+  linkedinUrl?: string;
+
   @ApiPropertyOptional({ example: 'Consultor en transformacion digital para PYMES.' })
   @IsString()
   @IsOptional()
@@ -44,6 +65,62 @@ export class ConsultantCreateDto {
   @IsString({ each: true })
   @IsOptional()
   sectors?: string[];
+
+  @ApiPropertyOptional({ example: ['Comercio', 'Gastronomia'], type: [String] })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  industries?: string[];
+
+  @ApiPropertyOptional({ example: ['Microempresa', 'Pequeña empresa'], type: [String] })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  companyTypes?: string[];
+
+  @ApiPropertyOptional({ example: ['Diagnóstico', 'Implementación'], type: [String] })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  services?: string[];
+
+  @ApiPropertyOptional({ example: 12 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  yearsExperience?: number;
+
+  @ApiPropertyOptional({ type: [ConsultantEducationDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ConsultantEducationDto)
+  @IsOptional()
+  education?: ConsultantEducationDto[];
+
+  @ApiPropertyOptional({ example: ['NIIF para PYMES'], type: [String] })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  certifications?: string[];
+
+  @ApiPropertyOptional({ example: ['Retail', 'Logistica'], type: [String] })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  workedSectors?: string[];
+
+  @ApiPropertyOptional({ type: [ConsultantCaseStudyDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ConsultantCaseStudyDto)
+  @IsOptional()
+  caseStudies?: ConsultantCaseStudyDto[];
+
+  @ApiPropertyOptional({ example: 'Texto extraido del CV del consultor...' })
+  @IsString()
+  @IsOptional()
+  cvText?: string;
 
   @ApiPropertyOptional({ example: 'https://storage.example.com/consultants/photo.jpg' })
   @IsString()

@@ -10,6 +10,9 @@ import { GoogleCallbackQueryDto } from './dto/google-callback-query.dto';
 import * as bcrypt from 'bcrypt';
 import { handleDbError } from '@functions/db-error.function';
 import { randomUUID } from 'crypto';
+import { EmailService } from '@modules/admin/email/email.service';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 type AuthRole = 'pyme' | 'consultor';
 type GoogleAuthFlow = 'login' | 'register';
@@ -42,6 +45,7 @@ export class AuthService {
     private readonly pymeRepository: PymeRepository,
     private readonly consultantRepository: ConsultantRepository,
     private readonly jwtService: JwtService,
+    private readonly emailService: EmailService,
   ) {}
 
   async login(loginDto: LoginDto) {
@@ -115,6 +119,23 @@ export class AuthService {
           fullName: user.name,
           firstName,
           lastName,
+          ownerPhone: registerDto.ownerPhone?.trim(),
+          headline: registerDto.headline?.trim(),
+          location: registerDto.location?.trim(),
+          workModality: registerDto.workModality?.trim(),
+          linkedinUrl: registerDto.linkedinUrl?.trim(),
+          bio: registerDto.bio?.trim(),
+          specialties: this.cleanTextList(registerDto.specialties),
+          sectors: this.cleanTextList(registerDto.sectors),
+          industries: this.cleanTextList(registerDto.industries),
+          companyTypes: this.cleanTextList(registerDto.companyTypes),
+          services: this.cleanTextList(registerDto.services),
+          yearsExperience: registerDto.yearsExperience,
+          education: registerDto.education,
+          certifications: this.cleanTextList(registerDto.certifications),
+          workedSectors: this.cleanTextList(registerDto.workedSectors),
+          caseStudies: registerDto.caseStudies,
+          cvText: registerDto.cvText?.trim(),
           active: 'true',
           validated: 'false',
         });
@@ -380,6 +401,10 @@ export class AuthService {
     return registerDto.name.trim();
   }
 
+  private cleanTextList(value?: string[]) {
+    return value?.map((item) => item.trim().replace(/\s+/g, ' ')).filter(Boolean);
+  }
+
   private buildGooglePopupResponse(data: { session?: unknown; error?: string }) {
     const frontendUrl = process.env.FRONTEND_URL ?? process.env.WEB_URL ?? '*';
     const payload = JSON.stringify({ type: 'hubsme:google-auth', ...data });
@@ -405,5 +430,93 @@ export class AuthService {
     } catch {
       return '*';
     }
+  }
+
+  async forgotPassword(forgotPasswordDto: ForgotPasswordDto) {
+    const { email } = forgotPasswordDto;
+    const cleanEmail = email.trim().toLowerCase();
+
+    const user = await this.userRepository.findByEmail(cleanEmail);
+    if (!user) {
+      throw new BadRequestException('No existe ninguna cuenta registrada con este correo electrónico');
+    }
+
+    if (user.isActive !== 'true') {
+      throw new BadRequestException('Esta cuenta está inactiva');
+    }
+
+    if (user.authProvider === 'google') {
+      throw new BadRequestException('Esta cuenta se registró utilizando Google. Por favor, inicia sesión con Google');
+    }
+
+    const secret = `${process.env.JWT_SECRET}-${user.password}`;
+    const token = this.jwtService.sign(
+      { sub: user.id, email: user.email },
+      { secret, expiresIn: '15m' },
+    );
+
+    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:6200';
+    const resetUrl = `${frontendUrl}/auth/reset-password?token=${token}`;
+
+    const mailHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 12px; background-color: #ffffff;">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <h2 style="color: #3876c7; margin: 0; font-size: 24px;">Restablecer Contraseña</h2>
+          <p style="color: #6b7280; margin: 5px 0 0 0; font-size: 14px;">Solicitud de recuperación de cuenta en HUBSME</p>
+        </div>
+        <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
+        <p style="font-size: 15px; color: #374151; line-height: 1.5;">Hola, <strong>${user.name}</strong>:</p>
+        <p style="font-size: 15px; color: #374151; line-height: 1.5;">Hemos recibido una solicitud para restablecer la contraseña de tu cuenta. Si no fuiste tú, puedes ignorar este correo de forma segura.</p>
+        <p style="font-size: 15px; color: #374151; line-height: 1.5;">Para restablecer tu contraseña, haz clic en el botón de abajo. Este enlace expira en 15 minutos:</p>
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="${resetUrl}" style="background-color: #3876c7; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block; font-size: 14px; box-shadow: 0 4px 6px -1px rgba(56, 118, 199, 0.2);">Restablecer contraseña</a>
+        </div>
+        <p style="font-size: 13px; color: #6b7280; line-height: 1.5;">Si el botón no funciona, copia y pega el siguiente enlace en tu navegador:</p>
+        <p style="font-size: 12px; color: #3876c7; word-break: break-all; line-height: 1.5;"><a href="${resetUrl}" style="color: #3876c7;">${resetUrl}</a></p>
+        <hr style="border: 0; border-top: 1px solid #e5e7eb; margin: 25px 0;" />
+        <p style="color: #9ca3af; font-size: 11px; text-align: center; margin: 0;">HUBSME &copy; 2026. Todos los derechos reservados.</p>
+      </div>
+    `;
+
+    await this.emailService.sendEmail({
+      to: cleanEmail,
+      subject: 'Restablecer contraseña - HUBSME',
+      text: `Hola ${user.name}, para restablecer tu contraseña accede al siguiente enlace: ${resetUrl}`,
+      html: mailHtml,
+    });
+
+    return { message: 'Se ha enviado un correo electrónico con instrucciones para restablecer tu contraseña' };
+  }
+
+  async resetPassword(resetPasswordDto: ResetPasswordDto) {
+    const { token, password } = resetPasswordDto;
+
+    let decoded: { sub: number; email: string };
+    try {
+      decoded = this.jwtService.decode(token) as { sub: number; email: string };
+    } catch (err) {
+      throw new BadRequestException('El token proporcionado no es válido');
+    }
+
+    if (!decoded || !decoded.sub) {
+      throw new BadRequestException('El token es inválido o está corrupto');
+    }
+
+    const user = await this.userRepository.findOne(decoded.sub);
+    if (!user) {
+      throw new BadRequestException('El usuario no existe');
+    }
+
+    const secret = `${process.env.JWT_SECRET}-${user.password}`;
+    try {
+      this.jwtService.verify(token, { secret });
+    } catch (err) {
+      throw new BadRequestException('El enlace para restablecer la contraseña es inválido o ha expirado');
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await this.userRepository.update(user.id, { password: hashedPassword });
+
+    return { message: 'Contraseña restablecida con éxito. Ya puedes iniciar sesión con tu nueva contraseña' };
   }
 }
