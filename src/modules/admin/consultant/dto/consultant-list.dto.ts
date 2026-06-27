@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsOptional, IsString } from 'class-validator';
 import { PaginationFiltersDto, PaginationMetaDto } from '@modules/admin/common/pagination.dto';
+import { ConsultantCaseStudyDto, ConsultantEducationDto } from './consultant-profile-fields.dto';
 
 export class ConsultantListFiltersDto extends PaginationFiltersDto {
   @ApiPropertyOptional({ description: 'Search by name, bio or specialty' })
@@ -44,6 +45,18 @@ export class ConsultantListItemDto {
   ownerPhone: string | null;
 
   @ApiProperty({ nullable: true })
+  headline: string | null;
+
+  @ApiProperty({ nullable: true })
+  location: string | null;
+
+  @ApiProperty({ nullable: true })
+  workModality: string | null;
+
+  @ApiProperty({ nullable: true })
+  linkedinUrl: string | null;
+
+  @ApiProperty({ nullable: true })
   bio: string | null;
 
   @ApiProperty({ type: [String] })
@@ -51,6 +64,33 @@ export class ConsultantListItemDto {
 
   @ApiProperty({ type: [String] })
   sectors: string[];
+
+  @ApiProperty({ type: [String] })
+  industries: string[];
+
+  @ApiProperty({ type: [String] })
+  companyTypes: string[];
+
+  @ApiProperty({ type: [String] })
+  services: string[];
+
+  @ApiProperty()
+  yearsExperience: number;
+
+  @ApiProperty({ type: [ConsultantEducationDto] })
+  education: ConsultantEducationDto[];
+
+  @ApiProperty({ type: [String] })
+  certifications: string[];
+
+  @ApiProperty({ type: [String] })
+  workedSectors: string[];
+
+  @ApiProperty({ type: [ConsultantCaseStudyDto] })
+  caseStudies: ConsultantCaseStudyDto[];
+
+  @ApiProperty({ nullable: true })
+  cvText: string | null;
 
   @ApiProperty({ nullable: true })
   photoUrl: string | null;

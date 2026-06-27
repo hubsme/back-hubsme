@@ -9,6 +9,9 @@ import { GoogleAuthUrlDto } from './dto/google-auth-url.dto';
 import { GoogleAuthUrlResponseDto } from './dto/google-auth-url-response.dto';
 import { GoogleCallbackQueryDto } from './dto/google-callback-query.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { MessageResponseDto } from './dto/message-response.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -55,5 +58,21 @@ export class AuthController {
   @ApiResponse({ status: 400, type: HttpErrorDto })
   getProfile(@Request() req) {
     return req.user;
+  }
+
+  @Post('forgot-password')
+  @ApiOperation({ summary: 'Request password reset link via email' })
+  @ApiResponse({ status: 200, type: MessageResponseDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
+    return await this.authService.forgotPassword(forgotPasswordDto);
+  }
+
+  @Post('reset-password')
+  @ApiOperation({ summary: 'Reset user password using token' })
+  @ApiResponse({ status: 200, type: MessageResponseDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
+    return await this.authService.resetPassword(resetPasswordDto);
   }
 }

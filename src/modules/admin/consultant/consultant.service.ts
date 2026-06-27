@@ -7,6 +7,7 @@ import { ConsultantListFiltersDto } from './dto/consultant-list.dto';
 import { ConsultantMeetingPymesFiltersDto } from './dto/consultant-meeting-pymes.dto';
 import { ConsultantUpdateDto } from './dto/consultant-update.dto';
 import { ConsultantDTO } from '@db/tables/consultant.table';
+import { ConsultantCaseStudyDto, ConsultantEducationDto } from './dto/consultant-profile-fields.dto';
 import { UserService } from '../user/user.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { EmailService } from '../email/email.service';
@@ -102,9 +103,22 @@ export class ConsultantService {
       lastName: data.lastName?.trim(),
       fullName: this.buildFullName(data),
       ownerPhone: data.ownerPhone?.trim(),
+      headline: data.headline?.trim(),
+      location: data.location?.trim(),
+      workModality: data.workModality?.trim(),
+      linkedinUrl: data.linkedinUrl?.trim(),
       bio: data.bio?.trim(),
-      specialties: data.specialties?.map((item) => item.trim()).filter(Boolean),
-      sectors: data.sectors?.map((item) => item.trim()).filter(Boolean),
+      specialties: this.cleanTextList(data.specialties),
+      sectors: this.cleanTextList(data.sectors),
+      industries: this.cleanTextList(data.industries),
+      companyTypes: this.cleanTextList(data.companyTypes),
+      services: this.cleanTextList(data.services),
+      yearsExperience: data.yearsExperience,
+      education: this.cleanEducation(data.education),
+      certifications: this.cleanTextList(data.certifications),
+      workedSectors: this.cleanTextList(data.workedSectors),
+      caseStudies: this.cleanCaseStudies(data.caseStudies),
+      cvText: data.cvText?.trim(),
       photoUrl: data.photoUrl?.trim(),
       videoUrl: data.videoUrl?.trim(),
       pricePerHour: data.pricePerHour === undefined ? undefined : data.pricePerHour.toFixed(2),
@@ -116,6 +130,32 @@ export class ConsultantService {
     if (explicitFullName) return explicitFullName;
 
     return [data.firstName?.trim(), data.lastName?.trim()].filter(Boolean).join(' ');
+  }
+
+  private cleanTextList(value?: string[]) {
+    return value?.map((item) => item.trim().replace(/\s+/g, ' ')).filter(Boolean);
+  }
+
+  private cleanEducation(value?: ConsultantEducationDto[]) {
+    return value
+      ?.map((item) => ({
+        degree: item.degree?.trim().replace(/\s+/g, ' '),
+        institution: item.institution?.trim().replace(/\s+/g, ' ') || undefined,
+        year: item.year?.trim().replace(/\s+/g, ' ') || undefined,
+      }))
+      .filter((item) => item.degree);
+  }
+
+  private cleanCaseStudies(value?: ConsultantCaseStudyDto[]) {
+    return value
+      ?.map((item) => ({
+        title: item.title?.trim().replace(/\s+/g, ' '),
+        problem: item.problem?.trim().replace(/\s+/g, ' ') || undefined,
+        action: item.action?.trim().replace(/\s+/g, ' ') || undefined,
+        result: item.result?.trim().replace(/\s+/g, ' ') || undefined,
+        sector: item.sector?.trim().replace(/\s+/g, ' ') || undefined,
+      }))
+      .filter((item) => item.title);
   }
 
   async sendMeetingNotification(

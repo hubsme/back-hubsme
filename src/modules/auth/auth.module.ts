@@ -7,6 +7,7 @@ import { JwtStrategy } from './jwt.strategy';
 import { UserRepository } from '@repositories/user.repository';
 import { ConsultantRepository } from '@repositories/consultant.repository';
 import { PymeRepository } from '@repositories/pyme.repository';
+import { EmailModule } from '@modules/admin/email/email.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { PymeRepository } from '@repositories/pyme.repository';
       secret: process.env.JWT_SECRET,
       signOptions: { expiresIn: '30d' },
     }),
+    EmailModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, UserRepository, PymeRepository, ConsultantRepository],

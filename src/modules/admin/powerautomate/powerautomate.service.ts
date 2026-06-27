@@ -1,5 +1,14 @@
-import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
+import {
+  ConsultantCaseStudyDto,
+  ConsultantEducationDto,
+} from '@modules/admin/consultant/dto/consultant-profile-fields.dto';
+import { ConsultantCvProfileResultDto } from './dto/consultant-cv/consultant-cv-profile-result.dto';
 import { HubsmeAiResultDto } from './dto/hubsme-ai/hubsme-ai-result.dto';
+
+type UnknownRecord = Record<string, unknown>;
 
 @Injectable()
 export class PowerAutomateService {
@@ -10,10 +19,14 @@ export class PowerAutomateService {
     const defaultPrompt = 'Genera un resumen ejecutivo en texto plano, corrido y fluido de la reunión (en párrafos cohesivos, sin viñetas, sin listas de tareas y sin divisiones artificiales) en español.';
     const activePrompt = prompt || defaultPrompt;
 
-    const combinedPrompt = `${activePrompt}\n\n# Transcripción a procesar:\n${text}`;
+    return this.runPromptWithUrl(this.workflowUrl, text, activePrompt);
+  }
+
+  private async runPromptWithUrl(workflowUrl: string, text: string, prompt: string): Promise<{ result: string }> {
+    const combinedPrompt = `${prompt}\n\n# Texto a procesar:\n${text}`;
 
     try {
-      const response = await fetch(this.workflowUrl, {
+      const response = await fetch(workflowUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -27,12 +40,13 @@ export class PowerAutomateService {
         throw new Error(`Power Automate respondió con estado ${response.status}`);
       }
 
-      const data = (await response.json()) as { result?: string };
-      return { result: data.result || '' };
-    } catch (error: any) {
-      this.logger.error(`Error al ejecutar el flujo de Power Automate: ${error.message || error}`);
+      const data = (await response.json()) as unknown;
+      return { result: this.readWorkflowResult(data) };
+    } catch (error: unknown) {
+      const message = this.errorMessage(error);
+      this.logger.error(`Error al ejecutar el flujo de Power Automate: ${message}`);
       throw new InternalServerErrorException(
-        `Error al comunicarse con Power Automate (${error.message || error})`,
+        `Error al comunicarse con Power Automate (${message})`,
       );
     }
   }
@@ -74,9 +88,9 @@ export class PowerAutomateService {
         summary: parsed.summary || '',
         tasks: Array.isArray(parsed.tasks) ? parsed.tasks.filter((task) => task.assignedTo === 'pyme') : [],
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       this.logger.error(
-        `Error al procesar/parsear JSON de Copilot AI: ${error.message || error}. Respuesta recibida: ${result}`,
+        `Error al procesar/parsear JSON de Copilot AI: ${this.errorMessage(error)}. Respuesta recibida: ${result}`,
       );
       // Fallback seguro en caso de error de parseo
       return {
@@ -84,5 +98,157 @@ export class PowerAutomateService {
         tasks: [],
       };
     }
+  }
+
+  async runConsultantCvPrompt(text: string, prompt?: string): Promise<ConsultantCvProfileResultDto> {
+    const workflowUrl = 'https://aa50c4112851ede8b0a69e71b5bf72.e4.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/50a2be3614d84f94a69a55e4aec13362/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=-Z930_es4R6VpwUkyJmg_jmisTBP7ZvSr2FcPig6oz0';
+
+    const defaultPrompt =
+      'Analiza el texto de CV de un consultor para PYMES y extrae un perfil estructurado.\n' +
+      'No inventes datos. Si un dato no aparece, usa string vacio, array vacio o 0 segun corresponda.\n' +
+      'Devuelve UNICAMENTE un JSON valido, sin markdown ni explicaciones, con esta estructura exacta:\n' +
+      '{\n' +
+      '  "firstName": "",\n' +
+      '  "lastName": "",\n' +
+      '  "fullName": "",\n' +
+      '  "headline": "",\n' +
+      '  "location": "",\n' +
+      '  "workModality": "",\n' +
+      '  "bio": "",\n' +
+      '  "ownerPhone": "",\n' +
+      '  "linkedinUrl": "",\n' +
+      '  "specialties": [],\n' +
+      '  "sectors": [],\n' +
+      '  "industries": [],\n' +
+      '  "companyTypes": [],\n' +
+      '  "services": [],\n' +
+      '  "yearsExperience": 0,\n' +
+      '  "education": [{ "degree": "", "institution": "", "year": "" }],\n' +
+      '  "certifications": [],\n' +
+      '  "workedSectors": [],\n' +
+      '  "caseStudies": [{ "title": "", "problem": "", "action": "", "result": "", "sector": "" }]\n' +
+      '}\n' +
+      'El headline debe ser una frase corta profesional. El bio debe resumir experiencia, enfoque y valor para PYMES en maximo 500 caracteres.';
+
+    const activePrompt = prompt || defaultPrompt;
+    const { result } = await this.runPromptWithUrl(workflowUrl, text, activePrompt);
+    const parsed = this.parseJsonObject(result);
+    const normalized = this.normalizeConsultantCvProfile(parsed);
+    await this.validateConsultantCvProfile(normalized);
+    return normalized;
+  }
+
+  private readWorkflowResult(data: unknown) {
+    if (typeof data === 'string') return data;
+    if (!this.isRecord(data)) return '';
+
+    const result = data.result ?? data.text ?? data.response ?? data.content;
+    if (typeof result === 'string') return result;
+    if (this.isRecord(result) || Array.isArray(result)) return JSON.stringify(result);
+
+    return JSON.stringify(data);
+  }
+
+  private parseJsonObject(value: string): UnknownRecord {
+    const jsonMatch = value.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      throw new BadRequestException(['Power Automate no devolvio un JSON valido para el perfil del consultor']);
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(jsonMatch[0]) as unknown;
+    } catch {
+      throw new BadRequestException(['Power Automate devolvio un JSON mal formado para el perfil del consultor']);
+    }
+
+    if (!this.isRecord(parsed)) {
+      throw new BadRequestException(['El JSON del perfil del consultor debe ser un objeto']);
+    }
+
+    return parsed;
+  }
+
+  private normalizeConsultantCvProfile(data: UnknownRecord): ConsultantCvProfileResultDto {
+    return {
+      firstName: this.readString(data.firstName),
+      lastName: this.readString(data.lastName),
+      fullName: this.readString(data.fullName),
+      headline: this.readString(data.headline),
+      location: this.readString(data.location),
+      workModality: this.readString(data.workModality),
+      bio: this.readString(data.bio),
+      ownerPhone: this.readString(data.ownerPhone),
+      linkedinUrl: this.readString(data.linkedinUrl),
+      specialties: this.readStringArray(data.specialties),
+      sectors: this.readStringArray(data.sectors),
+      industries: this.readStringArray(data.industries),
+      companyTypes: this.readStringArray(data.companyTypes),
+      services: this.readStringArray(data.services),
+      yearsExperience: this.readNumber(data.yearsExperience),
+      education: this.normalizeEducation(data.education),
+      certifications: this.readStringArray(data.certifications),
+      workedSectors: this.readStringArray(data.workedSectors),
+      caseStudies: this.normalizeCaseStudies(data.caseStudies),
+    };
+  }
+
+  private async validateConsultantCvProfile(data: ConsultantCvProfileResultDto) {
+    const instance = plainToInstance(ConsultantCvProfileResultDto, data);
+    const errors = await validate(instance, { whitelist: true });
+    if (errors.length) {
+      throw new BadRequestException(['Power Automate devolvio un perfil con formato invalido']);
+    }
+  }
+
+  private normalizeEducation(value: unknown): ConsultantEducationDto[] {
+    if (!Array.isArray(value)) return [];
+    return value
+      .filter((item): item is UnknownRecord => this.isRecord(item))
+      .map((item) => ({
+        degree: this.readString(item.degree),
+        institution: this.readString(item.institution) || undefined,
+        year: this.readString(item.year) || undefined,
+      }))
+      .filter((item) => item.degree);
+  }
+
+  private normalizeCaseStudies(value: unknown): ConsultantCaseStudyDto[] {
+    if (!Array.isArray(value)) return [];
+    return value
+      .filter((item): item is UnknownRecord => this.isRecord(item))
+      .map((item) => ({
+        title: this.readString(item.title),
+        problem: this.readString(item.problem) || undefined,
+        action: this.readString(item.action) || undefined,
+        result: this.readString(item.result) || undefined,
+        sector: this.readString(item.sector) || undefined,
+      }))
+      .filter((item) => item.title);
+  }
+
+  private readString(value: unknown) {
+    return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
+  }
+
+  private readStringArray(value: unknown) {
+    if (!Array.isArray(value)) return [];
+    return value
+      .filter((item): item is string => typeof item === 'string')
+      .map((item) => item.trim().replace(/\s+/g, ' '))
+      .filter(Boolean);
+  }
+
+  private readNumber(value: unknown) {
+    const numberValue = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(numberValue) && numberValue > 0 ? Math.floor(numberValue) : 0;
+  }
+
+  private isRecord(value: unknown): value is UnknownRecord {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+  }
+
+  private errorMessage(error: unknown) {
+    return error instanceof Error ? error.message : String(error);
   }
 }
