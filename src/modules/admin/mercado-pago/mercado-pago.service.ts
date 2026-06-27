@@ -162,6 +162,10 @@ export class MercadoPagoService {
     const pymeId = currentUserId;
     const durationMinutes = data.durationMinutes ?? 60;
 
+    if (durationMinutes < 60) {
+      throw new BadRequestException(['La duración mínima de la sesión es de 60 minutos (1 hora)']);
+    }
+
     await this.consultantAvailabilityService.assertAvailableForMeeting(
       data.consultantId,
       new Date(data.startTime),
