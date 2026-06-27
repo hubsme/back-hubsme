@@ -146,6 +146,16 @@ export class ConsultantAvailabilityService {
 
   async assertAvailableForMeeting(consultantId: number, startTime: Date, durationMinutes: number) {
     await this.validateConsultant(consultantId);
+    
+    // Validate that meetings are scheduled at least for tomorrow (from tomorrow onwards)
+    const nowLocal = new Date(Date.now() + this.businessTimezoneOffsetMinutes * 60 * 1000);
+    const tomorrowLocal = new Date(Date.UTC(nowLocal.getUTCFullYear(), nowLocal.getUTCMonth(), nowLocal.getUTCDate() + 1, 0, 0, 0, 0));
+    const tomorrowUtc = new Date(tomorrowLocal.getTime() - this.businessTimezoneOffsetMinutes * 60 * 1000);
+
+    if (startTime.getTime() < tomorrowUtc.getTime()) {
+      throw new BadRequestException(['Las reuniones deben programarse al menos de un día para otro']);
+    }
+
     const endTime = new Date(startTime.getTime() + durationMinutes * 60 * 1000);
     this.validateSlotRange(startTime, endTime);
 
