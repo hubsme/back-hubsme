@@ -22,17 +22,32 @@ export class StorageService {
       const blobPath = folder ? `${folder}/${filename}` : filename;
 
       const containerClient = this.getClient().getContainerClient(this.containerName);
-      await containerClient.createIfNotExists({ access: 'blob' });
+      let isPublic = true;
+      try {
+        await containerClient.createIfNotExists({ access: 'blob' });
+      } catch (err: any) {
+        if (err.code === 'PublicAccessNotPermitted' || err.statusCode === 409) {
+          isPublic = false;
+          await containerClient.createIfNotExists();
+        } else {
+          throw err;
+        }
+      }
 
       const blockBlobClient = containerClient.getBlockBlobClient(blobPath);
       await blockBlobClient.uploadData(file.buffer, {
         blobHTTPHeaders: { blobContentType: file.mimetype },
       });
 
+      const backendUrl = process.env.BACKEND_URL;
+      const fileUrl = isPublic
+        ? blockBlobClient.url
+        : `${backendUrl}/storage/download-file?path=${encodeURIComponent(blobPath)}`;
+
       return {
         publicId: blobPath,
-        url: blockBlobClient.url,
-        secureUrl: blockBlobClient.url,
+        url: fileUrl,
+        secureUrl: fileUrl,
         format: extension,
         bytes: file.size,
         resourceType: this.getResourceType(file.mimetype),
