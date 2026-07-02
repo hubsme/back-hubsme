@@ -425,9 +425,6 @@ export class MercadoPagoService {
     accessToken: string,
     data: { meetingId?: number; title: string; amount: number; marketplaceFee: number; externalReference: string },
   ): Promise<Required<Pick<MercadoPagoPreferenceResponse, 'id'>> & MercadoPagoPreferenceResponse> {
-    const backUrls = this.getBackUrls(data.meetingId);
-    const isHttps = backUrls.success?.startsWith('https://');
-
     const response = await fetch('https://api.mercadopago.com/checkout/preferences', {
       method: 'POST',
       headers: {
@@ -447,8 +444,6 @@ export class MercadoPagoService {
         marketplace_fee: data.marketplaceFee,
         external_reference: data.externalReference,
         notification_url: this.getWebhookUrl(data.externalReference),
-        back_urls: backUrls,
-        ...(isHttps ? { auto_return: 'approved' } : {}),
         metadata: {
           external_reference: data.externalReference,
           ...(data.meetingId ? { meeting_id: data.meetingId } : {}),
@@ -571,14 +566,7 @@ export class MercadoPagoService {
     return account ? this.getValidAccessToken(account) : undefined;
   }
 
-  private getBackUrls(meetingId?: number) {
-    const frontendUrl = (process.env.FRONTEND_URL ?? process.env.WEB_URL ?? 'http://localhost:6200').replace(/\/$/, '');
-    return {
-      success: process.env.MERCADO_PAGO_SUCCESS_URL ?? (meetingId ? `${frontendUrl}/pyme/meetings/${meetingId}?payment=success` : `${frontendUrl}/pyme/meetings?payment=success`),
-      failure: process.env.MERCADO_PAGO_FAILURE_URL ?? (meetingId ? `${frontendUrl}/pyme/meetings/${meetingId}?payment=failure` : `${frontendUrl}/pyme/meetings?payment=failure`),
-      pending: process.env.MERCADO_PAGO_PENDING_URL ?? (meetingId ? `${frontendUrl}/pyme/meetings/${meetingId}?payment=pending` : `${frontendUrl}/pyme/meetings?payment=pending`),
-    };
-  }
+
 
   private getOAuthConfig(requireSecret = false) {
     const clientId = process.env.MERCADO_PAGO_CLIENT_ID;

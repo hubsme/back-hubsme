@@ -182,6 +182,7 @@ export class ConsultantService {
       });
 
       // 1. WhatsApp notification
+      /*
       if (consultant.ownerPhone?.trim()) {
         const message = `🎉 *¡Nueva asesoría agendada, ${consultant.fullName}!* 🚀\n\n` +
           `Hola, nos complace informarte que se ha agendado y confirmado una sesión de consultoría a través de *HUBSME*. Tienes una cita pendiente:\n\n` +
@@ -199,6 +200,7 @@ export class ConsultantService {
           console.error('Error sending WhatsApp notification:', error);
         }
       }
+      */
 
       // 2. Email notification
       if (user.email?.trim()) {

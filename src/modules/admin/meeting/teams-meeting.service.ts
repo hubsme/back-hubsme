@@ -1,13 +1,10 @@
 import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
-import { CommunicationIdentityClient } from '@azure/communication-identity';
 import { ClientSecretCredential } from '@azure/identity';
 import { Client, ResponseType } from '@microsoft/microsoft-graph-client';
 import { TokenCredentialAuthenticationProvider } from '@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials';
-import { MeetingTeamsJoinResponseDto } from './dto/meeting-teams-join.dto';
 import { PowerAutomateService } from '../powerautomate/powerautomate.service';
 import { HubsmeAiResultDto } from '../powerautomate/dto/hubsme-ai/hubsme-ai-result.dto';
 import {
-  GraphCalendarEvent,
   GraphCallRecording,
   GraphDriveItem,
   GraphListResponse,
@@ -19,7 +16,6 @@ import {
 @Injectable()
 export class TeamsMeetingService {
   private readonly logger = new Logger(TeamsMeetingService.name);
-  private identityClient?: CommunicationIdentityClient;
   private appGraphClient?: Client;
   private clientSecretCredential?: ClientSecretCredential;
 
@@ -62,68 +58,34 @@ export class TeamsMeetingService {
     const startDateTime = data.startTime.toISOString();
     const endDateTime = new Date(data.startTime.getTime() + data.durationMinutes * 60_000).toISOString();
 
-    const eventPayload = {
+    const meetingPayload = {
       subject: data.title,
-      start: {
-        dateTime: startDateTime,
-        timeZone: 'UTC',
+      startDateTime,
+      endDateTime,
+      lobbyBypassSettings: {
+        scope: 'everyone',
       },
-      end: {
-        dateTime: endDateTime,
-        timeZone: 'UTC',
-      },
-      isOnlineMeeting: true,
-      onlineMeetingProvider: 'teamsForBusiness',
+      recordAutomatically: true,
+      allowedPresenters: 'everyone',
     };
 
     try {
-      const calendarEvent = (await this.appGraphClient!.api(`/users/${organizerUserId}/calendar/events`).post(
-        eventPayload,
-      )) as GraphCalendarEvent;
+      const onlineMeeting = (await this.appGraphClient!.api(`/users/${organizerUserId}/onlineMeetings`).post(
+        meetingPayload,
+      )) as GraphOnlineMeeting;
 
-      const joinWebUrl = await this.resolveCalendarEventJoinUrl(organizerUserId!, calendarEvent);
-      const onlineMeeting = await this.findOnlineMeetingByJoinWebUrl(joinWebUrl);
-
-      if (!onlineMeeting?.id || !onlineMeeting.joinWebUrl) {
-        throw new Error('No se pudo resolver el onlineMeeting asociado al evento de calendario.');
+      if (!onlineMeeting.id || !onlineMeeting.joinWebUrl) {
+        throw new Error('La creación de la reunión de Teams no devolvió ID o joinWebUrl.');
       }
 
-      await this.updateOnlineMeetingSettings(onlineMeeting.id);
-
-      this.logger.log(`Reunión calendar-backed creada y configurada con grabación automática: ${data.title}`);
+      this.logger.log(`Reunión virtual pura de Teams creada con grabación automática y bypass de lobby restrictivo: ${data.title}`);
 
       return { id: onlineMeeting.id, joinWebUrl: onlineMeeting.joinWebUrl };
     } catch (error: any) {
       const graphError = error.message || JSON.stringify(error);
-      this.logger.error(`Microsoft Graph calendar-backed Teams meeting creation failed: ${graphError}`);
+      this.logger.error(`Microsoft Graph onlineMeetings creation failed: ${graphError}`);
       throw new InternalServerErrorException(`No se pudo crear la reunión de Microsoft Teams (${graphError})`);
     }
-  }
-
-  private async resolveCalendarEventJoinUrl(
-    organizerUserId: string,
-    calendarEvent: GraphCalendarEvent,
-  ): Promise<string> {
-    if (calendarEvent.onlineMeeting?.joinUrl) {
-      return calendarEvent.onlineMeeting.joinUrl;
-    }
-
-    if (!calendarEvent.id) {
-      throw new Error('El evento de calendario no devolvió id ni joinUrl.');
-    }
-
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      await this.sleep(500);
-      const event = (await this.appGraphClient!.api(`/users/${organizerUserId}/calendar/events/${calendarEvent.id}`)
-        .select('id,onlineMeeting')
-        .get()) as GraphCalendarEvent;
-
-      if (event.onlineMeeting?.joinUrl) {
-        return event.onlineMeeting.joinUrl;
-      }
-    }
-
-    throw new Error('El evento de calendario no generó un enlace de Teams.');
   }
 
   private async findOnlineMeetingByJoinWebUrl(meetingUrl: string): Promise<GraphOnlineMeeting | null> {
@@ -140,18 +102,6 @@ export class TeamsMeetingService {
     this.ensureGraphForAppOnlyAuth();
 
     return this.findOnlineMeetingByJoinWebUrl(meetingUrl);
-  }
-
-  private async updateOnlineMeetingSettings(onlineMeetingId: string): Promise<void> {
-    const organizerUserId = process.env.MS_GRAPH_TEAMS_ORGANIZER_USER_ID;
-
-    await this.appGraphClient!.api(`/users/${organizerUserId}/onlineMeetings/${onlineMeetingId}`).patch({
-      recordAutomatically: true,
-      allowedPresenters: 'everyone',
-      lobbyBypassSettings: {
-        scope: 'everyone',
-      },
-    });
   }
 
   async listOnlineMeetingRecordings(onlineMeetingId: string): Promise<MeetingRecording[]> {
@@ -312,24 +262,6 @@ export class TeamsMeetingService {
     });
   }
 
-  async createAnonymousJoinToken(data: {
-    meetingId: number;
-    meetingUrl: string;
-    displayName?: string;
-  }): Promise<MeetingTeamsJoinResponseDto> {
-    const client = this.getIdentityClient();
-    const { user, token, expiresOn } = await client.createUserAndToken(['voip']);
-
-    return {
-      meetingId: data.meetingId,
-      meetingUrl: data.meetingUrl,
-      acsUserId: user.communicationUserId,
-      token,
-      expiresOn,
-      displayName: data.displayName,
-    };
-  }
-
   async getOnlineMeetingAiInsights(onlineMeetingId: string): Promise<HubsmeAiResultDto> {
     this.assertGraphConfig();
     this.ensureGraphForAppOnlyAuth();
@@ -403,18 +335,6 @@ export class TeamsMeetingService {
     }
 
     return cleanLines.join('\n');
-  }
-
-
-
-  private getIdentityClient(): CommunicationIdentityClient {
-    const connectionString = process.env.AZURE_COMMUNICATION_CONNECTION_STRING;
-    if (!connectionString) {
-      throw new BadRequestException(['Configura AZURE_COMMUNICATION_CONNECTION_STRING para emitir tokens ACS']);
-    }
-
-    this.identityClient ??= new CommunicationIdentityClient(connectionString);
-    return this.identityClient;
   }
 
   private assertGraphConfig(): void {
