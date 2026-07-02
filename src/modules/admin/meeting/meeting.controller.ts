@@ -7,7 +7,6 @@ import { MeetingFinalizeDto } from './dto/meeting-finalize.dto';
 import { MeetingListDto, MeetingListFiltersDto } from './dto/meeting-list.dto';
 import { MeetingRecordingDto } from './dto/meeting-recording.dto';
 import { MeetingFinalizeResultDto, MeetingResultDto } from './dto/meeting-result.dto';
-import { MeetingTeamsJoinDto, MeetingTeamsJoinResponseDto } from './dto/meeting-teams-join.dto';
 import { MeetingUpdateDto } from './dto/meeting-update.dto';
 import { MeetingCopilotSummaryDto } from './dto/meeting-copilot-summary.dto';
 import { MeetingService } from './meeting.service';
@@ -53,14 +52,7 @@ export class MeetingController {
     return this.meetingService.confirm(+id);
   }
 
-  @Post('teams-join/:id')
-  @ApiOperation({ summary: 'Create an anonymous ACS token to join a Teams meeting inside the app' })
-  @ApiParam({ name: 'id', type: 'number' })
-  @ApiResponse({ status: 200, type: MeetingTeamsJoinResponseDto })
-  @ApiResponse({ status: 400, type: HttpErrorDto })
-  createTeamsJoinToken(@Param('id') id: string, @Body() joinDto: MeetingTeamsJoinDto) {
-    return this.meetingService.createTeamsJoinToken(+id, joinDto);
-  }
+
 
   @Get('recordings/:id')
   @ApiOperation({ summary: 'List Microsoft Graph recordings for a meeting' })

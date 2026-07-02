@@ -5,7 +5,6 @@ import { TaskRepository } from '@repositories/task.repository';
 import { MeetingCreateDto } from './dto/meeting-create.dto';
 import { MeetingFinalizeDto } from './dto/meeting-finalize.dto';
 import { MeetingListFiltersDto } from './dto/meeting-list.dto';
-import { MeetingTeamsJoinDto } from './dto/meeting-teams-join.dto';
 import { MeetingUpdateDto } from './dto/meeting-update.dto';
 import { TeamsMeetingService } from './teams-meeting.service';
 import { ConsultantAvailabilityService } from '../consultant-availability/consultant-availability.service';
@@ -86,41 +85,7 @@ export class MeetingService {
     });
   }
 
-  async createTeamsJoinToken(id: number, data: MeetingTeamsJoinDto) {
-    const meeting = await this.findOne(id);
-    if (!meeting.meetingUrl?.includes('teams.microsoft.com')) {
-      throw new BadRequestException(['La reunion no tiene un enlace de Microsoft Teams']);
-    }
 
-    const now = new Date();
-    const startTime = new Date(meeting.startTime);
-    const duration = meeting.durationMinutes ?? 60;
-
-    // Permitir unirse desde 10 minutos antes del inicio de la reunión
-    const allowedStart = new Date(startTime.getTime() - 10 * 60 * 1000);
-    // Permitir unirse hasta 30 minutos después del fin de la reunión
-    const allowedEnd = new Date(startTime.getTime() + (duration + 30) * 60 * 1000);
-
-    if (now < allowedStart) {
-      const allowedStartStr = allowedStart.toLocaleTimeString('es-PE', {
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-      throw new BadRequestException([
-        `La reunión aún no está activa. Podrás unirte a partir de las ${allowedStartStr}.`,
-      ]);
-    }
-
-    if (now > allowedEnd) {
-      throw new BadRequestException(['Esta reunión ha expirado y ya no está activa.']);
-    }
-
-    return this.teamsMeetingService.createAnonymousJoinToken({
-      meetingId: meeting.id,
-      meetingUrl: meeting.meetingUrl,
-      displayName: data.displayName?.trim() || undefined,
-    });
-  }
 
   async listMeetingRecordings(id: number) {
     const meeting = await this.findOne(id);

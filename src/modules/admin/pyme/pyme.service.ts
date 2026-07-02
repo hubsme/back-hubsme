@@ -119,6 +119,7 @@ export class PymeService {
       });
 
       // 1. WhatsApp notification
+      /*
       if (pyme.ownerPhone?.trim()) {
         const message = `✅ *¡Sesión de consultoría confirmada!* 💼\n\n` +
           `Hola ${pyme.ownerFirstName || pyme.name}, tu sesión ha sido agendada con éxito a través de *HUBSME*. Aquí tienes el resumen de tu cita:\n\n` +
@@ -136,6 +137,7 @@ export class PymeService {
           console.error('Error sending WhatsApp notification:', error);
         }
       }
+      */
 
       // 2. Email notification
       if (pyme.ownerEmail?.trim()) {
