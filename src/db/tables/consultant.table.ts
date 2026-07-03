@@ -45,6 +45,7 @@ export const consultant = pgTable(
     workedSectors: text('worked_sectors').array().default([]).notNull(),
     caseStudies: jsonb('case_studies').$type<ConsultantCaseStudy[]>().default([]).notNull(),
     cvText: text('cv_text'),
+    cvUrl: text('cv_url'),
     photoUrl: text('photo_url'),
     videoUrl: text('video_url'),
     pricePerHour: decimal('price_per_hour', { precision: 10, scale: 2 }).default('0.00').notNull(),

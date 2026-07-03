@@ -12,7 +12,7 @@ import { SubscriptionModule } from './modules/admin/subscription/subscription.mo
 import { DashboardModule } from './modules/admin/dashboard/dashboard.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { StorageModule } from './modules/storage/storage.module';
-import { PowerAutomateModule } from './modules/admin/powerautomate/powerautomate.module';
+import { AiModule } from './modules/admin/ai/ai.module';
 import { ConsultantAvailabilityModule } from './modules/admin/consultant-availability/consultant-availability.module';
 import { ConsultantGoogleCalendarModule } from './modules/admin/consultant-google-calendar/consultant-google-calendar.module';
 import { MercadoPagoModule } from './modules/admin/mercado-pago/mercado-pago.module';
@@ -33,7 +33,7 @@ import { PublicConsultantModule } from './modules/public/consultant/public-consu
     SubscriptionModule,
     DashboardModule,
     StorageModule,
-    PowerAutomateModule,
+    AiModule,
     ConsultantAvailabilityModule,
     ConsultantGoogleCalendarModule,
     MercadoPagoModule,

@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { UserRepository } from '@repositories/user.repository';
 import { ConsultantRepository } from '@repositories/consultant.repository';
 import { PymeRepository } from '@repositories/pyme.repository';
+import { SubscriptionRepository } from '@repositories/subscription.repository';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { GoogleAuthUrlDto } from './dto/google-auth-url.dto';
@@ -46,6 +47,7 @@ export class AuthService {
     private readonly consultantRepository: ConsultantRepository,
     private readonly jwtService: JwtService,
     private readonly emailService: EmailService,
+    private readonly subscriptionRepository: SubscriptionRepository,
   ) {}
 
   async login(loginDto: LoginDto) {
@@ -136,6 +138,7 @@ export class AuthService {
           workedSectors: this.cleanTextList(registerDto.workedSectors),
           caseStudies: registerDto.caseStudies,
           cvText: registerDto.cvText?.trim(),
+          cvUrl: registerDto.cvUrl?.trim(),
           active: 'true',
           validated: 'false',
         });
@@ -151,6 +154,14 @@ export class AuthService {
           ownerPosition: registerDto.ownerPosition?.trim(),
         });
       }
+
+      // Create default free subscription
+      await this.subscriptionRepository.create({
+        userId: user.id,
+        plan: 'free',
+        status: 'active',
+        startedAt: new Date(),
+      });
 
       const payload = {
         sub: user.id,
@@ -380,6 +391,14 @@ export class AuthService {
           });
         }
       }
+
+      // Create default free subscription
+      await this.subscriptionRepository.create({
+        userId: user.id,
+        plan: 'free',
+        status: 'active',
+        startedAt: new Date(),
+      });
 
       return this.buildSession(user);
     } catch (error) {

@@ -5,14 +5,14 @@ import { DiagnosticRepository } from '@repositories/diagnostic.repository';
 import { DiagnosticDocumentService } from '../diagnostic-document/diagnostic-document.service';
 import { DiagnosticGenerateDto } from './dto/diagnostic-generate.dto';
 import { DiagnosticListFiltersDto } from './dto/diagnostic-list.dto';
-import { PowerAutomateService } from '../powerautomate/powerautomate.service';
+import { AiService } from '../ai/ai.service';
 
 @Injectable()
 export class DiagnosticService {
   constructor(
     private readonly diagnosticRepository: DiagnosticRepository,
     private readonly diagnosticDocumentService: DiagnosticDocumentService,
-    private readonly powerAutomateService: PowerAutomateService,
+    private readonly aiService: AiService,
   ) {}
 
   async findAllPaginated(filters: DiagnosticListFiltersDto) {
@@ -198,11 +198,17 @@ export class DiagnosticService {
       Eres un consultor empresarial senior especializado en PYMES latinoamericanas.
       Analiza los datos, respuestas cerradas y abiertas de la PYME. Ya existe un score base calculado por Hubsme.
       Usa ese score como referencia, ajustalo solo si las respuestas abiertas justifican claramente un cambio.
-      El campo feedbackIa debe ser el DIAGNOSTICO GENERAL y debe estar estructurado en español con los siguientes apartados (usando títulos en negritas y párrafos separados):
-      - **Puntos Positivos:** Análisis de las fortalezas y aciertos del negocio basados en sus respuestas.
-      - **Puntos Negativos y Oportunidades de Mejora:** Análisis de las debilidades, riesgos, cuellos de botella e ineficiencias encontradas.
-      - **Conclusión y Ruta Estratégica:** Síntesis consultiva del camino sugerido para estabilizar y crecer.
+
+      El campo feedbackIa debe ser el ANÁLISIS ESTRATÉGICO DETALLADO (mínimo 600 palabras en total) redactado con un lenguaje formal, consultivo y de alto valor para el cliente. No te limites a listas cortas de viñetas o frases de una línea; cada sección debe ser redactada en párrafos extensos, profundos y bien estructurados:
       
+      Debe contener exactamente estos tres apartados (utilizando los títulos indicados abajo en negrita y párrafos separados):
+
+      - **Puntos Positivos:** Analiza extensamente y a nivel estratégico las fortalezas y cimientos más valiosos de la empresa en base a sus respuestas. Explica detalladamente cómo estas ventajas pueden aprovecharse como palancas de crecimiento o diferenciación en su sector. (Redactar mínimo 2 párrafos completos y profundos).
+      
+      - **Puntos Negativos y Oportunidades de Mejora:** Explica a profundidad las debilidades operativas, financieras, comerciales y organizacionales identificadas. No las listes como una lista simple; explica analíticamente cómo se conectan los problemas (por ejemplo, cómo la falta de procesos afecta las ventas o cómo el desorden en el flujo de caja frena la inversión) y el impacto real que tienen en la rentabilidad y escalabilidad del negocio. (Redactar mínimo 3 párrafos explicativos detallados).
+      
+      - **Conclusión y Ruta Estratégica:** Formula una síntesis estratégica integral con un plan de acción sugerido de forma clara y priorizada. Describe la secuencia lógica en la que la empresa debe implementar las mejoras recomendadas (ej. estabilizar operaciones antes de expandir marketing) y los resultados que se esperan obtener a corto y mediano plazo si actúan con disciplina. (Redactar mínimo 2-3 párrafos estratégicos completos).
+
       No repitas el resumen ejecutivo. Evita texto genérico y evita promesas legales o financieras absolutas.
       areasEvaluadas debe contener exactamente estas 11 areas y en este orden: Estratégica, Financiera, Comercial / Ventas, Marketing, Servicio al cliente, Operaciones, Organizacional / RRHH, Tecnología, Legal, Laboral, Tributario / Contable.
       Debes responder ÚNICAMENTE con un objeto JSON válido con la siguiente estructura y en español. No incluyas introducciones, explicaciones ni bloques de código markdown (como \`\`\`json). Solo devuelve el JSON puro:
@@ -229,14 +235,14 @@ export class DiagnosticService {
     `;
 
     try {
-      const response = await this.powerAutomateService.runPrompt(text, prompt);
+      const response = await this.aiService.runPrompt(text, prompt);
       const jsonMatch = response.result.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error('No se encontró un bloque JSON válido en la respuesta de la IA de Power Automate.');
+        throw new Error('No se encontró un bloque JSON válido en la respuesta de la IA.');
       }
       return JSON.parse(jsonMatch[0]) as DiagnosticResult;
     } catch (error: any) {
-      console.error('Error al generar diagnóstico con Power Automate:', error);
+      console.error('Error al generar diagnóstico con la IA:', error);
       return null;
     }
   }

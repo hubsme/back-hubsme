@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
+import { GoogleGenAI } from '@google/genai';
 import {
   ConsultantCaseStudyDto,
   ConsultantEducationDto,
@@ -11,42 +12,89 @@ import { HubsmeAiResultDto } from './dto/hubsme-ai/hubsme-ai-result.dto';
 type UnknownRecord = Record<string, unknown>;
 
 @Injectable()
-export class PowerAutomateService {
-  private readonly logger = new Logger(PowerAutomateService.name);
-  private readonly workflowUrl = 'https://aa50c4112851ede8b0a69e71b5bf72.e4.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/50a2be3614d84f94a69a55e4aec13362/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=-Z930_es4R6VpwUkyJmg_jmisTBP7ZvSr2FcPig6oz0';
+export class AiService {
+  private readonly logger = new Logger(AiService.name);
+  private ai?: GoogleGenAI;
+
+  private getAiClient(): GoogleGenAI {
+    if (!this.ai) {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        this.logger.error('GEMINI_API_KEY no configurado en variables de entorno');
+        throw new InternalServerErrorException('Error de configuración del servicio de IA (falta la clave API de Gemini)');
+      }
+      this.ai = new GoogleGenAI({ apiKey });
+    }
+    return this.ai;
+  }
 
   async runPrompt(text: string, prompt?: string): Promise<{ result: string }> {
     const defaultPrompt = 'Genera un resumen ejecutivo en texto plano, corrido y fluido de la reunión (en párrafos cohesivos, sin viñetas, sin listas de tareas y sin divisiones artificiales) en español.';
     const activePrompt = prompt || defaultPrompt;
 
-    return this.runPromptWithUrl(this.workflowUrl, text, activePrompt);
-  }
-
-  private async runPromptWithUrl(workflowUrl: string, text: string, prompt: string): Promise<{ result: string }> {
-    const combinedPrompt = `${prompt}\n\n# Texto a procesar:\n${text}`;
+    const model = process.env.GEMINI_MODEL || 'models/gemini-2.5-flash-lite';
+    const combinedPrompt = `${activePrompt}\n\n# Texto a procesar:\n${text}`;
 
     try {
-      const response = await fetch(workflowUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const interaction = await this.getAiClient().interactions.create({
+        model,
+        input: combinedPrompt,
+        tools: [
+          {
+            type: 'google_search',
+          },
+        ],
+        generation_config: {
+          temperature: 1,
+          max_output_tokens: 65536,
+          top_p: 0.95,
         },
-        body: JSON.stringify({
-          prompt: combinedPrompt,
-        }),
-      });
+      }) as any;
 
-      if (!response.ok) {
-        throw new Error(`Power Automate respondió con estado ${response.status}`);
+      let resultText = '';
+
+      // 1. Intentar obtener el texto del último paso (como interaction.steps?.at(-1))
+      const lastStep = interaction.steps?.at(-1);
+      if (lastStep) {
+        if (lastStep.model_turn?.parts?.[0]?.text) {
+          resultText = lastStep.model_turn.parts[0].text;
+        } else if (lastStep.text) {
+          resultText = lastStep.text;
+        } else if (typeof lastStep === 'string') {
+          resultText = lastStep;
+        }
       }
 
-      const data = (await response.json()) as unknown;
-      return { result: this.readWorkflowResult(data) };
+      // 2. Fallback al array de outputs si steps no tiene texto directo
+      if (!resultText && Array.isArray(interaction.outputs)) {
+        for (const output of interaction.outputs) {
+          if (output.type === 'text' && output.text) {
+            resultText += output.text;
+          }
+        }
+      }
+
+      // 3. Fallback a propiedades estándar del SDK
+      if (!resultText) {
+        resultText = interaction.text || interaction.output_text || '';
+      }
+
+      // 4. Registrar uso de tokens
+      if (interaction.usage) {
+        const inputTokens = interaction.usage.total_input_tokens ?? 0;
+        const outputTokens = interaction.usage.total_output_tokens ?? 0;
+        const totalTokens = interaction.usage.total_tokens ?? 0;
+        this.logger.log(
+          `Tokens consumidos - Entrada: ${inputTokens} | Salida: ${outputTokens} | Total: ${totalTokens}`
+        );
+      }
+
+      return { result: resultText };
     } catch (error: unknown) {
       const message = this.errorMessage(error);
-      this.logger.error(`Error al ejecutar el flujo de Power Automate: ${message}`);
+      this.logger.error(`Error al ejecutar prompt con Gemini: ${message}`);
       throw new InternalServerErrorException(
-        `Error al comunicarse con Power Automate (${message})`,
+        `Error al comunicarse con el proveedor de IA (${message})`,
       );
     }
   }
@@ -77,7 +125,6 @@ export class PowerAutomateService {
     const { result } = await this.runPrompt(text, activePrompt);
 
     try {
-      // Regex para capturar el primer bloque JSON {...} en la respuesta (por si hay texto antes o después)
       const jsonMatch = result.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         throw new Error('No se encontró un bloque JSON válido en la respuesta de la IA.');
@@ -90,9 +137,8 @@ export class PowerAutomateService {
       };
     } catch (error: unknown) {
       this.logger.error(
-        `Error al procesar/parsear JSON de Copilot AI: ${this.errorMessage(error)}. Respuesta recibida: ${result}`,
+        `Error al procesar/parsear JSON de Groq AI: ${this.errorMessage(error)}. Respuesta recibida: ${result}`,
       );
-      // Fallback seguro en caso de error de parseo
       return {
         summary: result,
         tasks: [],
@@ -101,8 +147,6 @@ export class PowerAutomateService {
   }
 
   async runConsultantCvPrompt(text: string, prompt?: string): Promise<ConsultantCvProfileResultDto> {
-    const workflowUrl = 'https://aa50c4112851ede8b0a69e71b5bf72.e4.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/50a2be3614d84f94a69a55e4aec13362/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=-Z930_es4R6VpwUkyJmg_jmisTBP7ZvSr2FcPig6oz0';
-
     const defaultPrompt =
       'Analiza el texto de CV de un consultor para PYMES y extrae un perfil estructurado.\n' +
       'No inventes datos. Si un dato no aparece, usa string vacio, array vacio o 0 segun corresponda.\n' +
@@ -131,35 +175,24 @@ export class PowerAutomateService {
       'El headline debe ser una frase corta profesional. El bio debe resumir experiencia, enfoque y valor para PYMES en maximo 500 caracteres.';
 
     const activePrompt = prompt || defaultPrompt;
-    const { result } = await this.runPromptWithUrl(workflowUrl, text, activePrompt);
+    const { result } = await this.runPrompt(text, activePrompt);
     const parsed = this.parseJsonObject(result);
     const normalized = this.normalizeConsultantCvProfile(parsed);
     await this.validateConsultantCvProfile(normalized);
     return normalized;
   }
 
-  private readWorkflowResult(data: unknown) {
-    if (typeof data === 'string') return data;
-    if (!this.isRecord(data)) return '';
-
-    const result = data.result ?? data.text ?? data.response ?? data.content;
-    if (typeof result === 'string') return result;
-    if (this.isRecord(result) || Array.isArray(result)) return JSON.stringify(result);
-
-    return JSON.stringify(data);
-  }
-
   private parseJsonObject(value: string): UnknownRecord {
     const jsonMatch = value.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      throw new BadRequestException(['Power Automate no devolvio un JSON valido para el perfil del consultor']);
+      throw new BadRequestException(['La IA no devolvió un JSON válido para el perfil del consultor']);
     }
 
     let parsed: unknown;
     try {
       parsed = JSON.parse(jsonMatch[0]) as unknown;
     } catch {
-      throw new BadRequestException(['Power Automate devolvio un JSON mal formado para el perfil del consultor']);
+      throw new BadRequestException(['La IA devolvió un JSON mal formado para el perfil del consultor']);
     }
 
     if (!this.isRecord(parsed)) {
@@ -197,7 +230,7 @@ export class PowerAutomateService {
     const instance = plainToInstance(ConsultantCvProfileResultDto, data);
     const errors = await validate(instance, { whitelist: true });
     if (errors.length) {
-      throw new BadRequestException(['Power Automate devolvio un perfil con formato invalido']);
+      throw new BadRequestException(['La IA devolvió un perfil con formato inválido']);
     }
   }
 

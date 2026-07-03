@@ -1,11 +1,16 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { HttpErrorDto } from '@core/dto/http-error.dto';
 import { JwtAuthGuard } from '@modules/auth/jwt-auth.guard';
+import { User } from '@db/tables/user.table';
 import { PlanResultDto, SubscriptionResultDto } from './dto/subscription-result.dto';
 import { SubscriptionListDto, SubscriptionListFiltersDto } from './dto/subscription-list.dto';
 import { SubscriptionUpsertDto } from './dto/subscription-upsert.dto';
+import { SubscriptionCheckoutDto } from './dto/subscription-checkout.dto';
+import { SubscriptionCheckoutResultDto } from './dto/subscription-checkout-result.dto';
 import { SubscriptionService } from './subscription.service';
+
+type AuthenticatedRequest = { user: User };
 
 @ApiTags('subscription')
 @ApiBearerAuth()
@@ -53,5 +58,13 @@ export class SubscriptionController {
   @ApiResponse({ status: 400, type: HttpErrorDto })
   upsert(@Body() upsertDto: SubscriptionUpsertDto) {
     return this.subscriptionService.upsert(upsertDto);
+  }
+
+  @Post('checkout')
+  @ApiOperation({ summary: 'Create Mercado Pago preference for subscription plan' })
+  @ApiResponse({ status: 200, type: SubscriptionCheckoutResultDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  createCheckout(@Request() req: AuthenticatedRequest, @Body() body: SubscriptionCheckoutDto) {
+    return this.subscriptionService.createCheckout(req.user.id, body.planId);
   }
 }

@@ -140,6 +140,11 @@ export class RegisterDto {
   @IsOptional()
   cvText?: string;
 
+  @ApiPropertyOptional({ example: 'https://storage.example.com/consultants/cv.pdf' })
+  @IsString()
+  @IsOptional()
+  cvUrl?: string;
+
   @ApiProperty({ enum: ['pyme', 'consultor'], default: 'pyme' })
   @IsIn(['pyme', 'consultor'])
   @IsOptional()
