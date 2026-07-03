@@ -1,6 +1,12 @@
-import { pgTable, text, varchar, timestamp, integer, decimal, index, uniqueIndex, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, text, varchar, timestamp, integer, decimal, index, uniqueIndex, jsonb, pgEnum } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { user } from './user.table';
+import { CONSULTANT_DIAGNOSTIC_AREAS } from '@core/consultant-diagnostic-area';
+
+export const consultantDiagnosticAreaEnum = pgEnum(
+  'consultant_diagnostic_area',
+  CONSULTANT_DIAGNOSTIC_AREAS,
+);
 
 export type ConsultantEducationItem = {
   degree: string;
@@ -34,6 +40,7 @@ export const consultant = pgTable(
     workModality: varchar('work_modality', { length: 160 }),
     linkedinUrl: text('linkedin_url'),
     bio: text('bio'),
+    diagnosticAreas: consultantDiagnosticAreaEnum('diagnostic_areas').array().default([]).notNull(),
     specialties: text('specialties').array().default([]).notNull(),
     sectors: text('sectors').array().default([]).notNull(),
     industries: text('industries').array().default([]).notNull(),
@@ -58,6 +65,7 @@ export const consultant = pgTable(
     index('consultant_full_name_idx').using('gin', t.fullName.op('gin_trgm_ops')),
     index('consultant_first_name_idx').using('gin', t.firstName.op('gin_trgm_ops')),
     index('consultant_last_name_idx').using('gin', t.lastName.op('gin_trgm_ops')),
+    index('consultant_diagnostic_areas_idx').using('gin', t.diagnosticAreas),
     index('consultant_specialties_idx').using('gin', t.specialties),
     index('consultant_sectors_idx').using('gin', t.sectors),
     index('consultant_industries_idx').using('gin', t.industries),

@@ -17,6 +17,7 @@ import { consultantAvailability } from '@db/tables/consultant-availability.table
 import { consultantGoogleCalendar } from '@db/tables/consultant-google-calendar.table';
 import { consultantMercadoPagoAccount } from '@db/tables/consultant-mercado-pago-account.table';
 import { mercadoPagoPayment } from '@db/tables/mercado-pago-payment.table';
+import { promotionCode, promotionCodeRedemption } from '@db/tables/promotion-code.table';
 
 const pool = new Pool(dbConfig);
 
@@ -36,6 +37,8 @@ const schema = {
   consultantGoogleCalendar,
   consultantMercadoPagoAccount,
   mercadoPagoPayment,
+  promotionCode,
+  promotionCodeRedemption,
 };
 
 export const database = drizzle(pool, { schema: schema });

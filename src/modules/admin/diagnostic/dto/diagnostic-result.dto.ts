@@ -39,6 +39,20 @@ export class DiagnosticRecommendationDto {
   prioridad: 'alta' | 'media' | 'baja';
 }
 
+export class DiagnosticFodaDto {
+  @ApiProperty({ type: [String] })
+  fortalezas: string[];
+
+  @ApiProperty({ type: [String] })
+  oportunidades: string[];
+
+  @ApiProperty({ type: [String] })
+  debilidades: string[];
+
+  @ApiProperty({ type: [String] })
+  amenazas: string[];
+}
+
 export class DiagnosticPayloadDto {
   @ApiProperty()
   resumenEjecutivo: string;
@@ -57,6 +71,9 @@ export class DiagnosticPayloadDto {
 
   @ApiProperty({ type: [DiagnosticRecommendationDto] })
   recomendaciones: DiagnosticRecommendationDto[];
+
+  @ApiProperty({ type: DiagnosticFodaDto, required: false })
+  foda?: DiagnosticFodaDto;
 }
 
 export class DiagnosticResultDto {

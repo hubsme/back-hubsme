@@ -2,6 +2,10 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsArray, IsIn, IsInt, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 import { ConsultantCaseStudyDto, ConsultantEducationDto } from './consultant-profile-fields.dto';
+import {
+  CONSULTANT_DIAGNOSTIC_AREAS,
+  ConsultantDiagnosticArea,
+} from '@core/consultant-diagnostic-area';
 
 export class ConsultantCreateDto {
   @ApiProperty({ example: 3 })
@@ -53,6 +57,16 @@ export class ConsultantCreateDto {
   @IsString()
   @IsOptional()
   bio?: string;
+
+  @ApiPropertyOptional({
+    enum: CONSULTANT_DIAGNOSTIC_AREAS,
+    isArray: true,
+    example: ['Estratégica', 'Operaciones'],
+  })
+  @IsArray()
+  @IsIn(CONSULTANT_DIAGNOSTIC_AREAS, { each: true })
+  @IsOptional()
+  diagnosticAreas?: ConsultantDiagnosticArea[];
 
   @ApiPropertyOptional({ example: ['Tecnologia', 'Operaciones'], type: [String] })
   @IsArray()

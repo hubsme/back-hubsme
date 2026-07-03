@@ -5,6 +5,10 @@ import {
   ConsultantCaseStudyDto,
   ConsultantEducationDto,
 } from '@modules/admin/consultant/dto/consultant-profile-fields.dto';
+import {
+  CONSULTANT_DIAGNOSTIC_AREAS,
+  ConsultantDiagnosticArea,
+} from '@core/consultant-diagnostic-area';
 
 export class RegisterDto {
   @ApiProperty({ example: 'maria@empresa.com', description: 'User email address' })
@@ -71,6 +75,16 @@ export class RegisterDto {
   @IsString()
   @IsOptional()
   bio?: string;
+
+  @ApiPropertyOptional({
+    enum: CONSULTANT_DIAGNOSTIC_AREAS,
+    isArray: true,
+    example: ['Financiera', 'Tributario / Contable'],
+  })
+  @IsArray()
+  @IsIn(CONSULTANT_DIAGNOSTIC_AREAS, { each: true })
+  @IsOptional()
+  diagnosticAreas?: ConsultantDiagnosticArea[];
 
   @ApiPropertyOptional({ example: ['Finanzas', 'Tributario'], type: [String] })
   @IsArray()

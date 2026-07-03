@@ -1,6 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsIn, IsOptional, IsString } from 'class-validator';
 import { PaginationFiltersDto, PaginationMetaDto } from '@modules/admin/common/pagination.dto';
+import {
+  CONSULTANT_DIAGNOSTIC_AREAS,
+  ConsultantDiagnosticArea,
+} from '@core/consultant-diagnostic-area';
 
 export class PublicConsultantListFiltersDto extends PaginationFiltersDto {
   @ApiPropertyOptional({ description: 'Search by name, bio or specialty' })
@@ -42,6 +46,9 @@ export class PublicConsultantListItemDto {
 
   @ApiProperty({ nullable: true })
   bio: string | null;
+
+  @ApiProperty({ enum: CONSULTANT_DIAGNOSTIC_AREAS, isArray: true })
+  diagnosticAreas: ConsultantDiagnosticArea[];
 
   @ApiProperty({ type: [String] })
   specialties: string[];

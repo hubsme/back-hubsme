@@ -19,6 +19,8 @@ import { MercadoPagoModule } from './modules/admin/mercado-pago/mercado-pago.mod
 import { EmailModule } from './modules/admin/email/email.module';
 import { WhatsappModule } from './modules/admin/whatsapp/whatsapp.module';
 import { PublicConsultantModule } from './modules/public/consultant/public-consultant.module';
+import { AdminAuthModule } from './modules/admin/admin-auth/admin-auth.module';
+import { PromotionCodeModule } from './modules/admin/promotion-code/promotion-code.module';
 
 @Module({
   imports: [
@@ -40,6 +42,8 @@ import { PublicConsultantModule } from './modules/public/consultant/public-consu
     EmailModule,
     WhatsappModule,
     PublicConsultantModule,
+    AdminAuthModule,
+    PromotionCodeModule,
   ],
   controllers: [AppController],
   providers: [AppService],
