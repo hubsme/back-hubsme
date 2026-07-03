@@ -12,6 +12,8 @@ import { ConsultantAvailabilityService } from '../consultant-availability/consul
 import { ConsultantService } from '../consultant/consultant.service';
 import { PymeService } from '../pyme/pyme.service';
 import { MercadoPagoAuthUrlDto, MercadoPagoCallbackDto } from './dto/mercado-pago-auth.dto';
+
+import { SubscriptionService } from '../subscription/subscription.service';
 import {
   MercadoPagoCreateCheckoutDto,
   MercadoPagoPaymentWebhookQueryDto,
@@ -68,6 +70,7 @@ export class MercadoPagoService {
     private readonly consultantAvailabilityService: ConsultantAvailabilityService,
     private readonly consultantService: ConsultantService,
     private readonly pymeService: PymeService,
+    private readonly subscriptionService: SubscriptionService,
   ) {}
 
   async getAuthUrl(query: MercadoPagoAuthUrlDto) {
@@ -231,6 +234,20 @@ export class MercadoPagoService {
     const queryExternalReference = query.externalReference?.trim();
 
     if (!paymentId || topic !== 'payment') {
+      return { received: true };
+    }
+
+    if (queryExternalReference?.startsWith('subscription:')) {
+      const payment = await this.getPayment(paymentId);
+      const extRef = payment.external_reference ?? queryExternalReference;
+      const status = this.mapPaymentStatus(payment.status);
+
+      if (status === 'approved') {
+        const parts = extRef.split(':');
+        const userId = Number(parts[1]);
+        const planId = parts[2];
+        await this.subscriptionService.activatePlan(userId, planId);
+      }
       return { received: true };
     }
 

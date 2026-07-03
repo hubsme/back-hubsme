@@ -2,8 +2,8 @@ import { BadRequestException, Injectable, InternalServerErrorException, Logger }
 import { ClientSecretCredential } from '@azure/identity';
 import { Client, ResponseType } from '@microsoft/microsoft-graph-client';
 import { TokenCredentialAuthenticationProvider } from '@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials';
-import { PowerAutomateService } from '../powerautomate/powerautomate.service';
-import { HubsmeAiResultDto } from '../powerautomate/dto/hubsme-ai/hubsme-ai-result.dto';
+import { AiService } from '../ai/ai.service';
+import { HubsmeAiResultDto } from '../ai/dto/hubsme-ai/hubsme-ai-result.dto';
 import {
   GraphCallRecording,
   GraphDriveItem,
@@ -19,7 +19,7 @@ export class TeamsMeetingService {
   private appGraphClient?: Client;
   private clientSecretCredential?: ClientSecretCredential;
 
-  constructor(private readonly powerAutomateService: PowerAutomateService) {}
+  constructor(private readonly aiService: AiService) {}
 
   isTeamsMeetingCreationEnabled(): boolean {
     return process.env.TEAMS_MEETINGS_ENABLED === 'true';
@@ -306,8 +306,8 @@ export class TeamsMeetingService {
       ]);
     }
 
-    // 4. Invocar el flujo de Power Automate
-    return this.powerAutomateService.runHubsmeAiPrompt(cleanedText);
+    // 4. Invocar el flujo de IA con Groq
+    return this.aiService.runHubsmeAiPrompt(cleanedText);
   }
 
   private cleanTranscript(vttText: string): string {

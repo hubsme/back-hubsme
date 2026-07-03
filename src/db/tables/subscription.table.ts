@@ -1,8 +1,8 @@
-import { pgTable, serial, timestamp, integer, pgEnum, index, uniqueIndex } from 'drizzle-orm/pg-core';
+import { pgTable, serial, timestamp, integer, pgEnum, index, uniqueIndex, text } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { user } from './user.table';
+import { subscriptionPlan } from './subscription-plan.table';
 
-export const subscriptionPlanEnum = pgEnum('subscription_plan', ['free', 'basic', 'pro', 'expert']);
 export const subscriptionStatusEnum = pgEnum('subscription_status', ['active', 'paused', 'cancelled', 'expired']);
 
 export const subscription = pgTable(
@@ -15,7 +15,10 @@ export const subscription = pgTable(
     userId: integer('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
-    plan: subscriptionPlanEnum('plan').default('free').notNull(),
+    plan: text('plan')
+      .default('free')
+      .notNull()
+      .references(() => subscriptionPlan.id),
     status: subscriptionStatusEnum('status').default('active').notNull(),
     startedAt: timestamp('started_at').defaultNow().notNull(),
     expiresAt: timestamp('expires_at'),

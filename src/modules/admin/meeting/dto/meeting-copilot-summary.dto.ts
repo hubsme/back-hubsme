@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { TaskSuggestionDto } from '../../powerautomate/dto/hubsme-ai/hubsme-ai-result.dto';
+import { TaskSuggestionDto } from '../../ai/dto/hubsme-ai/hubsme-ai-result.dto';
 
 export class MeetingCopilotSummaryDto {
   @ApiProperty({ description: 'Acta de reunion estructurada en Markdown' })

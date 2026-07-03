@@ -7,6 +7,7 @@ import { JwtStrategy } from './jwt.strategy';
 import { UserRepository } from '@repositories/user.repository';
 import { ConsultantRepository } from '@repositories/consultant.repository';
 import { PymeRepository } from '@repositories/pyme.repository';
+import { SubscriptionRepository } from '@repositories/subscription.repository';
 import { EmailModule } from '@modules/admin/email/email.module';
 
 @Module({
@@ -19,7 +20,14 @@ import { EmailModule } from '@modules/admin/email/email.module';
     EmailModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, UserRepository, PymeRepository, ConsultantRepository],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    UserRepository,
+    PymeRepository,
+    ConsultantRepository,
+    SubscriptionRepository,
+  ],
   exports: [AuthService],
 })
 export class AuthModule {}

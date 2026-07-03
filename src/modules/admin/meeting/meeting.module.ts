@@ -4,11 +4,11 @@ import { MeetingService } from './meeting.service';
 import { MeetingRepository } from '@repositories/meeting.repository';
 import { TaskRepository } from '@repositories/task.repository';
 import { TeamsMeetingService } from './teams-meeting.service';
-import { PowerAutomateModule } from '../powerautomate/powerautomate.module';
+import { AiModule } from '../ai/ai.module';
 import { ConsultantAvailabilityModule } from '../consultant-availability/consultant-availability.module';
 
 @Module({
-  imports: [PowerAutomateModule, ConsultantAvailabilityModule],
+  imports: [AiModule, ConsultantAvailabilityModule],
   controllers: [MeetingController],
   providers: [
     MeetingService,

@@ -122,6 +122,11 @@ export class ConsultantCreateDto {
   @IsOptional()
   cvText?: string;
 
+  @ApiPropertyOptional({ example: 'https://storage.example.com/consultants/cv.pdf' })
+  @IsString()
+  @IsOptional()
+  cvUrl?: string;
+
   @ApiPropertyOptional({ example: 'https://storage.example.com/consultants/photo.jpg' })
   @IsString()
   @IsOptional()

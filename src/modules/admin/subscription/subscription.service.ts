@@ -1,43 +1,18 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { SubscriptionRepository } from '@repositories/subscription.repository';
+import { SubscriptionPlanRepository } from '@repositories/subscription-plan.repository';
 import { SubscriptionListFiltersDto } from './dto/subscription-list.dto';
 import { SubscriptionUpsertDto } from './dto/subscription-upsert.dto';
 
 @Injectable()
 export class SubscriptionService {
-  constructor(private readonly subscriptionRepository: SubscriptionRepository) {}
+  constructor(
+    private readonly subscriptionRepository: SubscriptionRepository,
+    private readonly subscriptionPlanRepository: SubscriptionPlanRepository,
+  ) {}
 
-  getPlans() {
-    return [
-      {
-        id: 'free',
-        name: 'Gratuito',
-        price: 0,
-        description: 'Para explorar la plataforma con una cartera pequena.',
-        features: ['1 cliente activo', 'Diagnostico limitado', 'Tablero basico'],
-      },
-      {
-        id: 'basic',
-        name: 'Basico',
-        price: 29,
-        description: 'Para consultores independientes con flujo inicial.',
-        features: ['Hasta 5 clientes', 'Diagnostico completo', '3 actas mensuales'],
-      },
-      {
-        id: 'pro',
-        name: 'Profesional',
-        price: 79,
-        description: 'Para consultores con cartera activa.',
-        features: ['Clientes ilimitados', 'Actas ilimitadas', 'Analitica de cartera'],
-      },
-      {
-        id: 'expert',
-        name: 'Experto',
-        price: 149,
-        description: 'Para agencias y consultores senior.',
-        features: ['API de integracion', 'Soporte prioritario', 'Acompanamiento estrategico'],
-      },
-    ];
+  async getPlans() {
+    return this.subscriptionPlanRepository.findAll();
   }
 
   async findAllPaginated(filters: SubscriptionListFiltersDto) {
@@ -65,11 +40,15 @@ export class SubscriptionService {
   }
 
   async upsert(data: SubscriptionUpsertDto) {
+    if (data.plan !== 'free' && data.status === 'active') {
+      throw new BadRequestException(['Los planes de pago requieren cobro directo con pasarela Mercado Pago']);
+    }
+
     const existingSubscription = await this.subscriptionRepository.findByUserId(data.userId);
     const payload = {
       userId: data.userId,
       plan: data.plan,
-      status: data.status ?? 'active',
+      status: (data.status ?? 'active') as 'active' | 'paused' | 'cancelled' | 'expired',
       expiresAt: data.expiresAt,
     };
 
@@ -77,6 +56,82 @@ export class SubscriptionService {
       return this.subscriptionRepository.update(existingSubscription.id, payload);
     }
 
+    return this.subscriptionRepository.create(payload);
+  }
+
+  async createCheckout(userId: number, planId: string) {
+    const plan = await this.subscriptionPlanRepository.findById(planId);
+    if (!plan) {
+      throw new NotFoundException(`Plan ${planId} no encontrado`);
+    }
+
+    if (planId === 'free') {
+      throw new BadRequestException(['El plan gratuito no requiere pago']);
+    }
+
+    const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN;
+    if (!accessToken) {
+      throw new BadRequestException(['MERCADO_PAGO_ACCESS_TOKEN no configurado']);
+    }
+
+    const externalReference = `subscription:${userId}:${plan.id}:${Date.now()}`;
+    const webhookBaseUrl = process.env.MERCADO_PAGO_WEBHOOK_URL || `${process.env.BACKEND_URL || process.env.API_URL}/admin/mercado-pago/webhook`;
+    const notificationUrl = `${webhookBaseUrl}${webhookBaseUrl.includes('?') ? '&' : '?'}externalReference=${encodeURIComponent(externalReference)}`;
+
+    const response = await fetch('https://api.mercadopago.com/checkout/preferences', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        items: [
+          {
+            id: externalReference,
+            title: `Suscripción Plan ${plan.name} - Hubsme`,
+            quantity: 1,
+            currency_id: 'PEN',
+            unit_price: Number(plan.price),
+          },
+        ],
+        external_reference: externalReference,
+        notification_url: notificationUrl,
+        metadata: {
+          external_reference: externalReference,
+          user_id: userId,
+          plan_id: plan.id,
+        },
+      }),
+    });
+
+    const preference = await response.json();
+    if (!response.ok || !preference.id) {
+      throw new BadRequestException([preference.message || 'No se pudo crear el checkout de Mercado Pago']);
+    }
+
+    return {
+      initPoint: preference.init_point as string,
+      sandboxInitPoint: preference.sandbox_init_point as string,
+    };
+  }
+
+  async activatePlan(userId: number, planId: string) {
+    const existing = await this.subscriptionRepository.findByUserId(userId);
+    const start = new Date();
+    const expires = new Date();
+    expires.setMonth(expires.getMonth() + 1);
+
+    const payload = {
+      userId,
+      plan: planId,
+      status: 'active' as const,
+      startedAt: start,
+      expiresAt: expires,
+    };
+
+    if (existing) {
+      return this.subscriptionRepository.update(existing.id, payload);
+    }
     return this.subscriptionRepository.create(payload);
   }
 }

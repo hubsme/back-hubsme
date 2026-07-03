@@ -119,6 +119,7 @@ export class ConsultantService {
       workedSectors: this.cleanTextList(data.workedSectors),
       caseStudies: this.cleanCaseStudies(data.caseStudies),
       cvText: data.cvText?.trim(),
+      cvUrl: data.cvUrl?.trim(),
       photoUrl: data.photoUrl?.trim(),
       videoUrl: data.videoUrl?.trim(),
       pricePerHour: data.pricePerHour === undefined ? undefined : data.pricePerHour.toFixed(2),

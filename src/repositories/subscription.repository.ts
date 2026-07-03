@@ -4,7 +4,6 @@ import { database } from '@db/connection.db';
 import {
   subscription,
   SubscriptionDTO,
-  subscriptionPlanEnum,
   subscriptionStatusEnum,
 } from '@db/tables/subscription.table';
 
@@ -15,7 +14,7 @@ export class SubscriptionRepository {
     limit: number = 10,
     filters?: {
       userId?: number;
-      plan?: (typeof subscriptionPlanEnum.enumValues)[number];
+      plan?: 'free' | 'basic' | 'pro' | 'expert';
       status?: (typeof subscriptionStatusEnum.enumValues)[number];
     },
   ) {

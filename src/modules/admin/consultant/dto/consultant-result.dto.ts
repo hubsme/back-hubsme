@@ -78,6 +78,9 @@ export class ConsultantResultDto {
   cvText: string | null;
 
   @ApiProperty({ nullable: true })
+  cvUrl: string | null;
+
+  @ApiProperty({ nullable: true })
   photoUrl: string | null;
 
   @ApiProperty({ nullable: true })
