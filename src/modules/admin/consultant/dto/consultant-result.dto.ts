@@ -1,5 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ConsultantCaseStudyDto, ConsultantEducationDto } from './consultant-profile-fields.dto';
+import {
+  CONSULTANT_DIAGNOSTIC_AREAS,
+  ConsultantDiagnosticArea,
+} from '@core/consultant-diagnostic-area';
 
 export class ConsultantResultDto {
   @ApiProperty()
@@ -43,6 +47,9 @@ export class ConsultantResultDto {
 
   @ApiProperty({ nullable: true })
   bio: string | null;
+
+  @ApiProperty({ enum: CONSULTANT_DIAGNOSTIC_AREAS, isArray: true })
+  diagnosticAreas: ConsultantDiagnosticArea[];
 
   @ApiProperty({ type: [String] })
   specialties: string[];

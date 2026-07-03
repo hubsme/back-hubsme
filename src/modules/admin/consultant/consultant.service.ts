@@ -11,6 +11,7 @@ import { ConsultantCaseStudyDto, ConsultantEducationDto } from './dto/consultant
 import { UserService } from '../user/user.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { EmailService } from '../email/email.service';
+import { ConsultantDiagnosticArea } from '@core/consultant-diagnostic-area';
 
 @Injectable()
 export class ConsultantService {
@@ -108,6 +109,7 @@ export class ConsultantService {
       workModality: data.workModality?.trim(),
       linkedinUrl: data.linkedinUrl?.trim(),
       bio: data.bio?.trim(),
+      diagnosticAreas: this.cleanDiagnosticAreas(data.diagnosticAreas),
       specialties: this.cleanTextList(data.specialties),
       sectors: this.cleanTextList(data.sectors),
       industries: this.cleanTextList(data.industries),
@@ -135,6 +137,10 @@ export class ConsultantService {
 
   private cleanTextList(value?: string[]) {
     return value?.map((item) => item.trim().replace(/\s+/g, ' ')).filter(Boolean);
+  }
+
+  private cleanDiagnosticAreas(value?: ConsultantDiagnosticArea[]) {
+    return value ? [...new Set(value)] : undefined;
   }
 
   private cleanEducation(value?: ConsultantEducationDto[]) {

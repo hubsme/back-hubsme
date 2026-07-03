@@ -190,6 +190,12 @@ export class DiagnosticService {
       areasEvaluadas,
       problemasCriticos,
       recomendaciones,
+      foda: {
+        fortalezas: ['Control contable y cumplimiento tributario básico.'],
+        oportunidades: ['Estandarización de procesos comerciales.', 'Digitalización de canales de captación.'],
+        debilidades: ['Dependencia operativa del dueño.', 'Bajo control de flujo de caja y rentabilidad.'],
+        amenazas: ['Pérdida de clientes clave por concentración de ingresos.']
+      }
     };
   }
 
@@ -207,9 +213,14 @@ export class DiagnosticService {
       
       - **Puntos Negativos y Oportunidades de Mejora:** Explica a profundidad las debilidades operativas, financieras, comerciales y organizacionales identificadas. No las listes como una lista simple; explica analíticamente cómo se conectan los problemas (por ejemplo, cómo la falta de procesos afecta las ventas o cómo el desorden en el flujo de caja frena la inversión) y el impacto real que tienen en la rentabilidad y escalabilidad del negocio. (Redactar mínimo 3 párrafos explicativos detallados).
       
-      - **Conclusión y Ruta Estratégica:** Formula una síntesis estratégica integral con un plan de acción sugerido de forma clara y priorizada. Describe la secuencia lógica en la que la empresa debe implementar las mejoras recomendadas (ej. estabilizar operaciones antes de expandir marketing) y los resultados que se esperan obtener a corto y mediano plazo si actúan con disciplina. (Redactar mínimo 2-3 párrafos estratégicos completos).
+      - **Conclusión y Ruta Estratégica:** Formula una síntesis estratégica integral con un plan de acción sugerido de forma clara y priorizada. Describe la secuencia lógica en la que la empresa debe implementar las mejoras recomendadas (ej. estabilizar operaciones antes de expandir marketing) y los resultados que se esperan obtener a corto y mediano plazo si actúan con disciplina. No repitas el resumen ejecutivo. Evita texto genérico y evita promesas legales o financieras absolutas.
 
-      No repitas el resumen ejecutivo. Evita texto genérico y evita promesas legales o financieras absolutas.
+      El objeto JSON debe incluir un análisis FODA (Matriz DOFA) estructurado y preciso sobre la situación de la empresa. Agrega el campo 'foda' con las siguientes sub-claves:
+      - 'fortalezas': Un array de 3 a 5 strings detallados con fortalezas específicas identificadas.
+      - 'oportunidades': Un array de 3 a 5 strings detallados con oportunidades de mercado/crecimiento específicas identificadas.
+      - 'debilidades': Un array de 3 a 5 strings detallados con debilidades internas críticas.
+      - 'amenazas': Un array de 3 a 5 strings detallados con amenazas externas o riesgos que enfrenta la empresa.
+
       areasEvaluadas debe contener exactamente estas 11 areas y en este orden: Estratégica, Financiera, Comercial / Ventas, Marketing, Servicio al cliente, Operaciones, Organizacional / RRHH, Tecnología, Legal, Laboral, Tributario / Contable.
       Debes responder ÚNICAMENTE con un objeto JSON válido con la siguiente estructura y en español. No incluyas introducciones, explicaciones ni bloques de código markdown (como \`\`\`json). Solo devuelve el JSON puro:
       {
@@ -224,7 +235,13 @@ export class DiagnosticService {
         ],
         "recomendaciones": [
           { "accion": "string", "beneficioEsperado": "string", "plazo": "inmediato|30dias|90dias|6meses", "prioridad": "alta|media|baja" }
-        ]
+        ],
+        "foda": {
+          "fortalezas": ["string"],
+          "oportunidades": ["string"],
+          "debilidades": ["string"],
+          "amenazas": ["string"]
+        }
       }
     `;
 
@@ -273,6 +290,11 @@ export class DiagnosticService {
           `- **${recommendation.accion}** (${recommendation.prioridad}, ${recommendation.plazo}): ${recommendation.beneficioEsperado}`,
       )
       .join('\n');
+
+    const fodaMd = result.foda
+      ? `## Análisis FODA\n\n### Fortalezas\n${result.foda.fortalezas.map(f => `- ${f}`).join('\n')}\n\n### Oportunidades\n${result.foda.oportunidades.map(o => `- ${o}`).join('\n')}\n\n### Debilidades\n${result.foda.debilidades.map(d => `- ${d}`).join('\n')}\n\n### Amenazas\n${result.foda.amenazas.map(a => `- ${a}`).join('\n')}`
+      : '';
+
     return [
       {
         diagnosticId,
@@ -291,7 +313,8 @@ ${result.resumenEjecutivo}
  
 ## Diagnostico general
 ${result.feedbackIa}
- 
+
+${fodaMd ? fodaMd + '\n' : ''} 
 ## Areas evaluadas
 ${areas}
  
@@ -325,6 +348,12 @@ ${responses}
       recomendaciones: Array.isArray(result.recomendaciones) && result.recomendaciones.length
         ? result.recomendaciones
         : fallback.recomendaciones,
+      foda: result.foda ? {
+        fortalezas: Array.isArray(result.foda.fortalezas) ? result.foda.fortalezas : fallback.foda?.fortalezas || [],
+        oportunidades: Array.isArray(result.foda.oportunidades) ? result.foda.oportunidades : fallback.foda?.oportunidades || [],
+        debilidades: Array.isArray(result.foda.debilidades) ? result.foda.debilidades : fallback.foda?.debilidades || [],
+        amenazas: Array.isArray(result.foda.amenazas) ? result.foda.amenazas : fallback.foda?.amenazas || [],
+      } : fallback.foda,
     };
   }
 

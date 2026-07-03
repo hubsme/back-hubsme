@@ -99,6 +99,10 @@ export class AuthService {
         throw new BadRequestException(['Completa nombres y apellidos del consultor']);
       }
 
+      if (role === 'consultor' && !registerDto.diagnosticAreas?.length) {
+        throw new BadRequestException(['Selecciona al menos un área de diagnóstico']);
+      }
+
       if (role === 'pyme' && (!registerDto.name?.trim() || !registerDto.ruc?.trim() || !firstName || !lastName)) {
         throw new BadRequestException(['Completa empresa, RUC y datos del dueño']);
       }
@@ -127,6 +131,7 @@ export class AuthService {
           workModality: registerDto.workModality?.trim(),
           linkedinUrl: registerDto.linkedinUrl?.trim(),
           bio: registerDto.bio?.trim(),
+          diagnosticAreas: registerDto.diagnosticAreas,
           specialties: this.cleanTextList(registerDto.specialties),
           sectors: this.cleanTextList(registerDto.sectors),
           industries: this.cleanTextList(registerDto.industries),
