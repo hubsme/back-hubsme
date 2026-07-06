@@ -19,6 +19,7 @@ import { HttpErrorDto } from '@core/dto/http-error.dto';
 import { AdminAuthGuard } from '../admin-auth/admin-auth.guard';
 import {
   PromotionCodeCreateDto,
+  PromotionCodeDetailDto,
   PromotionCodeListDto,
   PromotionCodeListFiltersDto,
   PromotionCodeResultDto,
@@ -38,6 +39,15 @@ export class PromotionCodeAdminController {
   @ApiResponse({ status: 200, type: PromotionCodeListDto })
   findAll(@Query() filters: PromotionCodeListFiltersDto) {
     return this.promotionCodeService.findAllPaginated(filters);
+  }
+
+  @Get('find-one/:id')
+  @ApiOperation({ summary: 'Get promotional code details and redemptions' })
+  @ApiParam({ name: 'id', type: 'number' })
+  @ApiResponse({ status: 200, type: PromotionCodeDetailDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  findOne(@Param('id') id: string) {
+    return this.promotionCodeService.findDetail(+id);
   }
 
   @Post('create')
