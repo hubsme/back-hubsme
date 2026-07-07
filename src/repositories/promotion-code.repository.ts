@@ -18,10 +18,12 @@ import {
   PromotionCodeDTO,
   promotionCodeRedemption,
 } from '@db/tables/promotion-code.table';
+import { consultant } from '@db/tables/consultant.table';
 import {
   mercadoPagoPayment,
   MercadoPagoPaymentRaw,
 } from '@db/tables/mercado-pago-payment.table';
+import { pyme } from '@db/tables/pyme.table';
 
 @Injectable()
 export class PromotionCodeRepository {
@@ -56,6 +58,30 @@ export class PromotionCodeRepository {
       .from(promotionCode)
       .where(and(eq(promotionCode.id, id), isNull(promotionCode.deletedAt)));
     return result[0];
+  }
+
+  async findRedemptionsByPromotionCode(id: number) {
+    return await database
+      .select({
+        id: promotionCodeRedemption.id,
+        checkoutId: promotionCodeRedemption.checkoutId,
+        pymeId: promotionCodeRedemption.pymeId,
+        pymeName: pyme.name,
+        consultantId: promotionCodeRedemption.consultantId,
+        consultantName: consultant.fullName,
+        meetingId: promotionCodeRedemption.meetingId,
+        redeemedAt: promotionCodeRedemption.redeemedAt,
+      })
+      .from(promotionCodeRedemption)
+      .leftJoin(pyme, eq(promotionCodeRedemption.pymeId, pyme.id))
+      .leftJoin(consultant, eq(promotionCodeRedemption.consultantId, consultant.id))
+      .where(
+        and(
+          eq(promotionCodeRedemption.promotionCodeId, id),
+          isNull(promotionCodeRedemption.deletedAt),
+        ),
+      )
+      .orderBy(desc(promotionCodeRedemption.redeemedAt));
   }
 
   async create(data: PromotionCodeDTO) {

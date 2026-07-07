@@ -98,6 +98,37 @@ export class PromotionCodeListDto {
   meta: PaginationMetaDto;
 }
 
+export class PromotionCodeRedemptionDetailDto {
+  @ApiProperty()
+  id: number;
+
+  @ApiProperty()
+  checkoutId: number;
+
+  @ApiProperty()
+  pymeId: number;
+
+  @ApiProperty()
+  pymeName: string;
+
+  @ApiProperty()
+  consultantId: number;
+
+  @ApiProperty()
+  consultantName: string;
+
+  @ApiProperty({ nullable: true })
+  meetingId: number | null;
+
+  @ApiProperty()
+  redeemedAt: Date;
+}
+
+export class PromotionCodeDetailDto extends PromotionCodeResultDto {
+  @ApiProperty({ type: [PromotionCodeRedemptionDetailDto] })
+  redemptions: PromotionCodeRedemptionDetailDto[];
+}
+
 export class PromotionCodeRedeemDto {
   @ApiProperty({ example: 12 })
   @Type(() => Number)

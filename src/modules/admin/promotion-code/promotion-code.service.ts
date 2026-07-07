@@ -47,6 +47,26 @@ export class PromotionCodeService {
     };
   }
 
+  async findDetail(id: number) {
+    const promotionCode = await this.promotionCodeRepository.findOne(id);
+    if (!promotionCode) {
+      throw new NotFoundException(`Promotion code with ID ${id} not found`);
+    }
+
+    const redemptions =
+      await this.promotionCodeRepository.findRedemptionsByPromotionCode(id);
+
+    return {
+      ...promotionCode,
+      redemptions: redemptions.map((redemption) => ({
+        ...redemption,
+        pymeName: redemption.pymeName ?? `PYME #${redemption.pymeId}`,
+        consultantName:
+          redemption.consultantName ?? `Consultor #${redemption.consultantId}`,
+      })),
+    };
+  }
+
   async create(data: PromotionCodeCreateDto) {
     this.assertDateRange(data.startsAt, data.expiresAt);
 
