@@ -17,6 +17,12 @@ export class PymeResultDto {
   userId: number;
 
   @ApiProperty()
+  userEmail: string;
+
+  @ApiProperty({ enum: ['local', 'google'] })
+  authProvider: 'local' | 'google';
+
+  @ApiProperty()
   name: string;
 
   @ApiProperty({ nullable: true })

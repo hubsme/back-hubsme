@@ -22,6 +22,12 @@ export class ConsultantResultDto {
   userId: number;
 
   @ApiProperty()
+  userEmail: string;
+
+  @ApiProperty({ enum: ['local', 'google'] })
+  authProvider: 'local' | 'google';
+
+  @ApiProperty()
   fullName: string;
 
   @ApiProperty({ nullable: true })

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { eq, ilike, or, and, isNull, isNotNull, count, desc, sql } from 'drizzle-orm';
 import { database } from '@db/connection.db';
 import { pyme, PymeDTO } from '@db/tables/pyme.table';
+import { user } from '@db/tables/user.table';
 import { meeting } from '@db/tables/meeting.table';
 import { task } from '@db/tables/task.table';
 
@@ -121,10 +122,31 @@ export class PymeRepository {
 
   async findOne(id: number) {
     const result = await database
-      .select()
+      .select({
+        id: pyme.id,
+        createdAt: pyme.createdAt,
+        updatedAt: pyme.updatedAt,
+        deletedAt: pyme.deletedAt,
+        userId: pyme.id,
+        userEmail: user.email,
+        authProvider: user.authProvider,
+        name: pyme.name,
+        ruc: pyme.ruc,
+        ownerFirstName: pyme.ownerFirstName,
+        ownerLastName: pyme.ownerLastName,
+        ownerEmail: pyme.ownerEmail,
+        ownerPhone: pyme.ownerPhone,
+        ownerPosition: pyme.ownerPosition,
+        sector: pyme.sector,
+        numEmployees: pyme.numEmployees,
+        yearsInOperation: pyme.yearsInOperation,
+        description: pyme.description,
+        logoUrl: pyme.logoUrl,
+      })
       .from(pyme)
+      .innerJoin(user, and(eq(user.id, pyme.id), isNull(user.deletedAt)))
       .where(and(eq(pyme.id, id), isNull(pyme.deletedAt)));
-    return result[0] ? { ...result[0], userId: result[0].id } : undefined;
+    return result[0];
   }
 
   async findByUserId(userId: number) {
