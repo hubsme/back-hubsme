@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { eq, ilike, or, and, isNull, isNotNull, count, desc, sql } from 'drizzle-orm';
 import { database } from '@db/connection.db';
 import { consultant, ConsultantDTO } from '@db/tables/consultant.table';
+import { user } from '@db/tables/user.table';
 import { meeting } from '@db/tables/meeting.table';
 import { task } from '@db/tables/task.table';
 
@@ -182,10 +183,48 @@ export class ConsultantRepository {
 
   async findOne(id: number) {
     const result = await database
-      .select()
+      .select({
+        id: consultant.id,
+        createdAt: consultant.createdAt,
+        updatedAt: consultant.updatedAt,
+        deletedAt: consultant.deletedAt,
+        userId: consultant.id,
+        userEmail: user.email,
+        authProvider: user.authProvider,
+        fullName: consultant.fullName,
+        firstName: consultant.firstName,
+        lastName: consultant.lastName,
+        ownerPhone: consultant.ownerPhone,
+        headline: consultant.headline,
+        location: consultant.location,
+        workModality: consultant.workModality,
+        linkedinUrl: consultant.linkedinUrl,
+        bio: consultant.bio,
+        diagnosticAreas: consultant.diagnosticAreas,
+        specialties: consultant.specialties,
+        sectors: consultant.sectors,
+        industries: consultant.industries,
+        companyTypes: consultant.companyTypes,
+        services: consultant.services,
+        yearsExperience: consultant.yearsExperience,
+        education: consultant.education,
+        certifications: consultant.certifications,
+        workedSectors: consultant.workedSectors,
+        caseStudies: consultant.caseStudies,
+        cvText: consultant.cvText,
+        cvUrl: consultant.cvUrl,
+        photoUrl: consultant.photoUrl,
+        videoUrl: consultant.videoUrl,
+        pricePerHour: consultant.pricePerHour,
+        rating: consultant.rating,
+        totalReviews: consultant.totalReviews,
+        active: consultant.active,
+        validated: consultant.validated,
+      })
       .from(consultant)
+      .innerJoin(user, and(eq(user.id, consultant.id), isNull(user.deletedAt)))
       .where(and(eq(consultant.id, id), isNull(consultant.deletedAt)));
-    return result[0] ? { ...result[0], userId: result[0].id } : undefined;
+    return result[0];
   }
 
   async findByUserId(userId: number) {

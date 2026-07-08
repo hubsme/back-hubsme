@@ -5,11 +5,13 @@ import { MeetingRepository } from '@repositories/meeting.repository';
 import { TaskRepository } from '@repositories/task.repository';
 import { TeamsMeetingService } from './teams-meeting.service';
 import { AiModule } from '../ai/ai.module';
+import { AdminAuthModule } from '../admin-auth/admin-auth.module';
 import { ConsultantAvailabilityModule } from '../consultant-availability/consultant-availability.module';
+import { MeetingAdminController } from './meeting-admin.controller';
 
 @Module({
-  imports: [AiModule, ConsultantAvailabilityModule],
-  controllers: [MeetingController],
+  imports: [AdminAuthModule, AiModule, ConsultantAvailabilityModule],
+  controllers: [MeetingAdminController, MeetingController],
   providers: [
     MeetingService,
     TeamsMeetingService,
