@@ -116,6 +116,7 @@
       "^@seeds/(.*)$": "<rootDir>/src/seeds/$1",
       "^@repositories/(.*)$": "<rootDir>/src/repositories/$1",
       "^@controllers/(.*)$": "<rootDir>/src/controllers/$1",
+      "^@functions/(.*)$": "<rootDir>/src/functions/$1",
       "^@utils/(.*)$": "<rootDir>/src/utils/$1",
       "^@config/(.*)$": "<rootDir>/src/config/$1"
     }

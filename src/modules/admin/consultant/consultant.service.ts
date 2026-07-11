@@ -10,6 +10,7 @@ import { ConsultantDTO } from '@db/tables/consultant.table';
 import { ConsultantCaseStudyDto, ConsultantEducationDto } from './dto/consultant-profile-fields.dto';
 import { UserService } from '../user/user.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import { WhatsappNotificacionConsultorDto } from '../whatsapp/dto/whatsapp-notificacion-consultor.dto';
 import { EmailService } from '../email/email.service';
 import { ConsultantDiagnosticArea } from '@core/consultant-diagnostic-area';
 
@@ -189,25 +190,20 @@ export class ConsultantService {
       });
 
       // 1. WhatsApp notification
-      /*
       if (consultant.ownerPhone?.trim()) {
-        const message = `🎉 *¡Nueva asesoría agendada, ${consultant.fullName}!* 🚀\n\n` +
-          `Hola, nos complace informarte que se ha agendado y confirmado una sesión de consultoría a través de *HUBSME*. Tienes una cita pendiente:\n\n` +
-          `🏢 *PYME:* ${pymeName}\n` +
-          `📝 *Tipo de sesión:* ${meetingTitle}\n` +
-          `📅 *Fecha y hora:* ${dateStr} (hora de Perú)\n` +
-          `⏱️ *Duración:* ${durationMinutes} minutos\n\n` +
-          `¡Éxitos en tu sesión! 💪✨`;
         try {
-          await this.whatsappService.sendMessage({
-            phone: consultant.ownerPhone,
-            message,
+          await this.whatsappService.sendNotificacionConsultor(consultant.ownerPhone, {
+            to: consultant.ownerPhone,
+            nombre_consultor: consultant.fullName,
+            nombre_pyme: pymeName,
+            titulo_sesion: meetingTitle,
+            fecha_hora: dateStr,
+            duracion: `${durationMinutes} minutos`,
           });
         } catch (error) {
           console.error('Error sending WhatsApp notification:', error);
         }
       }
-      */
 
       // 2. Email notification
       if (user.email?.trim()) {

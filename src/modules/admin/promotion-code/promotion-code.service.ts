@@ -1,13 +1,10 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { MercadoPagoPaymentRepository } from '@repositories/mercado-pago-payment.repository';
 import { PromotionCodeRepository } from '@repositories/promotion-code.repository';
 import { MeetingService } from '../meeting/meeting.service';
+import { ConsultantService } from '../consultant/consultant.service';
+import { PymeService } from '../pyme/pyme.service';
 import {
   PromotionCodeCreateDto,
   PromotionCodeListFiltersDto,
@@ -17,21 +14,20 @@ import {
 
 @Injectable()
 export class PromotionCodeService {
+  private readonly logger = new Logger(PromotionCodeService.name);
+
   constructor(
     private readonly promotionCodeRepository: PromotionCodeRepository,
     private readonly paymentRepository: MercadoPagoPaymentRepository,
     private readonly meetingService: MeetingService,
+    private readonly consultantService: ConsultantService,
+    private readonly pymeService: PymeService,
   ) {}
 
   async findAllPaginated(filters: PromotionCodeListFiltersDto) {
     const page = filters.page ?? 1;
     const limit = filters.limit ?? 20;
-    const { data, total } =
-      await this.promotionCodeRepository.findAllPaginated(
-        page,
-        limit,
-        filters.search,
-      );
+    const { data, total } = await this.promotionCodeRepository.findAllPaginated(page, limit, filters.search);
     const totalPages = Math.ceil(total / limit);
 
     return {
@@ -53,16 +49,14 @@ export class PromotionCodeService {
       throw new NotFoundException(`Promotion code with ID ${id} not found`);
     }
 
-    const redemptions =
-      await this.promotionCodeRepository.findRedemptionsByPromotionCode(id);
+    const redemptions = await this.promotionCodeRepository.findRedemptionsByPromotionCode(id);
 
     return {
       ...promotionCode,
       redemptions: redemptions.map((redemption) => ({
         ...redemption,
         pymeName: redemption.pymeName ?? `PYME #${redemption.pymeId}`,
-        consultantName:
-          redemption.consultantName ?? `Consultor #${redemption.consultantId}`,
+        consultantName: redemption.consultantName ?? `Consultor #${redemption.consultantId}`,
       })),
     };
   }
@@ -89,18 +83,11 @@ export class PromotionCodeService {
   async update(id: number, data: PromotionCodeUpdateDto) {
     const current = await this.promotionCodeRepository.findOne(id);
     if (!current) {
-      throw new NotFoundException(
-        `Promotion code with ID ${id} not found`,
-      );
+      throw new NotFoundException(`Promotion code with ID ${id} not found`);
     }
 
-    if (
-      data.maxRedemptions !== undefined &&
-      data.maxRedemptions < current.redemptionCount
-    ) {
-      throw new BadRequestException([
-        'El máximo de usos no puede ser menor a los usos ya realizados',
-      ]);
+    if (data.maxRedemptions !== undefined && data.maxRedemptions < current.redemptionCount) {
+      throw new BadRequestException(['El máximo de usos no puede ser menor a los usos ya realizados']);
     }
 
     const startsAt = data.startsAt ?? current.startsAt ?? undefined;
@@ -111,10 +98,7 @@ export class PromotionCodeService {
       return await this.promotionCodeRepository.update(id, {
         ...data,
         code: data.code ? this.normalizeCode(data.code) : undefined,
-        description:
-          data.description === undefined
-            ? undefined
-            : data.description.trim() || null,
+        description: data.description === undefined ? undefined : data.description.trim() || null,
       });
     } catch (error) {
       if (this.isUniqueViolation(error)) {
@@ -127,16 +111,13 @@ export class PromotionCodeService {
   async redeem(currentUserId: number, data: PromotionCodeRedeemDto) {
     const checkout = await this.paymentRepository.findOne(data.checkoutId);
     if (!checkout) {
-      throw new NotFoundException(
-        `Mercado Pago checkout with ID ${data.checkoutId} not found`,
-      );
+      throw new NotFoundException(`Mercado Pago checkout with ID ${data.checkoutId} not found`);
     }
     if (checkout.pymeId !== currentUserId) {
       throw new UnauthorizedException('No tienes acceso a este checkout');
     }
 
-    const previousRedemption =
-      await this.promotionCodeRepository.findRedemptionByCheckout(checkout.id);
+    const previousRedemption = await this.promotionCodeRepository.findRedemptionByCheckout(checkout.id);
     if (previousRedemption?.meetingId) {
       return {
         meetingId: previousRedemption.meetingId,
@@ -150,9 +131,7 @@ export class PromotionCodeService {
       throw new BadRequestException(['Este checkout ya fue pagado']);
     }
     if (!checkout.meetingDetails) {
-      throw new BadRequestException([
-        'El checkout no contiene los datos de la reunión',
-      ]);
+      throw new BadRequestException(['El checkout no contiene los datos de la reunión']);
     }
 
     const claim = await this.promotionCodeRepository.claim(
@@ -162,9 +141,7 @@ export class PromotionCodeService {
       checkout.consultantId,
     );
     if (!claim) {
-      throw new BadRequestException([
-        'El código no existe, venció o ya alcanzó su límite de usos',
-      ]);
+      throw new BadRequestException(['El código no existe, venció o ya alcanzó su límite de usos']);
     }
 
     let meetingId: number | undefined;
@@ -181,17 +158,13 @@ export class PromotionCodeService {
       meetingId = meeting.id;
 
       await this.meetingService.confirm(meeting.id);
-      await this.promotionCodeRepository.finalizeClaim(
-        claim.redemption.id,
-        checkout.id,
-        meeting.id,
-        {
-          source: 'promotion_code',
-          promotionCodeId: claim.promotion.id,
-          promotionCode: claim.promotion.code,
-          redemptionId: claim.redemption.id,
-        },
-      );
+      await this.promotionCodeRepository.finalizeClaim(claim.redemption.id, checkout.id, meeting.id, {
+        source: 'promotion_code',
+        promotionCodeId: claim.promotion.id,
+        promotionCode: claim.promotion.code,
+        redemptionId: claim.redemption.id,
+      });
+      await this.sendMeetingNotifications(meeting.id);
 
       return {
         meetingId: meeting.id,
@@ -205,6 +178,36 @@ export class PromotionCodeService {
       }
       await this.promotionCodeRepository.releaseClaim(claim.redemption.id);
       throw error;
+    }
+  }
+
+  private async sendMeetingNotifications(meetingId: number) {
+    try {
+      const meeting = await this.meetingService.findOne(meetingId);
+      const [consultant, pyme] = await Promise.all([
+        this.consultantService.findOne(meeting.consultantId),
+        this.pymeService.findOne(meeting.pymeId),
+      ]);
+
+      await Promise.all([
+        this.consultantService.sendMeetingNotification(
+          meeting.consultantId,
+          pyme.name,
+          meeting.title,
+          meeting.startTime,
+          meeting.durationMinutes,
+        ),
+        this.pymeService.sendMeetingNotification(
+          meeting.pymeId,
+          consultant.fullName,
+          meeting.title,
+          meeting.startTime,
+          meeting.durationMinutes,
+        ),
+      ]);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`No se pudieron enviar las notificaciones de la reunion ${meetingId}: ${message}`);
     }
   }
 
@@ -226,18 +229,11 @@ export class PromotionCodeService {
 
   private assertDateRange(startsAt?: Date, expiresAt?: Date) {
     if (startsAt && expiresAt && startsAt >= expiresAt) {
-      throw new BadRequestException([
-        'La fecha de vencimiento debe ser posterior a la fecha de inicio',
-      ]);
+      throw new BadRequestException(['La fecha de vencimiento debe ser posterior a la fecha de inicio']);
     }
   }
 
   private isUniqueViolation(error: unknown) {
-    return (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === '23505'
-    );
+    return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505';
   }
 }

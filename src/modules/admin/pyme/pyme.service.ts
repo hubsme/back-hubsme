@@ -7,6 +7,7 @@ import { PymeListFiltersDto } from './dto/pyme-list.dto';
 import { PymeMeetingConsultantsFiltersDto } from './dto/pyme-meeting-consultants.dto';
 import { PymeUpdateDto } from './dto/pyme-update.dto';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import { WhatsappNotificacionPymeDto } from '../whatsapp/dto/whatsapp-notificacion-pyme.dto';
 import { EmailService } from '../email/email.service';
 
 @Injectable()
@@ -119,25 +120,20 @@ export class PymeService {
       });
 
       // 1. WhatsApp notification
-      /*
       if (pyme.ownerPhone?.trim()) {
-        const message = `✅ *¡Sesión de consultoría confirmada!* 💼\n\n` +
-          `Hola ${pyme.ownerFirstName || pyme.name}, tu sesión ha sido agendada con éxito a través de *HUBSME*. Aquí tienes el resumen de tu cita:\n\n` +
-          `👤 *Consultor:* ${consultantName}\n` +
-          `📝 *Tipo de sesión:* ${meetingTitle}\n` +
-          `📅 *Fecha y hora:* ${dateStr} (hora de Perú)\n` +
-          `⏱️ *Duración:* ${durationMinutes} minutos\n\n` +
-          `Pronto recibirás el enlace para conectarte. ¡Que tengas una excelente sesión! 🚀✨`;
         try {
-          await this.whatsappService.sendMessage({
-            phone: pyme.ownerPhone,
-            message,
+          await this.whatsappService.sendNotificacionPyme(pyme.ownerPhone, {
+            to: pyme.ownerPhone,
+            nombre_pyme: pyme.ownerFirstName || pyme.name,
+            nombre_consultor: consultantName,
+            titulo_sesion: meetingTitle,
+            fecha_hora: dateStr,
+            duracion: `${durationMinutes} minutos`,
           });
         } catch (error) {
           console.error('Error sending WhatsApp notification:', error);
         }
       }
-      */
 
       // 2. Email notification
       if (pyme.ownerEmail?.trim()) {

@@ -1,81 +1,359 @@
 import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { WhatsappSendDto } from './dto/whatsapp-send.dto';
 import { WhatsappSendResultDto } from './dto/whatsapp-send-result.dto';
+import { WhatsappNotificacionPymeDto } from './dto/whatsapp-notificacion-pyme.dto';
+import { WhatsappNotificacionConsultorDto } from './dto/whatsapp-notificacion-consultor.dto';
+import { WhatsappAlertaReunionConsultorDto } from './dto/whatsapp-alerta-reunion-consultor.dto';
+import { WhatsappAlertaReunionDto } from './dto/whatsapp-alerta-reunion.dto';
 
 type WhatsappProviderResponse = Record<string, unknown> | string | null;
 
 @Injectable()
 export class WhatsappService {
   private readonly logger = new Logger(WhatsappService.name);
-  private readonly endpoint = 'https://hubsme-whatsapp-cgavhgfqavhvepb6.chilecentral-01.azurewebsites.net/send/message';
-  private readonly origin = 'https://hubsme-whatsapp-cgavhgfqavhvepb6.chilecentral-01.azurewebsites.net';
-  private readonly deviceId = '44605a98-3dc5-41df-9983-855b7ab4253f';
 
-  async sendMessage(sendMessageDto: WhatsappSendDto): Promise<WhatsappSendResultDto> {
-    const phone = this.normalizePhone(sendMessageDto.phone);
-    const payload = {
-      phone,
-      message: sendMessageDto.message,
-      is_forwarded: false,
-    };
+  private async sendToMeta(
+    payload: Record<string, unknown>,
+  ): Promise<{ status: number; body: WhatsappProviderResponse }> {
+    const token = process.env.WHATSAPP_TOKEN;
+    const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+
+    if (!token || !phoneNumberId) {
+      this.logger.error('WhatsApp credentials are not configured in environment variables');
+      throw new InternalServerErrorException('Las credenciales de WhatsApp no están configuradas');
+    }
+
+    const url = `https://graph.facebook.com/v20.0/${phoneNumberId}/messages`;
 
     try {
-      const response = await fetch(this.endpoint, {
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
-          Accept: 'application/json, text/plain, */*',
-          'Accept-Language': 'es-US,es-419;q=0.9,es;q=0.8,en;q=0.7,pt;q=0.6',
           'Content-Type': 'application/json',
-          Origin: this.origin,
-          Referer: `${this.origin}/`,
-          'User-Agent':
-            'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Mobile Safari/537.36',
-          'X-Device-Id': this.deviceId,
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
       });
 
-      const providerResponse = await this.parseProviderResponse(response);
+      const responseBody = await this.parseProviderResponse(response);
 
       if (!response.ok) {
-        this.logger.error(`WhatsApp provider failed with status ${response.status}: ${JSON.stringify(providerResponse)}`);
+        this.logger.error(`Meta API failed with status ${response.status}: ${JSON.stringify(responseBody)}`);
         throw new InternalServerErrorException('No se pudo enviar el mensaje por WhatsApp');
       }
 
-      this.logger.log(`WhatsApp message sent to ${phone}`);
-
       return {
-        message: 'Mensaje enviado exitosamente',
-        phone,
-        providerStatus: response.status,
-        providerResponse,
+        status: response.status,
+        body: responseBody,
       };
     } catch (error) {
       if (error instanceof InternalServerErrorException) {
         throw error;
       }
-
-      this.logger.error('Error enviando mensaje por WhatsApp', error instanceof Error ? error.stack : undefined);
+      this.logger.error('Error sending message through Meta API', error instanceof Error ? error.stack : undefined);
       throw new InternalServerErrorException(
         `No se pudo enviar el mensaje por WhatsApp: ${error instanceof Error ? error.message : 'Error desconocido'}`,
       );
     }
   }
 
-  private normalizePhone(phone: string): string {
+  async sendMessage(sendMessageDto: WhatsappSendDto): Promise<WhatsappSendResultDto> {
+    const phone = this.normalizePhoneMeta(sendMessageDto.phone);
+    const payload = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: phone,
+      type: 'text',
+      text: {
+        preview_url: false,
+        body: sendMessageDto.message,
+      },
+    };
+
+    const result = await this.sendToMeta(payload);
+
+    this.logger.log(`WhatsApp message sent to ${phone}`);
+
+    return {
+      message: 'Mensaje enviado exitosamente',
+      phone,
+      providerStatus: result.status,
+      providerResponse: result.body,
+    };
+  }
+
+  async sendNotificacionPyme(to: string, dto: WhatsappNotificacionPymeDto): Promise<WhatsappSendResultDto> {
+    const phone = this.normalizePhoneMeta(to);
+    const payload = {
+      messaging_product: 'whatsapp',
+      to: phone,
+      type: 'template',
+      template: {
+        name: 'notificacion_pyme',
+        language: {
+          code: 'es_PE',
+        },
+        components: [
+          {
+            type: 'body',
+            parameters: [
+              {
+                type: 'text',
+                parameter_name: 'nombre_pyme',
+                text: dto.nombre_pyme,
+              },
+              {
+                type: 'text',
+                parameter_name: 'nombre_consultor',
+                text: dto.nombre_consultor,
+              },
+              {
+                type: 'text',
+                parameter_name: 'titulo_sesion',
+                text: dto.titulo_sesion,
+              },
+              {
+                type: 'text',
+                parameter_name: 'fecha_hora',
+                text: dto.fecha_hora,
+              },
+              {
+                type: 'text',
+                parameter_name: 'duracion',
+                text: dto.duracion,
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const result = await this.sendToMeta(payload);
+
+    this.logger.log(`WhatsApp template notificacion_pyme sent to ${phone}`);
+
+    return {
+      message: 'Plantilla de notificación pyme enviada exitosamente',
+      phone,
+      providerStatus: result.status,
+      providerResponse: result.body,
+    };
+  }
+
+  async sendNotificacionConsultor(to: string, dto: WhatsappNotificacionConsultorDto): Promise<WhatsappSendResultDto> {
+    const phone = this.normalizePhoneMeta(to);
+    const payload = {
+      messaging_product: 'whatsapp',
+      to: phone,
+      type: 'template',
+      template: {
+        name: 'notificacion_consultor',
+        language: {
+          code: 'es_PE',
+        },
+        components: [
+          {
+            type: 'body',
+            parameters: [
+              {
+                type: 'text',
+                parameter_name: 'nombre_consultor',
+                text: dto.nombre_consultor,
+              },
+              {
+                type: 'text',
+                parameter_name: 'nombre_pyme',
+                text: dto.nombre_pyme,
+              },
+              {
+                type: 'text',
+                parameter_name: 'titulo_sesion',
+                text: dto.titulo_sesion,
+              },
+              {
+                type: 'text',
+                parameter_name: 'fecha_hora',
+                text: dto.fecha_hora,
+              },
+              {
+                type: 'text',
+                parameter_name: 'duracion',
+                text: dto.duracion,
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const result = await this.sendToMeta(payload);
+
+    this.logger.log(`WhatsApp template notificacion_consultor sent to ${phone}`);
+
+    return {
+      message: 'Plantilla de notificación consultor enviada exitosamente',
+      phone,
+      providerStatus: result.status,
+      providerResponse: result.body,
+    };
+  }
+
+  async sendAlertaReunionConsultor(to: string, dto: WhatsappAlertaReunionConsultorDto): Promise<WhatsappSendResultDto> {
+    const phone = this.normalizePhoneMeta(to);
+    const payload = {
+      messaging_product: 'whatsapp',
+      to: phone,
+      type: 'template',
+      template: {
+        name: 'alerta_de_reunion_consultor',
+        language: {
+          code: 'en',
+        },
+        components: [
+          {
+            type: 'header',
+            parameters: [
+              {
+                type: 'text',
+                parameter_name: 'tiempo',
+                text: dto.tiempo_header,
+              },
+            ],
+          },
+          {
+            type: 'body',
+            parameters: [
+              {
+                type: 'text',
+                parameter_name: 'nombre_consultor',
+                text: dto.nombre_consultor,
+              },
+              {
+                type: 'text',
+                parameter_name: 'nombre_pyme',
+                text: dto.nombre_pyme,
+              },
+              {
+                type: 'text',
+                parameter_name: 'titulo_sesion',
+                text: dto.titulo_sesion,
+              },
+              {
+                type: 'text',
+                parameter_name: 'fecha_hora',
+                text: dto.fecha_hora,
+              },
+              {
+                type: 'text',
+                parameter_name: 'tiempo',
+                text: dto.tiempo_body,
+              },
+              {
+                type: 'text',
+                parameter_name: 'link_reunion',
+                text: dto.link_reunion,
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const result = await this.sendToMeta(payload);
+
+    this.logger.log(`WhatsApp template alerta_de_reunion_consultor sent to ${phone}`);
+
+    return {
+      message: 'Plantilla de alerta de reunión consultor enviada exitosamente',
+      phone,
+      providerStatus: result.status,
+      providerResponse: result.body,
+    };
+  }
+
+  async sendAlertaReunionPyme(to: string, dto: WhatsappAlertaReunionDto): Promise<WhatsappSendResultDto> {
+    const phone = this.normalizePhoneMeta(to);
+    const payload = {
+      messaging_product: 'whatsapp',
+      to: phone,
+      type: 'template',
+      template: {
+        name: 'alerta_de_reunion',
+        language: {
+          code: 'es_PE',
+        },
+        components: [
+          {
+            type: 'header',
+            parameters: [
+              {
+                type: 'text',
+                parameter_name: 'tiempo',
+                text: dto.tiempo_header,
+              },
+            ],
+          },
+          {
+            type: 'body',
+            parameters: [
+              {
+                type: 'text',
+                parameter_name: 'nombre_pyme',
+                text: dto.nombre_pyme,
+              },
+              {
+                type: 'text',
+                parameter_name: 'nombre_consultor',
+                text: dto.nombre_consultor,
+              },
+              {
+                type: 'text',
+                parameter_name: 'titulo_sesion',
+                text: dto.titulo_sesion,
+              },
+              {
+                type: 'text',
+                parameter_name: 'fecha_hora',
+                text: dto.fecha_hora,
+              },
+              {
+                type: 'text',
+                parameter_name: 'tiempo',
+                text: dto.tiempo_body,
+              },
+              {
+                type: 'text',
+                parameter_name: 'enlace',
+                text: dto.enlace,
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const result = await this.sendToMeta(payload);
+
+    this.logger.log(`WhatsApp template alerta_de_reunion sent to ${phone}`);
+
+    return {
+      message: 'Plantilla de alerta de reunión pyme enviada exitosamente',
+      phone,
+      providerStatus: result.status,
+      providerResponse: result.body,
+    };
+  }
+
+  private normalizePhoneMeta(phone: string): string {
     const trimmedPhone = phone.trim();
-
-    if (trimmedPhone.endsWith('@s.whatsapp.net')) {
-      return trimmedPhone;
-    }
-
-    const digits = trimmedPhone.replace(/\D/g, '');
+    const cleanPhone = trimmedPhone.replace(/@s\.whatsapp\.net$/, '');
+    const digits = cleanPhone.replace(/\D/g, '');
 
     if (!digits) {
-      throw new BadRequestException('El numero de WhatsApp no es valido');
+      throw new BadRequestException('El número de WhatsApp no es válido');
     }
 
-    return `${digits}@s.whatsapp.net`;
+    return digits;
   }
 
   private async parseProviderResponse(response: Response): Promise<WhatsappProviderResponse> {

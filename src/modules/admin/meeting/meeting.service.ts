@@ -8,6 +8,7 @@ import { MeetingListFiltersDto } from './dto/meeting-list.dto';
 import { MeetingUpdateDto } from './dto/meeting-update.dto';
 import { TeamsMeetingService } from './teams-meeting.service';
 import { ConsultantAvailabilityService } from '../consultant-availability/consultant-availability.service';
+import { ScheduledNotificationService } from '../scheduled-notification/scheduled-notification.service';
 
 @Injectable()
 export class MeetingService {
@@ -18,6 +19,7 @@ export class MeetingService {
     private readonly taskRepository: TaskRepository,
     private readonly teamsMeetingService: TeamsMeetingService,
     private readonly consultantAvailabilityService: ConsultantAvailabilityService,
+    private readonly scheduledNotificationService: ScheduledNotificationService,
   ) {}
 
   async findAllPaginated(filters: MeetingListFiltersDto) {
@@ -66,6 +68,11 @@ export class MeetingService {
       `Confirming meeting ${meeting.id}: status=${meeting.status}, pymeId=${meeting.pymeId}, consultantId=${meeting.consultantId}, startTime=${meeting.startTime.toISOString()}, durationMinutes=${meeting.durationMinutes}`,
     );
 
+    if (meeting.status === 'confirmada') {
+      await this.scheduledNotificationService.scheduleMeetingReminders(meeting);
+      return meeting;
+    }
+
     if (!['solicitada', 'pago_pendiente'].includes(meeting.status)) {
       this.logger.warn(`Meeting ${meeting.id} cannot be confirmed because status is ${meeting.status}`);
       throw new BadRequestException(['Solo se pueden confirmar reuniones solicitadas o pendientes de pago']);
@@ -78,14 +85,15 @@ export class MeetingService {
     });
     this.logger.log(`Teams meeting URL created for meeting ${meeting.id}`);
 
-    return this.meetingRepository.update(id, {
+    const confirmedMeeting = await this.meetingRepository.update(id, {
       status: 'confirmada',
       meetingUrl: teamsMeeting.joinWebUrl,
       teamsOnlineMeetingId: teamsMeeting.id,
     });
+
+    await this.scheduledNotificationService.scheduleMeetingReminders(confirmedMeeting);
+    return confirmedMeeting;
   }
-
-
 
   async listMeetingRecordings(id: number) {
     const meeting = await this.findOne(id);
@@ -128,11 +136,19 @@ export class MeetingService {
       throw new BadRequestException(['Solo se pueden cancelar reuniones solicitadas o pendientes de pago']);
     }
 
-    return this.meetingRepository.update(id, {
+    const updatedMeeting = await this.meetingRepository.update(id, {
       ...data,
       title: data.title?.trim(),
       description: data.description?.trim(),
     });
+
+    if (updatedMeeting.status === 'confirmada') {
+      await this.scheduledNotificationService.scheduleMeetingReminders(updatedMeeting);
+    } else {
+      await this.scheduledNotificationService.cancelMeetingReminders(id);
+    }
+
+    return updatedMeeting;
   }
 
   async finalize(id: number, data: MeetingFinalizeDto) {
@@ -147,6 +163,7 @@ export class MeetingService {
       description,
       completedAt: new Date(),
     });
+    await this.scheduledNotificationService.cancelMeetingReminders(id);
 
     // Soft-delete existing tasks for this meeting to prevent duplicates on edit/refinalize
     await this.taskRepository.deleteByMeetingId(id);
@@ -171,6 +188,7 @@ export class MeetingService {
 
   async delete(id: number) {
     await this.findOne(id);
+    await this.scheduledNotificationService.cancelMeetingReminders(id);
     return this.meetingRepository.delete(id);
   }
 
