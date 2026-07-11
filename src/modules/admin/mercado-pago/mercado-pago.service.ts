@@ -14,10 +14,7 @@ import { PymeService } from '../pyme/pyme.service';
 import { MercadoPagoAuthUrlDto, MercadoPagoCallbackDto } from './dto/mercado-pago-auth.dto';
 
 import { SubscriptionService } from '../subscription/subscription.service';
-import {
-  MercadoPagoCreateCheckoutDto,
-  MercadoPagoPaymentWebhookQueryDto,
-} from './dto/mercado-pago-checkout.dto';
+import { MercadoPagoCreateCheckoutDto, MercadoPagoPaymentWebhookQueryDto } from './dto/mercado-pago-checkout.dto';
 
 type MercadoPagoState = {
   flow: 'consultant-mercado-pago';
@@ -176,31 +173,18 @@ export class MercadoPagoService {
     );
 
     const consultant = await this.validateConsultant(data.consultantId);
-    const account = await this.accountRepository.findByConsultantId(data.consultantId);
-    if (!account) {
-      throw new BadRequestException(['El consultor aun no conecto su cuenta de Mercado Pago']);
-    }
-
-    const accessToken = await this.getValidAccessToken(account);
     const amount = this.calculateAmount(consultant, durationMinutes);
     const marketplaceFee = this.calculateMarketplaceFee(amount);
 
     const tempRef = `pending:${pymeId}:${data.consultantId}:${Date.now()}`;
 
-    const preference = await this.createPreference(accessToken, {
-      title: data.title,
-      amount,
-      marketplaceFee,
-      externalReference: tempRef,
-    });
-
     return this.paymentRepository.create({
       meetingId: null,
       pymeId,
       consultantId: data.consultantId,
-      preferenceId: preference.id,
-      initPoint: preference.init_point,
-      sandboxInitPoint: preference.sandbox_init_point,
+      preferenceId: null,
+      initPoint: null,
+      sandboxInitPoint: null,
       externalReference: tempRef,
       status: 'created',
       amount: amount.toFixed(2),
@@ -226,6 +210,42 @@ export class MercadoPagoService {
     }
 
     return checkout;
+  }
+
+  async prepareCheckoutPayment(currentUserId: number, id: number) {
+    const checkout = await this.findCheckout(currentUserId, id);
+
+    if (checkout.pymeId !== currentUserId) {
+      throw new UnauthorizedException('Solo la PYME puede iniciar el pago de este checkout');
+    }
+    if (checkout.status === 'approved' || checkout.meetingId) {
+      throw new BadRequestException(['Este checkout ya fue pagado']);
+    }
+    if (checkout.preferenceId && (checkout.initPoint || checkout.sandboxInitPoint)) {
+      return checkout;
+    }
+    if (!checkout.meetingDetails) {
+      throw new BadRequestException(['El checkout no contiene los datos de la reunión']);
+    }
+
+    const account = await this.accountRepository.findByConsultantId(checkout.consultantId);
+    if (!account) {
+      throw new BadRequestException(['El consultor aun no conecto su cuenta de Mercado Pago']);
+    }
+
+    const accessToken = await this.getValidAccessToken(account);
+    const preference = await this.createPreference(accessToken, {
+      title: checkout.meetingDetails.title,
+      amount: Number(checkout.amount),
+      marketplaceFee: Number(checkout.marketplaceFee),
+      externalReference: checkout.externalReference,
+    });
+
+    return this.paymentRepository.update(checkout.id, {
+      preferenceId: preference.id,
+      initPoint: preference.init_point ?? null,
+      sandboxInitPoint: preference.sandbox_init_point ?? null,
+    });
   }
 
   async handleWebhook(query: MercadoPagoPaymentWebhookQueryDto = {}) {
@@ -263,7 +283,7 @@ export class MercadoPagoService {
       return { received: true };
     }
 
-    const checkout = checkoutFromQuery ?? await this.paymentRepository.findByExternalReference(externalReference);
+    const checkout = checkoutFromQuery ?? (await this.paymentRepository.findByExternalReference(externalReference));
     if (!checkout) {
       return { received: true };
     }
@@ -337,21 +357,13 @@ export class MercadoPagoService {
       const title = meeting.title || 'Sesión de consultoría';
 
       // Disparar notificaciones en segundo plano sin esperar (fire-and-forget)
-      this.consultantService.sendMeetingNotification(
-        approvedCheckout.consultantId,
-        pymeName,
-        title,
-        startTime,
-        durationMinutes
-      ).catch(() => undefined);
+      this.consultantService
+        .sendMeetingNotification(approvedCheckout.consultantId, pymeName, title, startTime, durationMinutes)
+        .catch(() => undefined);
 
-      this.pymeService.sendMeetingNotification(
-        approvedCheckout.pymeId,
-        consultantName,
-        title,
-        startTime,
-        durationMinutes
-      ).catch(() => undefined);
+      this.pymeService
+        .sendMeetingNotification(approvedCheckout.pymeId, consultantName, title, startTime, durationMinutes)
+        .catch(() => undefined);
     } catch {
       // Catch general para evitar fallas colaterales
     }
@@ -382,7 +394,9 @@ export class MercadoPagoService {
     return token.access_token;
   }
 
-  private async exchangeCode(code: string): Promise<Required<Pick<MercadoPagoTokenResponse, 'access_token'>> & MercadoPagoTokenResponse> {
+  private async exchangeCode(
+    code: string,
+  ): Promise<Required<Pick<MercadoPagoTokenResponse, 'access_token'>> & MercadoPagoTokenResponse> {
     const { clientId, clientSecret, redirectUri } = this.getOAuthConfig(true);
     const response = await fetch('https://api.mercadopago.com/oauth/token', {
       method: 'POST',
@@ -398,13 +412,17 @@ export class MercadoPagoService {
 
     const data = (await response.json()) as MercadoPagoTokenResponse;
     if (!response.ok || !data.access_token) {
-      throw new UnauthorizedException(data.error_description ?? data.message ?? data.error ?? 'Mercado Pago rechazo el codigo');
+      throw new UnauthorizedException(
+        data.error_description ?? data.message ?? data.error ?? 'Mercado Pago rechazo el codigo',
+      );
     }
 
     return { ...data, access_token: data.access_token };
   }
 
-  private async refreshAccessToken(refreshToken: string): Promise<Required<Pick<MercadoPagoTokenResponse, 'access_token'>> & MercadoPagoTokenResponse> {
+  private async refreshAccessToken(
+    refreshToken: string,
+  ): Promise<Required<Pick<MercadoPagoTokenResponse, 'access_token'>> & MercadoPagoTokenResponse> {
     const { clientId, clientSecret } = this.getOAuthConfig(true);
     const response = await fetch('https://api.mercadopago.com/oauth/token', {
       method: 'POST',
@@ -419,7 +437,9 @@ export class MercadoPagoService {
 
     const data = (await response.json()) as MercadoPagoTokenResponse;
     if (!response.ok || !data.access_token) {
-      throw new UnauthorizedException(data.error_description ?? data.message ?? data.error ?? 'Mercado Pago rechazo el refresh token');
+      throw new UnauthorizedException(
+        data.error_description ?? data.message ?? data.error ?? 'Mercado Pago rechazo el refresh token',
+      );
     }
 
     return { ...data, access_token: data.access_token };
@@ -470,7 +490,9 @@ export class MercadoPagoService {
 
     const preference = (await response.json()) as MercadoPagoPreferenceResponse;
     if (!response.ok || !preference.id) {
-      throw new BadRequestException([preference.message ?? preference.error ?? 'No se pudo crear el checkout de Mercado Pago']);
+      throw new BadRequestException([
+        preference.message ?? preference.error ?? 'No se pudo crear el checkout de Mercado Pago',
+      ]);
     }
 
     return { ...preference, id: preference.id };
@@ -515,7 +537,7 @@ export class MercadoPagoService {
 
   private calculateMarketplaceFee(amount: number) {
     const rawPercent = Number(process.env.MERCADO_PAGO_PLATFORM_FEE_PERCENT ?? 0);
-    const fee = amount * (Number.isFinite(rawPercent) ? rawPercent : 0) / 100;
+    const fee = (amount * (Number.isFinite(rawPercent) ? rawPercent : 0)) / 100;
     return Number(Math.max(0, fee).toFixed(2));
   }
 
@@ -582,8 +604,6 @@ export class MercadoPagoService {
     const account = await this.accountRepository.findByConsultantId(consultantId);
     return account ? this.getValidAccessToken(account) : undefined;
   }
-
-
 
   private getOAuthConfig(requireSecret = false) {
     const clientId = process.env.MERCADO_PAGO_CLIENT_ID;
