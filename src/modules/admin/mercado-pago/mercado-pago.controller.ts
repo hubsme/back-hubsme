@@ -1,9 +1,25 @@
-import { Body, Controller, Delete, Get, Header, HttpCode, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Header,
+  HttpCode,
+  Param,
+  Post,
+  Query,
+  Request,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { HttpErrorDto } from '@core/dto/http-error.dto';
 import { User } from '@db/tables/user.table';
 import { JwtAuthGuard } from '@modules/auth/jwt-auth.guard';
-import { MercadoPagoAuthUrlDto, MercadoPagoAuthUrlResponseDto, MercadoPagoCallbackDto } from './dto/mercado-pago-auth.dto';
+import {
+  MercadoPagoAuthUrlDto,
+  MercadoPagoAuthUrlResponseDto,
+  MercadoPagoCallbackDto,
+} from './dto/mercado-pago-auth.dto';
 import {
   MercadoPagoCheckoutDto,
   MercadoPagoCreateCheckoutDto,
@@ -76,6 +92,17 @@ export class MercadoPagoController {
   @ApiResponse({ status: 400, type: HttpErrorDto })
   findCheckout(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.mercadoPagoService.findCheckout(req.user.id, +id);
+  }
+
+  @Post('checkout/:id/payment')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create the Mercado Pago preference when the PYME is ready to pay' })
+  @ApiParam({ name: 'id', type: 'number' })
+  @ApiResponse({ status: 200, type: MercadoPagoCheckoutDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  prepareCheckoutPayment(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.mercadoPagoService.prepareCheckoutPayment(req.user.id, +id);
   }
 
   @Post('webhook')
