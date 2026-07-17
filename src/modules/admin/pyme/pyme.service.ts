@@ -7,7 +7,6 @@ import { PymeListFiltersDto } from './dto/pyme-list.dto';
 import { PymeMeetingConsultantsFiltersDto } from './dto/pyme-meeting-consultants.dto';
 import { PymeUpdateDto } from './dto/pyme-update.dto';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
-import { WhatsappNotificacionPymeDto } from '../whatsapp/dto/whatsapp-notificacion-pyme.dto';
 import { EmailService } from '../email/email.service';
 
 @Injectable()
@@ -137,13 +136,15 @@ export class PymeService {
 
       // 2. Email notification
       if (pyme.ownerEmail?.trim()) {
-        const emailSubject = `Confirmación de sesión de consultoría agendada - HUBSME`;
-        const emailText = `Hola ${pyme.ownerFirstName || pyme.name},\n\nTe confirmamos que tu sesión de consultoría de tipo "${meetingTitle}" con el consultor "${consultantName}" ha sido agendada con éxito.\n\nDetalles de la reunión:\n- Fecha y hora: ${dateStr}\n- Duración: ${durationMinutes} minutos\n\nSaludos,\nEl equipo de HUBSME`;
         try {
-          await this.emailService.sendEmail({
+          await this.emailService.sendMeetingConfirmedEmail({
             to: pyme.ownerEmail,
-            subject: emailSubject,
-            text: emailText,
+            recipientName: pyme.ownerFirstName || pyme.name,
+            counterpartName: consultantName,
+            meetingTitle,
+            dateTime: dateStr,
+            duration: `${durationMinutes} minutos`,
+            recipientType: 'pyme',
           });
         } catch (error) {
           console.error('Error sending email notification:', error);
@@ -165,31 +166,29 @@ export class PymeService {
       const pyme = await this.pymeRepository.findOne(pymeId);
       if (!pyme?.ownerEmail?.trim()) return;
 
-      const optionsText = this.formatProposedStartTimes(proposedStartTimes);
-      await this.emailService.sendEmail({
+      await this.emailService.sendMeetingPendingConfirmationEmail({
         to: pyme.ownerEmail,
-        subject: 'Tu reunión fue pagada y está por confirmación - HUBSME',
-        text: `Hola ${pyme.ownerFirstName || pyme.name},\n\nRecibimos el pago de tu reunión "${meetingTitle}" con ${consultantName}.\n\nEl consultor debe escoger uno de estos horarios propuestos:\n${optionsText}\n\nDuración: ${durationMinutes} minutos\n\nPodrás ver la reunión en tu calendario con estado "Por confirmación".\n\nSaludos,\nEl equipo de HUBSME`,
+        recipientName: pyme.ownerFirstName || pyme.name,
+        counterpartName: consultantName,
+        meetingTitle,
+        proposedStartTimes: proposedStartTimes.map((startTime) => this.formatProposedStartTime(startTime)),
+        duration: `${durationMinutes} minutos`,
+        recipientType: 'pyme',
       });
     } catch {
       // General silent catch to ensure fire-and-forget safety
     }
   }
 
-  private formatProposedStartTimes(proposedStartTimes: Date[]) {
-    return proposedStartTimes
-      .map((startTime, index) => {
-        const dateStr = startTime.toLocaleString('es-PE', {
-          timeZone: 'America/Lima',
-          weekday: 'long',
-          day: '2-digit',
-          month: 'long',
-          year: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-        });
-        return `${index + 1}. ${dateStr}`;
-      })
-      .join('\n');
+  private formatProposedStartTime(startTime: Date) {
+    return startTime.toLocaleString('es-PE', {
+      timeZone: 'America/Lima',
+      weekday: 'long',
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   }
 }
