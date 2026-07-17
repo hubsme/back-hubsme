@@ -4,6 +4,7 @@ import { ScheduledNotification } from '@db/tables/scheduled-notification.table';
 import { ConsultantRepository } from '@repositories/consultant.repository';
 import { PymeRepository } from '@repositories/pyme.repository';
 import { ScheduledNotificationRepository } from '@repositories/scheduled-notification.repository';
+import { EmailService } from '../email/email.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { MeetingReminderPayload } from './scheduled-notification.types';
 
@@ -24,6 +25,7 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
     private readonly consultantRepository: ConsultantRepository,
     @Inject(forwardRef(() => WhatsappService))
     private readonly whatsappService: WhatsappService,
+    private readonly emailService: EmailService,
   ) {}
 
   async onApplicationBootstrap() {
@@ -131,6 +133,7 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
       });
       const duration = `${meeting.durationMinutes} minutos`;
       const notifications: Promise<unknown>[] = [];
+      const pymeName = pyme.ownerFirstName?.trim() || pyme.name;
 
       if (consultant.ownerPhone?.trim()) {
         notifications.push(
@@ -145,15 +148,45 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
         );
       }
 
+      if (consultant.userEmail?.trim()) {
+        notifications.push(
+          this.emailService.sendMeetingConfirmedEmail({
+            to: consultant.userEmail,
+            recipientName: consultant.fullName,
+            counterpartName: pyme.name,
+            meetingTitle: meeting.title,
+            dateTime,
+            duration,
+            meetingUrl: meeting.meetingUrl,
+            recipientType: 'consultor',
+          }),
+        );
+      }
+
       if (pyme.ownerPhone?.trim()) {
         notifications.push(
           this.whatsappService.sendNotificacionPyme(pyme.ownerPhone, {
             to: pyme.ownerPhone,
-            nombre_pyme: pyme.ownerFirstName?.trim() || pyme.name,
+            nombre_pyme: pymeName,
             nombre_consultor: consultant.fullName,
             titulo_sesion: meeting.title,
             fecha_hora: dateTime,
             duracion: duration,
+          }),
+        );
+      }
+
+      if (pyme.ownerEmail?.trim()) {
+        notifications.push(
+          this.emailService.sendMeetingConfirmedEmail({
+            to: pyme.ownerEmail,
+            recipientName: pymeName,
+            counterpartName: consultant.fullName,
+            meetingTitle: meeting.title,
+            dateTime,
+            duration,
+            meetingUrl: meeting.meetingUrl,
+            recipientType: 'pyme',
           }),
         );
       }

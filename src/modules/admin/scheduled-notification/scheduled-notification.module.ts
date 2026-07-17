@@ -2,11 +2,12 @@ import { forwardRef, Module } from '@nestjs/common';
 import { ConsultantRepository } from '@repositories/consultant.repository';
 import { PymeRepository } from '@repositories/pyme.repository';
 import { ScheduledNotificationRepository } from '@repositories/scheduled-notification.repository';
+import { EmailModule } from '../email/email.module';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { ScheduledNotificationService } from './scheduled-notification.service';
 
 @Module({
-  imports: [forwardRef(() => WhatsappModule)],
+  imports: [forwardRef(() => WhatsappModule), EmailModule],
   providers: [ScheduledNotificationService, ScheduledNotificationRepository, PymeRepository, ConsultantRepository],
   exports: [ScheduledNotificationService],
 })

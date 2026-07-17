@@ -509,13 +509,7 @@ export class WhatsappService {
       }
 
       if (meeting.status === 'confirmada') {
-        const alreadySelected =
-          meeting.startTime && new Date(meeting.startTime).toISOString() === new Date(selectedStartTime).toISOString();
-        if (alreadySelected) {
-          this.logger.log(`Respuesta duplicada ignorada para la reunión ${meeting.id}`);
-        } else {
-          this.logger.warn(`La reunión ${meeting.id} ya fue confirmada con otro horario`);
-        }
+        await this.sendAlreadyConfirmedMessage(senderPhone, meeting.startTime);
         return;
       }
 
@@ -544,6 +538,22 @@ export class WhatsappService {
       meetingId: Number(match[1]),
       optionIndex: match[2].toLowerCase().charCodeAt(0) - 'a'.charCodeAt(0),
     };
+  }
+
+  private async sendAlreadyConfirmedMessage(phone: string, startTime: Date | string | null) {
+    const confirmedTime = startTime ? this.formatMeetingDateTime(startTime) : 'el horario confirmado';
+    await this.sendMessage({
+      phone,
+      message: `Esta reunión ya fue confirmada para ${confirmedTime}. El horario ya no se puede cambiar desde WhatsApp.`,
+    });
+  }
+
+  private formatMeetingDateTime(value: Date | string): string {
+    return new Intl.DateTimeFormat('es-PE', {
+      dateStyle: 'full',
+      timeStyle: 'short',
+      timeZone: 'America/Lima',
+    }).format(new Date(value));
   }
 
   private assertMetaSignature(rawBody: Buffer | undefined, signature?: string) {
