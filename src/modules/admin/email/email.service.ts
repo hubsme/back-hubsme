@@ -35,7 +35,6 @@ export class EmailService {
     const clientId = process.env.MS_GRAPH_CLIENT_ID;
     const clientSecret = process.env.MS_GRAPH_CLIENT_SECRET;
     const senderEmail = process.env.MS_GRAPH_SENDER_EMAIL || 'no-reply@hubsme.net';
-    const senderName = process.env.MS_GRAPH_SENDER_NAME || 'HUBSME';
 
     if (!tenantId || !clientId || !clientSecret) {
       throw new InternalServerErrorException('Configuración de correo de Microsoft Graph incompleta en el servidor');
@@ -54,18 +53,6 @@ export class EmailService {
       const sendMailPayload = {
         message: {
           subject: sendEmailDto.subject,
-          from: {
-            emailAddress: {
-              address: senderEmail,
-              name: senderName,
-            },
-          },
-          sender: {
-            emailAddress: {
-              address: senderEmail,
-              name: senderName,
-            },
-          },
           body: {
             contentType: sendEmailDto.html ? 'HTML' : 'Text',
             content: sendEmailDto.html || sendEmailDto.text,
@@ -206,24 +193,27 @@ export class EmailService {
     cta?: string;
   }) {
     const details = data.details
-      .map(
-        (item) => `
+      .map((item, index) => {
+        const icon = this.detailIcon(item.label);
+        const border = index === 0 ? '' : 'border-top:1px solid #dbe3ef;';
+        return `
           <tr>
-            <td style="padding:12px 0;color:#64748b;font-size:13px;">${this.escapeHtml(item.label)}</td>
-            <td style="padding:12px 0;color:#0f172a;font-size:14px;font-weight:700;text-align:right;">${this.escapeHtml(item.value)}</td>
-          </tr>`,
-      )
+            <td width="54" style="${border}padding:19px 0 19px 22px;color:#0b6ee8;font-size:26px;line-height:1;">${icon}</td>
+            <td style="${border}padding:19px 12px;color:#435775;font-size:15px;">${this.escapeHtml(item.label)}</td>
+            <td style="${border}padding:19px 22px 19px 12px;color:#0b1328;font-size:16px;font-weight:800;text-align:right;">${this.escapeHtml(item.value)}</td>
+          </tr>`;
+      })
       .join('');
     const options = data.options?.length
       ? `
-        <div style="margin-top:22px;">
-          <p style="margin:0 0 10px;color:#64748b;font-size:13px;font-weight:700;text-transform:uppercase;">Horarios propuestos</p>
+        <div style="margin-top:26px;">
+          <p style="margin:0 0 12px;color:#435775;font-size:15px;font-weight:800;">Horarios propuestos</p>
           ${data.options
             .map(
               (option, index) => `
-                <div style="border:1px solid #dbe7f7;border-radius:12px;padding:12px 14px;margin-top:8px;background:#f8fbff;">
-                  <span style="display:inline-block;width:24px;height:24px;border-radius:999px;background:#2f77d0;color:#ffffff;font-size:12px;font-weight:800;line-height:24px;text-align:center;margin-right:8px;">${index + 1}</span>
-                  <span style="color:#0f172a;font-size:14px;font-weight:700;">${this.escapeHtml(option)}</span>
+                <div style="border:1px solid #dbe3ef;border-radius:14px;padding:14px 16px;margin-top:10px;background:#fbfdff;">
+                  <span style="display:inline-block;width:28px;height:28px;border-radius:999px;background:#eaf3ff;color:#0b6ee8;border:1px solid #b9d6ff;font-size:13px;font-weight:900;line-height:28px;text-align:center;margin-right:10px;">${index + 1}</span>
+                  <span style="color:#0b1328;font-size:15px;font-weight:800;">${this.escapeHtml(option)}</span>
                 </div>`,
             )
             .join('')}
@@ -231,31 +221,41 @@ export class EmailService {
       : '';
 
     return `
-      <div style="margin:0;padding:0;background:#eef4fb;font-family:Arial,Helvetica,sans-serif;color:#0f172a;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef4fb;padding:28px 12px;">
+      <div style="margin:0;padding:0;background:#edf5ff;font-family:Arial,Helvetica,sans-serif;color:#0b1328;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#edf5ff;padding:22px 12px;">
           <tr>
             <td align="center">
-              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#ffffff;border-radius:22px;overflow:hidden;border:1px solid #dbe7f7;box-shadow:0 18px 50px rgba(15,23,42,0.08);">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:780px;background:#ffffff;border-radius:24px;border:1px solid #dce6f2;box-shadow:0 20px 55px rgba(16,35,70,0.10);">
                 <tr>
-                  <td style="padding:28px 30px;background:#0f172a;">
-                    <div style="color:#ffffff;font-size:24px;font-weight:900;letter-spacing:.2px;">HUBSME</div>
-                    <div style="margin-top:18px;display:inline-block;background:#dbeafe;color:#1d4ed8;border-radius:999px;padding:7px 12px;font-size:12px;font-weight:800;text-transform:uppercase;">${this.escapeHtml(data.eyebrow)}</div>
-                    <h1 style="margin:14px 0 0;color:#ffffff;font-size:28px;line-height:1.15;">${this.escapeHtml(data.title)}</h1>
+                  <td align="center" style="padding:46px 54px 30px;">
+                    <img src="https://www.hubsme.net/avif/logo_completo.png" width="230" alt="HUBSME" style="display:block;border:0;outline:none;text-decoration:none;max-width:230px;height:auto;margin:0 auto 28px;" />
+                    <div style="display:inline-block;background:#eaf3ff;color:#0b6ee8;border-radius:999px;padding:6px 13px;font-size:12px;font-weight:900;letter-spacing:.02em;text-transform:uppercase;">
+                      <span style="display:inline-block;width:18px;height:18px;border-radius:999px;border:2px solid #0b6ee8;line-height:15px;text-align:center;margin-right:7px;font-size:12px;">✓</span>
+                      ${this.escapeHtml(data.eyebrow)}
+                    </div>
+                    <h1 style="margin:26px 0 0;color:#0b1328;font-size:38px;line-height:1.1;font-weight:900;">${this.escapeHtml(data.title)}</h1>
+                    <p style="margin:18px auto 0;color:#435775;font-size:20px;line-height:1.45;max-width:640px;">${data.intro}</p>
                   </td>
                 </tr>
                 <tr>
-                  <td style="padding:28px 30px;">
-                    <p style="margin:0;color:#0f172a;font-size:17px;font-weight:800;">${data.greeting}</p>
-                    <p style="margin:10px 0 22px;color:#475569;font-size:15px;line-height:1.6;">${data.intro}</p>
-                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-top:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;">
+                  <td style="padding:0 54px 44px;">
+                    <div style="height:1px;background:#dbe3ef;margin:0 0 32px;"></div>
+                    <p style="margin:0;color:#0b1328;font-size:22px;font-weight:900;">${data.greeting}</p>
+                    <p style="margin:22px 0 22px;color:#253a5b;font-size:18px;line-height:1.6;">Te compartimos los detalles de tu reunión:</p>
+                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #dbe3ef;border-radius:14px;border-collapse:separate;border-spacing:0;overflow:hidden;">
                       ${details}
                     </table>
                     ${options}
-                    <div style="margin-top:24px;padding:16px 18px;border-radius:14px;background:#eff6ff;color:#315279;font-size:14px;line-height:1.55;">
-                      ${this.escapeHtml(data.note)}
+                    <div style="margin-top:30px;padding:18px 22px;border-radius:14px;background:#eef6ff;color:#253a5b;font-size:16px;line-height:1.55;">
+                      <span style="display:inline-block;width:24px;height:24px;border-radius:999px;border:2px solid #0b6ee8;color:#0b6ee8;font-size:16px;font-weight:900;line-height:21px;text-align:center;margin-right:10px;">i</span>
+                      <span>${this.escapeHtml(data.note)}</span>
                     </div>
-                    ${data.cta ? `<div style="margin-top:24px;">${data.cta}</div>` : ''}
-                    <p style="margin:26px 0 0;color:#64748b;font-size:13px;line-height:1.5;">Gracias por confiar en HUBSME para seguir impulsando tu negocio.</p>
+                    ${data.cta ? `<div style="margin-top:30px;text-align:center;">${data.cta}</div>` : ''}
+                    <div style="height:1px;background:#dbe3ef;margin:34px 0 24px;"></div>
+                    <p style="margin:0;text-align:center;color:#435775;font-size:16px;line-height:1.5;">
+                      <span style="color:#0b6ee8;font-size:24px;vertical-align:middle;margin-right:10px;">♡</span>
+                      Gracias por confiar en HUBSME para seguir impulsando tu negocio.
+                    </p>
                   </td>
                 </tr>
               </table>
@@ -266,7 +266,16 @@ export class EmailService {
   }
 
   private buttonStyle() {
-    return 'display:inline-block;background:#2f77d0;color:#ffffff;text-decoration:none;border-radius:12px;padding:13px 18px;font-size:14px;font-weight:800;';
+    return 'display:inline-block;background:#0b6ee8;color:#ffffff;text-decoration:none;border-radius:10px;padding:17px 48px;font-size:18px;font-weight:900;';
+  }
+
+  private detailIcon(label: string) {
+    const normalized = label.toLowerCase();
+    if (normalized.includes('tema')) return '▤';
+    if (normalized.includes('consultor') || normalized.includes('pyme')) return '♙';
+    if (normalized.includes('fecha')) return '□';
+    if (normalized.includes('dur')) return '◷';
+    return '•';
   }
 
   private escapeAttribute(value: string) {
