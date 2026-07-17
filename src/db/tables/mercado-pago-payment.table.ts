@@ -41,6 +41,7 @@ export const mercadoPagoPayment = pgTable(
     rawPayment: jsonb('raw_payment').$type<MercadoPagoPaymentRaw>(),
     meetingDetails: jsonb('meeting_details').$type<{
       startTime: string;
+      proposedStartTimes?: string[];
       durationMinutes: number;
       title: string;
       description?: string;

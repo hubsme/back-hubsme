@@ -123,7 +123,7 @@ export class PromotionCodeService {
         meetingId: previousRedemption.meetingId,
         checkoutId: checkout.id,
         code: this.normalizeCode(data.code),
-        message: 'Consultoría gratuita confirmada',
+        message: 'Consultoría gratuita registrada por confirmación',
       };
     }
 
@@ -149,7 +149,7 @@ export class PromotionCodeService {
       const meeting = await this.meetingService.create({
         pymeId: checkout.pymeId,
         consultantId: checkout.consultantId,
-        startTime: new Date(checkout.meetingDetails.startTime),
+        proposedStartTimes: checkout.meetingDetails.proposedStartTimes ?? [checkout.meetingDetails.startTime],
         durationMinutes: checkout.meetingDetails.durationMinutes,
         title: checkout.meetingDetails.title,
         description: checkout.meetingDetails.description || undefined,
@@ -157,7 +157,7 @@ export class PromotionCodeService {
       });
       meetingId = meeting.id;
 
-      await this.meetingService.confirm(meeting.id);
+      await this.meetingService.markPaidPendingConfirmation(meeting.id);
       await this.promotionCodeRepository.finalizeClaim(claim.redemption.id, checkout.id, meeting.id, {
         source: 'promotion_code',
         promotionCodeId: claim.promotion.id,
@@ -170,7 +170,7 @@ export class PromotionCodeService {
         meetingId: meeting.id,
         checkoutId: checkout.id,
         code: claim.promotion.code,
-        message: 'Consultoría gratuita confirmada',
+        message: 'Consultoría gratuita registrada por confirmación',
       };
     } catch (error) {
       if (meetingId) {
@@ -190,18 +190,19 @@ export class PromotionCodeService {
       ]);
 
       await Promise.all([
-        this.consultantService.sendMeetingNotification(
+        this.consultantService.sendMeetingPendingConfirmationNotification(
+          meeting.id,
           meeting.consultantId,
           pyme.name,
           meeting.title,
-          meeting.startTime,
+          (meeting.proposedStartTimes ?? []).map((value) => new Date(value)),
           meeting.durationMinutes,
         ),
-        this.pymeService.sendMeetingNotification(
+        this.pymeService.sendMeetingPendingConfirmationNotification(
           meeting.pymeId,
           consultant.fullName,
           meeting.title,
-          meeting.startTime,
+          (meeting.proposedStartTimes ?? []).map((value) => new Date(value)),
           meeting.durationMinutes,
         ),
       ]);

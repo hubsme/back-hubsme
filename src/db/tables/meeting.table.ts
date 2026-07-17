@@ -4,6 +4,7 @@ import { user } from './user.table';
 export const meetingStatusEnum = pgEnum('meeting_status', [
   'solicitada',
   'pago_pendiente',
+  'por_confirmar',
   'confirmada',
   'finalizada',
   'cancelada',
@@ -24,7 +25,8 @@ export const meeting = pgTable(
       .notNull()
       .references(() => user.id),
     title: text('title').notNull(),
-    startTime: timestamp('start_time').notNull(),
+    startTime: timestamp('start_time'),
+    proposedStartTimes: text('proposed_start_times').array().default([]).notNull(),
     durationMinutes: integer('duration_minutes').default(60).notNull(),
     meetingUrl: text('meeting_url'),
     teamsOnlineMeetingId: text('teams_online_meeting_id'),

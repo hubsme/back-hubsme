@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsInt, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class MercadoPagoCreateCheckoutDto {
   @ApiProperty({ example: 3 })
@@ -12,6 +12,16 @@ export class MercadoPagoCreateCheckoutDto {
   @IsString()
   @IsNotEmpty()
   startTime: string;
+
+  @ApiProperty({
+    type: [String],
+    example: ['2026-05-10T15:00:00.000Z', '2026-05-10T16:00:00.000Z', '2026-05-11T15:00:00.000Z'],
+  })
+  @IsArray()
+  @ArrayMinSize(3)
+  @ArrayMaxSize(3)
+  @IsString({ each: true })
+  proposedStartTimes: string[];
 
   @ApiPropertyOptional({ example: 60 })
   @Type(() => Number)
@@ -33,6 +43,9 @@ export class MercadoPagoCreateCheckoutDto {
 export class CheckoutMeetingDetailsDto {
   @ApiProperty()
   startTime: string;
+
+  @ApiProperty({ type: [String] })
+  proposedStartTimes: string[];
 
   @ApiProperty()
   durationMinutes: number;

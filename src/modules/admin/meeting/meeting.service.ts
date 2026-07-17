@@ -1,8 +1,9 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, forwardRef, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { TaskDTO } from '@db/tables/task.table';
 import { MeetingRepository } from '@repositories/meeting.repository';
 import { TaskRepository } from '@repositories/task.repository';
 import { MeetingCreateDto } from './dto/meeting-create.dto';
+import { MeetingConfirmOptionDto } from './dto/meeting-confirm-option.dto';
 import { MeetingFinalizeDto } from './dto/meeting-finalize.dto';
 import { MeetingListFiltersDto } from './dto/meeting-list.dto';
 import { MeetingUpdateDto } from './dto/meeting-update.dto';
@@ -19,6 +20,7 @@ export class MeetingService {
     private readonly taskRepository: TaskRepository,
     private readonly teamsMeetingService: TeamsMeetingService,
     private readonly consultantAvailabilityService: ConsultantAvailabilityService,
+    @Inject(forwardRef(() => ScheduledNotificationService))
     private readonly scheduledNotificationService: ScheduledNotificationService,
   ) {}
 
@@ -44,14 +46,30 @@ export class MeetingService {
     const title = data.title.trim();
     const durationMinutes = data.durationMinutes ?? 60;
     const requestedBy = data.requestedBy ?? 'pyme';
-    await this.consultantAvailabilityService.assertAvailableForMeeting(
-      data.consultantId,
-      data.startTime,
-      durationMinutes,
-    );
+    const proposedStartTimes = this.cleanProposedStartTimes(data.proposedStartTimes ?? []);
+    const startTime = data.startTime ?? (proposedStartTimes.length === 1 ? new Date(proposedStartTimes[0]) : undefined);
+
+    if (requestedBy === 'pyme') {
+      this.assertThreeProposedStartTimes(proposedStartTimes);
+    } else if (!startTime) {
+      throw new BadRequestException(['La hora de inicio es obligatoria para reuniones solicitadas por el consultor']);
+    }
+
+    const timesToValidate = proposedStartTimes.length
+      ? proposedStartTimes.map((value) => new Date(value))
+      : [startTime];
+    for (const proposedTime of timesToValidate) {
+      await this.consultantAvailabilityService.assertAvailableForMeeting(
+        data.consultantId,
+        proposedTime,
+        durationMinutes,
+      );
+    }
 
     return this.meetingRepository.create({
       ...data,
+      startTime: requestedBy === 'pyme' ? null : startTime,
+      proposedStartTimes,
       title,
       meetingUrl: null,
       teamsOnlineMeetingId: null,
@@ -65,12 +83,16 @@ export class MeetingService {
   async confirm(id: number) {
     const meeting = await this.findOne(id);
     this.logger.log(
-      `Confirming meeting ${meeting.id}: status=${meeting.status}, pymeId=${meeting.pymeId}, consultantId=${meeting.consultantId}, startTime=${meeting.startTime.toISOString()}, durationMinutes=${meeting.durationMinutes}`,
+      `Confirming meeting ${meeting.id}: status=${meeting.status}, pymeId=${meeting.pymeId}, consultantId=${meeting.consultantId}, durationMinutes=${meeting.durationMinutes}`,
     );
 
     if (meeting.status === 'confirmada') {
       await this.scheduledNotificationService.scheduleMeetingReminders(meeting);
       return meeting;
+    }
+
+    if (!meeting.startTime) {
+      throw new BadRequestException(['Selecciona una de las opciones propuestas antes de confirmar la reunion']);
     }
 
     if (!['solicitada', 'pago_pendiente'].includes(meeting.status)) {
@@ -92,6 +114,67 @@ export class MeetingService {
     });
 
     await this.scheduledNotificationService.scheduleMeetingReminders(confirmedMeeting);
+    await this.scheduledNotificationService.sendMeetingConfirmedNotifications(confirmedMeeting);
+    return confirmedMeeting;
+  }
+
+  async markPaidPendingConfirmation(id: number) {
+    const meeting = await this.findOne(id);
+
+    if (meeting.status === 'por_confirmar') return meeting;
+    if (meeting.status !== 'pago_pendiente') {
+      throw new BadRequestException(['Solo se pueden marcar como pagadas las reuniones pendientes de pago']);
+    }
+    this.assertThreeProposedStartTimes(meeting.proposedStartTimes ?? []);
+
+    await this.scheduledNotificationService.cancelMeetingReminders(id);
+    return this.meetingRepository.update(id, {
+      status: 'por_confirmar',
+      startTime: null,
+      meetingUrl: null,
+      teamsOnlineMeetingId: null,
+    });
+  }
+
+  async confirmProposedOption(id: number, data: MeetingConfirmOptionDto) {
+    const meeting = await this.findOne(id);
+
+    if (meeting.status !== 'por_confirmar') {
+      throw new BadRequestException(['Solo se pueden confirmar reuniones por confirmacion']);
+    }
+
+    const selectedStartTime = new Date(data.selectedStartTime);
+    if (Number.isNaN(selectedStartTime.getTime())) {
+      throw new BadRequestException(['El horario seleccionado no es valido']);
+    }
+
+    const selectedIso = selectedStartTime.toISOString();
+    const proposedStartTimes = meeting.proposedStartTimes ?? [];
+    if (!proposedStartTimes.map((value) => new Date(value).toISOString()).includes(selectedIso)) {
+      throw new BadRequestException(['El horario seleccionado no pertenece a las opciones propuestas']);
+    }
+
+    await this.consultantAvailabilityService.assertAvailableForMeeting(
+      meeting.consultantId,
+      selectedStartTime,
+      meeting.durationMinutes,
+    );
+
+    const teamsMeeting = await this.createTeamsMeeting({
+      title: meeting.title,
+      startTime: selectedStartTime,
+      durationMinutes: meeting.durationMinutes,
+    });
+
+    const confirmedMeeting = await this.meetingRepository.update(id, {
+      status: 'confirmada',
+      startTime: selectedStartTime,
+      meetingUrl: teamsMeeting.joinWebUrl,
+      teamsOnlineMeetingId: teamsMeeting.id,
+    });
+
+    await this.scheduledNotificationService.scheduleMeetingReminders(confirmedMeeting);
+    await this.scheduledNotificationService.sendMeetingConfirmedNotifications(confirmedMeeting);
     return confirmedMeeting;
   }
 
@@ -218,5 +301,24 @@ export class MeetingService {
   private isInvalidOnlineMeetingIdError(error: unknown): boolean {
     const message = error instanceof Error ? error.message : String(error);
     return message.toLowerCase().includes('invalid meeting id');
+  }
+
+  private cleanProposedStartTimes(values: string[]) {
+    const normalized = values.map((value) => {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        throw new BadRequestException(['Uno de los horarios propuestos no es valido']);
+      }
+      return date.toISOString();
+    });
+    const uniqueValues = [...new Set(normalized)];
+    uniqueValues.sort((left, right) => new Date(left).getTime() - new Date(right).getTime());
+    return uniqueValues;
+  }
+
+  private assertThreeProposedStartTimes(values: string[]) {
+    if (values.length !== 3) {
+      throw new BadRequestException(['Selecciona exactamente 3 opciones de horario']);
+    }
   }
 }

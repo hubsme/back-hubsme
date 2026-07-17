@@ -22,10 +22,10 @@ export class MeetingListFiltersDto extends PaginationFiltersDto {
   @IsOptional()
   consultantId?: number;
 
-  @ApiPropertyOptional({ enum: ['solicitada', 'pago_pendiente', 'confirmada', 'finalizada', 'cancelada'] })
-  @IsIn(['solicitada', 'pago_pendiente', 'confirmada', 'finalizada', 'cancelada'])
+  @ApiPropertyOptional({ enum: ['solicitada', 'pago_pendiente', 'por_confirmar', 'confirmada', 'finalizada', 'cancelada'] })
+  @IsIn(['solicitada', 'pago_pendiente', 'por_confirmar', 'confirmada', 'finalizada', 'cancelada'])
   @IsOptional()
-  status?: 'solicitada' | 'pago_pendiente' | 'confirmada' | 'finalizada' | 'cancelada';
+  status?: 'solicitada' | 'pago_pendiente' | 'por_confirmar' | 'confirmada' | 'finalizada' | 'cancelada';
 }
 
 export class MeetingListDto {

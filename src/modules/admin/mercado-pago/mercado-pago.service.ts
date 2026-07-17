@@ -21,6 +21,14 @@ type MercadoPagoState = {
   consultantId: number;
 };
 
+type MeetingDetails = {
+  startTime: string;
+  proposedStartTimes?: string[];
+  durationMinutes: number;
+  title: string;
+  description?: string;
+};
+
 type MercadoPagoTokenResponse = {
   access_token?: string;
   refresh_token?: string;
@@ -161,16 +169,19 @@ export class MercadoPagoService {
   async createCheckout(currentUserId: number, data: MercadoPagoCreateCheckoutDto) {
     const pymeId = currentUserId;
     const durationMinutes = data.durationMinutes ?? 60;
+    const proposedStartTimes = this.normalizeProposedStartTimes(data.proposedStartTimes);
 
     if (durationMinutes < 60) {
       throw new BadRequestException(['La duración mínima de la sesión es de 60 minutos (1 hora)']);
     }
 
-    await this.consultantAvailabilityService.assertAvailableForMeeting(
-      data.consultantId,
-      new Date(data.startTime),
-      durationMinutes,
-    );
+    for (const proposedStartTime of proposedStartTimes) {
+      await this.consultantAvailabilityService.assertAvailableForMeeting(
+        data.consultantId,
+        new Date(proposedStartTime),
+        durationMinutes,
+      );
+    }
 
     const consultant = await this.validateConsultant(data.consultantId);
     const amount = this.calculateAmount(consultant, durationMinutes);
@@ -191,7 +202,8 @@ export class MercadoPagoService {
       marketplaceFee: marketplaceFee.toFixed(2),
       currency: this.getCurrency(),
       meetingDetails: {
-        startTime: data.startTime,
+        startTime: proposedStartTimes[0],
+        proposedStartTimes,
         durationMinutes,
         title: data.title,
         description: data.description || undefined,
@@ -311,19 +323,20 @@ export class MercadoPagoService {
     try {
       let meetingId = approvedCheckout.meetingId;
       if (meetingId) {
-        await this.meetingService.confirm(meetingId);
+        await this.meetingService.markPaidPendingConfirmation(meetingId);
       } else if (approvedCheckout.meetingDetails) {
+        const proposedStartTimes = this.getCheckoutProposedStartTimes(approvedCheckout.meetingDetails);
         const newMeeting = await this.meetingService.create({
           pymeId: approvedCheckout.pymeId,
           consultantId: approvedCheckout.consultantId,
-          startTime: new Date(approvedCheckout.meetingDetails.startTime),
+          proposedStartTimes,
           durationMinutes: approvedCheckout.meetingDetails.durationMinutes,
           title: approvedCheckout.meetingDetails.title,
           description: approvedCheckout.meetingDetails.description || undefined,
           requestedBy: 'pyme',
         });
 
-        await this.meetingService.confirm(newMeeting.id);
+        await this.meetingService.markPaidPendingConfirmation(newMeeting.id);
 
         await this.paymentRepository.update(approvedCheckout.id, {
           meetingId: newMeeting.id,
@@ -341,7 +354,10 @@ export class MercadoPagoService {
     return { received: true };
   }
 
-  private async sendMeetingNotifications(meetingId: number, approvedCheckout: any) {
+  private async sendMeetingNotifications(
+    meetingId: number,
+    approvedCheckout: { consultantId: number; pymeId: number },
+  ) {
     try {
       const meeting = await this.meetingService.findOne(meetingId);
       if (!meeting) return;
@@ -352,17 +368,34 @@ export class MercadoPagoService {
       const consultantName = consultant?.fullName || 'Consultor';
       const pymeName = pyme?.name || 'PYME';
 
-      const startTime = meeting.startTime ? new Date(meeting.startTime) : new Date();
+      const proposedStartTimes = meeting.proposedStartTimes?.length
+        ? meeting.proposedStartTimes.map((value) => new Date(value))
+        : meeting.startTime
+          ? [new Date(meeting.startTime)]
+          : [];
       const durationMinutes = meeting.durationMinutes || 60;
       const title = meeting.title || 'Sesión de consultoría';
 
       // Disparar notificaciones en segundo plano sin esperar (fire-and-forget)
       this.consultantService
-        .sendMeetingNotification(approvedCheckout.consultantId, pymeName, title, startTime, durationMinutes)
+        .sendMeetingPendingConfirmationNotification(
+          meetingId,
+          approvedCheckout.consultantId,
+          pymeName,
+          title,
+          proposedStartTimes,
+          durationMinutes,
+        )
         .catch(() => undefined);
 
       this.pymeService
-        .sendMeetingNotification(approvedCheckout.pymeId, consultantName, title, startTime, durationMinutes)
+        .sendMeetingPendingConfirmationNotification(
+          approvedCheckout.pymeId,
+          consultantName,
+          title,
+          proposedStartTimes,
+          durationMinutes,
+        )
         .catch(() => undefined);
     } catch {
       // Catch general para evitar fallas colaterales
@@ -551,6 +584,28 @@ export class MercadoPagoService {
 
   private buildExternalReference(meetingId: number) {
     return `meeting:${meetingId}`;
+  }
+
+  private normalizeProposedStartTimes(values: string[]) {
+    const normalized = values.map((value) => {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        throw new BadRequestException(['Uno de los horarios seleccionados no es valido']);
+      }
+      return date.toISOString();
+    });
+    const uniqueValues = [...new Set(normalized)].sort();
+    if (uniqueValues.length !== 3) {
+      throw new BadRequestException(['Selecciona exactamente 3 horarios distintos']);
+    }
+    return uniqueValues;
+  }
+
+  private getCheckoutProposedStartTimes(meetingDetails: MeetingDetails) {
+    if (meetingDetails.proposedStartTimes?.length) {
+      return this.normalizeProposedStartTimes(meetingDetails.proposedStartTimes);
+    }
+    return this.normalizeProposedStartTimes([meetingDetails.startTime]);
   }
 
   private getExpiresAt(expiresIn?: number) {

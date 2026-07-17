@@ -1,4 +1,5 @@
 import { index, integer, jsonb, pgEnum, pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
+import { MeetingReminderPayload } from '@modules/admin/scheduled-notification/scheduled-notification.types';
 import { meeting } from './meeting.table';
 
 export const scheduledNotificationRecipientEnum = pgEnum('scheduled_notification_recipient', ['pyme', 'consultor']);
@@ -10,17 +11,6 @@ export const scheduledNotificationStatusEnum = pgEnum('scheduled_notification_st
   'failed',
   'cancelled',
 ]);
-
-export type MeetingReminderPayload = {
-  to: string;
-  tiempo_header: string;
-  nombre_pyme: string;
-  nombre_consultor: string;
-  titulo_sesion: string;
-  fecha_hora: string;
-  tiempo_body: string;
-  enlace: string;
-};
 
 export const scheduledNotification = pgTable(
   'scheduled_notification',
