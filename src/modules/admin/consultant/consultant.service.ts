@@ -65,7 +65,7 @@ export class ConsultantService {
     try {
       const { userId, ...rest } = data;
       const cleanData = this.clean(rest);
-      const validated = (cleanData.photoUrl && cleanData.videoUrl) ? 'true' : 'false';
+      const validated = cleanData.photoUrl && cleanData.videoUrl ? 'true' : 'false';
       return await this.consultantRepository.create({
         id: userId,
         ...cleanData,
@@ -82,8 +82,8 @@ export class ConsultantService {
       const cleanedUpdates = this.clean(data);
       const photoUrl = cleanedUpdates.photoUrl !== undefined ? cleanedUpdates.photoUrl : existing.photoUrl;
       const videoUrl = cleanedUpdates.videoUrl !== undefined ? cleanedUpdates.videoUrl : existing.videoUrl;
-      const validated = (photoUrl && videoUrl) ? 'true' : 'false';
-      
+      const validated = photoUrl && videoUrl ? 'true' : 'false';
+
       return await this.consultantRepository.update(id, {
         ...cleanedUpdates,
         validated,
@@ -222,5 +222,72 @@ export class ConsultantService {
     } catch (error) {
       // General silent catch to ensure fire-and-forget safety
     }
+  }
+
+  async sendMeetingPendingConfirmationNotification(
+    meetingId: number,
+    consultantId: number,
+    pymeName: string,
+    meetingTitle: string,
+    proposedStartTimes: Date[],
+    durationMinutes: number,
+  ) {
+    try {
+      const consultant = await this.consultantRepository.findOne(consultantId);
+      if (!consultant) return;
+
+      const user = await this.userService.findOne(consultantId);
+      const formattedOptions = proposedStartTimes.map((startTime) => this.formatProposedStartTime(startTime));
+
+      if (consultant.ownerPhone?.trim() && formattedOptions.length === 3) {
+        try {
+          await this.whatsappService.sendConsultorConfirmarReunion(consultant.ownerPhone, {
+            to: consultant.ownerPhone,
+            reunion_id: meetingId,
+            nombre_consultor: consultant.fullName,
+            nombre_pyme: pymeName,
+            tema_reunion: meetingTitle,
+            duracion_reunion: `${durationMinutes} minutos`,
+            horario_opcion_a: formattedOptions[0],
+            horario_opcion_b: formattedOptions[1],
+            horario_opcion_c: formattedOptions[2],
+          });
+        } catch {
+          // El correo se intenta aunque Meta no pueda entregar la plantilla.
+        }
+      }
+
+      if (!user?.email?.trim()) return;
+
+      const optionsText = this.formatProposedStartTimes(proposedStartTimes);
+      await this.emailService.sendEmail({
+        to: user.email,
+        subject: 'Nueva reunión pagada por confirmar - HUBSME',
+        text: `Hola ${consultant.fullName},\n\nLa PYME "${pymeName}" pagó una reunión contigo sobre "${meetingTitle}".\n\nDebes ingresar a tu calendario HUBSME y escoger uno de estos horarios propuestos:\n${optionsText}\n\nDuración: ${durationMinutes} minutos\n\nSaludos,\nEl equipo de HUBSME`,
+      });
+    } catch {
+      // General silent catch to ensure fire-and-forget safety
+    }
+  }
+
+  private formatProposedStartTimes(proposedStartTimes: Date[]) {
+    return proposedStartTimes
+      .map((startTime, index) => {
+        const dateStr = this.formatProposedStartTime(startTime);
+        return `${index + 1}. ${dateStr}`;
+      })
+      .join('\n');
+  }
+
+  private formatProposedStartTime(startTime: Date) {
+    return startTime.toLocaleString('es-PE', {
+      timeZone: 'America/Lima',
+      weekday: 'long',
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   }
 }

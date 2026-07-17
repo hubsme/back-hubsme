@@ -10,10 +10,10 @@ export class WhatsappAlertaReunionDto {
   @IsNotEmpty()
   to: string;
 
-  @ApiProperty({ example: '30 min', description: 'Tiempo para el encabezado (header)' })
+  @ApiProperty({ example: '15 minutos', description: 'Tiempo restante para el inicio de la reunión' })
   @IsString()
   @IsNotEmpty()
-  tiempo_header: string;
+  tiempo_restante: string;
 
   @ApiProperty({ example: 'Erick', description: 'Nombre de la PYME' })
   @IsString()
@@ -35,10 +35,10 @@ export class WhatsappAlertaReunionDto {
   @IsNotEmpty()
   fecha_hora: string;
 
-  @ApiProperty({ example: '60 minutos', description: 'Tiempo para el cuerpo (body)' })
+  @ApiProperty({ example: '60 minutos', description: 'Duración de la reunión' })
   @IsString()
   @IsNotEmpty()
-  tiempo_body: string;
+  tiempo: string;
 
   @ApiProperty({
     example: 'https://teams.microsoft.com/l/meetup-join/example',

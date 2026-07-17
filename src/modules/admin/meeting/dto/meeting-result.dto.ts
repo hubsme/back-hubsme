@@ -23,8 +23,11 @@ export class MeetingResultDto {
   @ApiProperty()
   title: string;
 
-  @ApiProperty()
-  startTime: Date;
+  @ApiProperty({ nullable: true })
+  startTime: Date | null;
+
+  @ApiProperty({ type: [String] })
+  proposedStartTimes: string[];
 
   @ApiProperty()
   durationMinutes: number;
@@ -35,8 +38,8 @@ export class MeetingResultDto {
   @ApiProperty({ nullable: true })
   teamsOnlineMeetingId: string | null;
 
-  @ApiProperty({ enum: ['solicitada', 'pago_pendiente', 'confirmada', 'finalizada', 'cancelada'] })
-  status: 'solicitada' | 'pago_pendiente' | 'confirmada' | 'finalizada' | 'cancelada';
+  @ApiProperty({ enum: ['solicitada', 'pago_pendiente', 'por_confirmar', 'confirmada', 'finalizada', 'cancelada'] })
+  status: 'solicitada' | 'pago_pendiente' | 'por_confirmar' | 'confirmada' | 'finalizada' | 'cancelada';
 
   @ApiProperty({ enum: ['pyme', 'consultor'] })
   requestedBy: 'pyme' | 'consultor';

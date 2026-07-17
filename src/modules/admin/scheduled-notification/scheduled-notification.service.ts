@@ -1,10 +1,11 @@
-import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
 import { Meeting } from '@db/tables/meeting.table';
-import { MeetingReminderPayload, ScheduledNotification } from '@db/tables/scheduled-notification.table';
+import { ScheduledNotification } from '@db/tables/scheduled-notification.table';
 import { ConsultantRepository } from '@repositories/consultant.repository';
 import { PymeRepository } from '@repositories/pyme.repository';
 import { ScheduledNotificationRepository } from '@repositories/scheduled-notification.repository';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import { MeetingReminderPayload } from './scheduled-notification.types';
 
 const QUEUE_REFRESH_MS = 60_000;
 const PROCESSING_STALE_MS = 5 * 60_000;
@@ -21,10 +22,15 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
     private readonly notificationRepository: ScheduledNotificationRepository,
     private readonly pymeRepository: PymeRepository,
     private readonly consultantRepository: ConsultantRepository,
+    @Inject(forwardRef(() => WhatsappService))
     private readonly whatsappService: WhatsappService,
   ) {}
 
   async onApplicationBootstrap() {
+    if (process.env.SKIP_SCHEDULED_NOTIFICATIONS_BOOTSTRAP === 'true') {
+      this.logger.warn('Cola de notificaciones omitida por configuracion de entorno');
+      return;
+    }
     await this.recoverStaleJobs();
     await this.expirePastJobs();
     await this.backfillConfirmedMeetings();
@@ -102,6 +108,69 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
     return cancelled;
   }
 
+  async sendMeetingConfirmedNotifications(meeting: Meeting) {
+    if (meeting.status !== 'confirmada' || !meeting.startTime) return;
+
+    try {
+      const [pyme, consultant] = await Promise.all([
+        this.pymeRepository.findOne(meeting.pymeId),
+        this.consultantRepository.findOne(meeting.consultantId),
+      ]);
+      if (!pyme || !consultant) {
+        this.logger.warn(`No se encontraron los participantes para notificar la reunion ${meeting.id}`);
+        return;
+      }
+
+      const dateTime = meeting.startTime.toLocaleString('es-PE', {
+        timeZone: 'America/Lima',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      const duration = `${meeting.durationMinutes} minutos`;
+      const notifications: Promise<unknown>[] = [];
+
+      if (consultant.ownerPhone?.trim()) {
+        notifications.push(
+          this.whatsappService.sendNotificacionConsultor(consultant.ownerPhone, {
+            to: consultant.ownerPhone,
+            nombre_consultor: consultant.fullName,
+            nombre_pyme: pyme.name,
+            titulo_sesion: meeting.title,
+            fecha_hora: dateTime,
+            duracion: duration,
+          }),
+        );
+      }
+
+      if (pyme.ownerPhone?.trim()) {
+        notifications.push(
+          this.whatsappService.sendNotificacionPyme(pyme.ownerPhone, {
+            to: pyme.ownerPhone,
+            nombre_pyme: pyme.ownerFirstName?.trim() || pyme.name,
+            nombre_consultor: consultant.fullName,
+            titulo_sesion: meeting.title,
+            fecha_hora: dateTime,
+            duracion: duration,
+          }),
+        );
+      }
+
+      const results = await Promise.allSettled(notifications);
+      results.forEach((result) => {
+        if (result.status === 'rejected') {
+          const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
+          this.logger.error(`No se pudo enviar una notificacion de confirmacion de la reunion ${meeting.id}: ${message}`);
+        }
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`No se pudieron preparar las notificaciones de confirmacion de la reunion ${meeting.id}: ${message}`);
+    }
+  }
+
   private async wake() {
     if (this.processing) return;
 
@@ -161,7 +230,6 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
 
     return this.whatsappService.sendAlertaReunionConsultor(payload.to, {
       ...payload,
-      link_reunion: payload.enlace,
     });
   }
 
@@ -210,7 +278,7 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
   private buildPayload(meeting: Meeting, pymeName: string, consultantName: string): Omit<MeetingReminderPayload, 'to'> {
     const minutesBefore = this.getPositiveInteger('MEETING_REMINDER_MINUTES_BEFORE', 15);
     return {
-      tiempo_header: `${minutesBefore} min`,
+      tiempo_restante: `${minutesBefore} minutos`,
       nombre_pyme: pymeName,
       nombre_consultor: consultantName,
       titulo_sesion: meeting.title,
@@ -219,7 +287,7 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
         timeStyle: 'short',
         timeZone: 'America/Lima',
       }),
-      tiempo_body: `${minutesBefore} minutos`,
+      tiempo: `${meeting.durationMinutes} minutos`,
       enlace: meeting.meetingUrl ?? '',
     };
   }

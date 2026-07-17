@@ -1,6 +1,17 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsDate, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsDate,
+  IsIn,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 
 export class MeetingCreateDto {
   @ApiProperty({ example: 2 })
@@ -18,10 +29,22 @@ export class MeetingCreateDto {
   @IsNotEmpty()
   title: string;
 
-  @ApiProperty({ example: '2026-05-10T15:00:00.000Z' })
+  @ApiPropertyOptional({ example: '2026-05-10T15:00:00.000Z' })
   @Type(() => Date)
   @IsDate()
-  startTime: Date;
+  @IsOptional()
+  startTime?: Date;
+
+  @ApiPropertyOptional({
+    type: [String],
+    example: ['2026-05-10T15:00:00.000Z', '2026-05-10T16:00:00.000Z', '2026-05-11T15:00:00.000Z'],
+  })
+  @IsArray()
+  @ArrayMinSize(3)
+  @ArrayMaxSize(3)
+  @IsString({ each: true })
+  @IsOptional()
+  proposedStartTimes?: string[];
 
   @ApiPropertyOptional({ example: 60 })
   @Type(() => Number)

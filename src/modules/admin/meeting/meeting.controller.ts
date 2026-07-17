@@ -3,6 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@ne
 import { HttpErrorDto } from '@core/dto/http-error.dto';
 import { JwtAuthGuard } from '@modules/auth/jwt-auth.guard';
 import { MeetingCreateDto } from './dto/meeting-create.dto';
+import { MeetingConfirmOptionDto } from './dto/meeting-confirm-option.dto';
 import { MeetingFinalizeDto } from './dto/meeting-finalize.dto';
 import { MeetingListDto, MeetingListFiltersDto } from './dto/meeting-list.dto';
 import { MeetingRecordingDto } from './dto/meeting-recording.dto';
@@ -52,7 +53,14 @@ export class MeetingController {
     return this.meetingService.confirm(+id);
   }
 
-
+  @Post('confirm-option/:id')
+  @ApiOperation({ summary: 'Confirm one of the proposed meeting times and create its Teams meeting URL internally' })
+  @ApiParam({ name: 'id', type: 'number' })
+  @ApiResponse({ status: 200, type: MeetingResultDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  confirmOption(@Param('id') id: string, @Body() confirmOptionDto: MeetingConfirmOptionDto) {
+    return this.meetingService.confirmProposedOption(+id, confirmOptionDto);
+  }
 
   @Get('recordings/:id')
   @ApiOperation({ summary: 'List Microsoft Graph recordings for a meeting' })

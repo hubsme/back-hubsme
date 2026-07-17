@@ -4,6 +4,7 @@ import { config } from 'dotenv';
 import { setupSwagger } from '@core/swagger.core';
 import { setupTransformer } from '@core/transformer.core';
 import { json, urlencoded } from 'express';
+import type { WhatsappWebhookRequest } from '@modules/admin/whatsapp/types/whatsapp-webhook.types';
 
 config();
 
@@ -12,7 +13,14 @@ async function bootstrap() {
     bodyParser: false,
   });
 
-  app.use(json({ limit: '50mb' }));
+  app.use(
+    json({
+      limit: '50mb',
+      verify: (request, _response, buffer) => {
+        (request as WhatsappWebhookRequest).rawBody = Buffer.from(buffer);
+      },
+    }),
+  );
   app.use(urlencoded({ limit: '50mb', extended: true }));
 
   setupTransformer(app);

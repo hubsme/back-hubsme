@@ -153,4 +153,43 @@ export class PymeService {
       // General silent catch to ensure fire-and-forget safety
     }
   }
+
+  async sendMeetingPendingConfirmationNotification(
+    pymeId: number,
+    consultantName: string,
+    meetingTitle: string,
+    proposedStartTimes: Date[],
+    durationMinutes: number,
+  ) {
+    try {
+      const pyme = await this.pymeRepository.findOne(pymeId);
+      if (!pyme?.ownerEmail?.trim()) return;
+
+      const optionsText = this.formatProposedStartTimes(proposedStartTimes);
+      await this.emailService.sendEmail({
+        to: pyme.ownerEmail,
+        subject: 'Tu reunión fue pagada y está por confirmación - HUBSME',
+        text: `Hola ${pyme.ownerFirstName || pyme.name},\n\nRecibimos el pago de tu reunión "${meetingTitle}" con ${consultantName}.\n\nEl consultor debe escoger uno de estos horarios propuestos:\n${optionsText}\n\nDuración: ${durationMinutes} minutos\n\nPodrás ver la reunión en tu calendario con estado "Por confirmación".\n\nSaludos,\nEl equipo de HUBSME`,
+      });
+    } catch {
+      // General silent catch to ensure fire-and-forget safety
+    }
+  }
+
+  private formatProposedStartTimes(proposedStartTimes: Date[]) {
+    return proposedStartTimes
+      .map((startTime, index) => {
+        const dateStr = startTime.toLocaleString('es-PE', {
+          timeZone: 'America/Lima',
+          weekday: 'long',
+          day: '2-digit',
+          month: 'long',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        });
+        return `${index + 1}. ${dateStr}`;
+      })
+      .join('\n');
+  }
 }
