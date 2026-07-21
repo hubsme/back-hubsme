@@ -163,8 +163,4 @@ export class ConsultantCreateDto {
   @IsOptional()
   active?: string;
 
-  @ApiPropertyOptional({ enum: ['true', 'false'], default: 'false' })
-  @IsIn(['true', 'false'])
-  @IsOptional()
-  validated?: string;
 }

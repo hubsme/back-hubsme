@@ -9,6 +9,7 @@ import { ConsultantListDto, ConsultantListFiltersDto } from './dto/consultant-li
 import { ConsultantMeetingPymesFiltersDto } from './dto/consultant-meeting-pymes.dto';
 import { ConsultantResultDto } from './dto/consultant-result.dto';
 import { ConsultantUpdateDto } from './dto/consultant-update.dto';
+import { ConsultantActiveDto } from './dto/consultant-active.dto';
 import { ConsultantService } from './consultant.service';
 
 type AuthenticatedRequest = { user: User };
@@ -25,7 +26,7 @@ export class ConsultantController {
   @ApiResponse({ status: 200, type: ConsultantListDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
   findAll(@Query() filters: ConsultantListFiltersDto) {
-    return this.consultantService.findAllPaginated(filters);
+    return this.consultantService.findAllPaginated(filters, true);
   }
 
   @Get('meeting-pymes')
@@ -69,6 +70,19 @@ export class ConsultantController {
   @ApiResponse({ status: 400, type: HttpErrorDto })
   update(@Param('id') id: string, @Body() updateConsultantDto: ConsultantUpdateDto) {
     return this.consultantService.update(+id, updateConsultantDto);
+  }
+
+  @Patch('active/:id')
+  @ApiOperation({ summary: 'Update consultant availability' })
+  @ApiParam({ name: 'id', type: 'number' })
+  @ApiResponse({ status: 200, type: ConsultantResultDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  setActive(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() data: ConsultantActiveDto,
+  ) {
+    return this.consultantService.setActive(+id, data, req.user.id);
   }
 
   @Delete('delete/:id')

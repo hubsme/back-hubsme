@@ -117,6 +117,9 @@ export class ConsultantListItemDto {
   @ApiProperty({ enum: ['true', 'false'] })
   active: string;
 
+  @ApiProperty({ enum: ['true', 'false'] })
+  validated: string;
+
   @ApiProperty()
   createdAt: Date;
 }

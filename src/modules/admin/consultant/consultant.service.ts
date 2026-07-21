@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConsultantRepository } from '@repositories/consultant.repository';
 import { PymeRepository } from '@repositories/pyme.repository';
 import { handleDbError } from '@functions/db-error.function';
@@ -6,6 +6,8 @@ import { ConsultantCreateDto } from './dto/consultant-create.dto';
 import { ConsultantListFiltersDto } from './dto/consultant-list.dto';
 import { ConsultantMeetingPymesFiltersDto } from './dto/consultant-meeting-pymes.dto';
 import { ConsultantUpdateDto } from './dto/consultant-update.dto';
+import { ConsultantApprovalDto } from './dto/consultant-approval.dto';
+import { ConsultantActiveDto } from './dto/consultant-active.dto';
 import { ConsultantDTO } from '@db/tables/consultant.table';
 import { ConsultantCaseStudyDto, ConsultantEducationDto } from './dto/consultant-profile-fields.dto';
 import { UserService } from '../user/user.service';
@@ -23,10 +25,13 @@ export class ConsultantService {
     private readonly emailService: EmailService,
   ) {}
 
-  async findAllPaginated(filters: ConsultantListFiltersDto) {
+  async findAllPaginated(filters: ConsultantListFiltersDto, onlyAvailable = false) {
     const page = filters.page ?? 1;
     const limit = filters.limit ?? 10;
-    const { data, total } = await this.consultantRepository.findAllPaginated(page, limit, filters);
+    const listFilters = onlyAvailable
+      ? { ...filters, active: 'true', validated: 'true' as const }
+      : filters;
+    const { data, total } = await this.consultantRepository.findAllPaginated(page, limit, listFilters);
     const totalPages = Math.ceil(total / limit);
 
     return {
@@ -64,11 +69,10 @@ export class ConsultantService {
     try {
       const { userId, ...rest } = data;
       const cleanData = this.clean(rest);
-      const validated = cleanData.photoUrl && cleanData.videoUrl ? 'true' : 'false';
       return await this.consultantRepository.create({
         id: userId,
         ...cleanData,
-        validated,
+        validated: 'false',
       } as ConsultantDTO);
     } catch (error) {
       handleDbError(error);
@@ -76,17 +80,10 @@ export class ConsultantService {
   }
 
   async update(id: number, data: ConsultantUpdateDto) {
-    const existing = await this.findOne(id);
+    await this.findOne(id);
     try {
       const cleanedUpdates = this.clean(data);
-      const photoUrl = cleanedUpdates.photoUrl !== undefined ? cleanedUpdates.photoUrl : existing.photoUrl;
-      const videoUrl = cleanedUpdates.videoUrl !== undefined ? cleanedUpdates.videoUrl : existing.videoUrl;
-      const validated = photoUrl && videoUrl ? 'true' : 'false';
-
-      return await this.consultantRepository.update(id, {
-        ...cleanedUpdates,
-        validated,
-      });
+      return await this.consultantRepository.update(id, cleanedUpdates);
     } catch (error) {
       handleDbError(error);
     }
@@ -95,6 +92,22 @@ export class ConsultantService {
   async delete(id: number) {
     await this.findOne(id);
     return this.consultantRepository.delete(id);
+  }
+
+  async setValidation(id: number, data: ConsultantApprovalDto) {
+    await this.findOne(id);
+    await this.consultantRepository.update(id, { validated: data.validated });
+    return this.findOne(id);
+  }
+
+  async setActive(id: number, data: ConsultantActiveDto, requesterId?: number) {
+    if (requesterId !== undefined && requesterId !== id) {
+      throw new ForbiddenException('No puedes cambiar la disponibilidad de otro consultor');
+    }
+
+    await this.findOne(id);
+    await this.consultantRepository.update(id, { active: data.active });
+    return this.findOne(id);
   }
 
   private clean<T extends Partial<ConsultantCreateDto>>(data: T): Partial<ConsultantDTO> {
