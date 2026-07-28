@@ -21,6 +21,25 @@ export class ConsultantMercadoPagoAccountRepository {
     return result[0];
   }
 
+  async findConnectionDetailsByConsultantId(consultantId: number) {
+    const result = await database
+      .select({
+        mercadoPagoUserId: consultantMercadoPagoAccount.mercadoPagoUserId,
+        nickname: consultantMercadoPagoAccount.nickname,
+        email: consultantMercadoPagoAccount.email,
+        connectedAt: consultantMercadoPagoAccount.connectedAt,
+        lastUpdatedAt: consultantMercadoPagoAccount.updatedAt,
+      })
+      .from(consultantMercadoPagoAccount)
+      .where(
+        and(
+          eq(consultantMercadoPagoAccount.consultantId, consultantId),
+          isNull(consultantMercadoPagoAccount.deletedAt),
+        ),
+      );
+    return result[0];
+  }
+
   async upsertByConsultantId(consultantId: number, data: ConsultantMercadoPagoAccountDTO) {
     const current = await this.findByConsultantId(consultantId);
     if (current) {

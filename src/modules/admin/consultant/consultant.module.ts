@@ -8,11 +8,12 @@ import { UserModule } from '../user/user.module';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { EmailModule } from '../email/email.module';
 import { ConsultantAdminController } from './consultant-admin.controller';
+import { ConsultantMercadoPagoAccountRepository } from '@repositories/consultant-mercado-pago-account.repository';
 
 @Module({
   imports: [AdminAuthModule, UserModule, WhatsappModule, EmailModule],
   controllers: [ConsultantAdminController, ConsultantController],
-  providers: [ConsultantService, ConsultantRepository, PymeRepository],
+  providers: [ConsultantService, ConsultantRepository, PymeRepository, ConsultantMercadoPagoAccountRepository],
   exports: [ConsultantService],
 })
 export class ConsultantModule {}

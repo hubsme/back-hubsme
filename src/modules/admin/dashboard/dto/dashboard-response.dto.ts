@@ -17,6 +17,23 @@ export class DashboardStatsDto {
   billableHours: number;
 }
 
+export class DashboardMeetingStatsDto {
+  @ApiProperty()
+  total: number;
+
+  @ApiProperty()
+  confirmed: number;
+
+  @ApiProperty()
+  requested: number;
+
+  @ApiProperty()
+  pending: number;
+
+  @ApiProperty({ description: 'Reuniones finalizadas con acta registrada' })
+  completed: number;
+}
+
 export class DashboardTaskStatusDto {
   @ApiProperty()
   pendiente: number;
@@ -76,6 +93,9 @@ export class DashboardAlertDto {
 export class DashboardResponseDto {
   @ApiProperty({ type: DashboardStatsDto })
   stats: DashboardStatsDto;
+
+  @ApiProperty({ type: DashboardMeetingStatsDto })
+  meetingStats: DashboardMeetingStatsDto;
 
   @ApiProperty({ type: DashboardTaskStatusDto })
   taskStatus: DashboardTaskStatusDto;

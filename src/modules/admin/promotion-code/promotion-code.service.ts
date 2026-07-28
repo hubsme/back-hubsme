@@ -197,6 +197,7 @@ export class PromotionCodeService {
           meeting.title,
           (meeting.proposedStartTimes ?? []).map((value) => new Date(value)),
           meeting.durationMinutes,
+          meeting.description,
         ),
         this.pymeService.sendMeetingPendingConfirmationNotification(
           meeting.pymeId,
@@ -204,6 +205,7 @@ export class PromotionCodeService {
           meeting.title,
           (meeting.proposedStartTimes ?? []).map((value) => new Date(value)),
           meeting.durationMinutes,
+          meeting.description,
         ),
       ]);
     } catch (error: unknown) {

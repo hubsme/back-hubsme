@@ -7,6 +7,7 @@ import { ConsultantResultDto } from './dto/consultant-result.dto';
 import { ConsultantApprovalDto } from './dto/consultant-approval.dto';
 import { ConsultantActiveDto } from './dto/consultant-active.dto';
 import { ConsultantService } from './consultant.service';
+import { ConsultantMercadoPagoAdminDto } from './dto/consultant-mercado-pago.dto';
 
 @ApiTags('consultantAdmin')
 @ApiBearerAuth()
@@ -30,6 +31,15 @@ export class ConsultantAdminController {
   @ApiResponse({ status: 400, type: HttpErrorDto })
   findOne(@Param('id') id: string) {
     return this.consultantService.findOne(+id);
+  }
+
+  @Get('mercado-pago/:id')
+  @ApiOperation({ summary: 'Get a consultant Mercado Pago connection for the internal admin panel' })
+  @ApiParam({ name: 'id', type: 'number' })
+  @ApiResponse({ status: 200, type: ConsultantMercadoPagoAdminDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  mercadoPago(@Param('id') id: string) {
+    return this.consultantService.findMercadoPagoDetails(+id);
   }
 
   @Patch('approve/:id')

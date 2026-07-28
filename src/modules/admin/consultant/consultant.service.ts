@@ -14,6 +14,7 @@ import { UserService } from '../user/user.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { EmailService } from '../email/email.service';
 import { ConsultantDiagnosticArea } from '@core/consultant-diagnostic-area';
+import { ConsultantMercadoPagoAccountRepository } from '@repositories/consultant-mercado-pago-account.repository';
 
 @Injectable()
 export class ConsultantService {
@@ -23,6 +24,7 @@ export class ConsultantService {
     private readonly userService: UserService,
     private readonly whatsappService: WhatsappService,
     private readonly emailService: EmailService,
+    private readonly mercadoPagoAccountRepository: ConsultantMercadoPagoAccountRepository,
   ) {}
 
   async findAllPaginated(filters: ConsultantListFiltersDto, onlyAvailable = false) {
@@ -44,6 +46,20 @@ export class ConsultantService {
     const consultant = await this.consultantRepository.findOne(id);
     if (!consultant) throw new NotFoundException(`Consultant with ID ${id} not found`);
     return consultant;
+  }
+
+  async findMercadoPagoDetails(id: number) {
+    await this.findOne(id);
+    const account = await this.mercadoPagoAccountRepository.findConnectionDetailsByConsultantId(id);
+
+    return {
+      connected: Boolean(account),
+      mercadoPagoUserId: account?.mercadoPagoUserId ?? null,
+      nickname: account?.nickname ?? null,
+      email: account?.email ?? null,
+      connectedAt: account?.connectedAt ?? null,
+      lastUpdatedAt: account?.lastUpdatedAt ?? null,
+    };
   }
 
   async findByUserId(userId: number) {
@@ -184,6 +200,7 @@ export class ConsultantService {
     meetingTitle: string,
     startTime: Date,
     durationMinutes: number,
+    sessionNotes?: string | null,
   ) {
     try {
       const consultant = await this.consultantRepository.findOne(consultantId);
@@ -227,6 +244,7 @@ export class ConsultantService {
             meetingTitle,
             dateTime: dateStr,
             duration: `${durationMinutes} minutos`,
+            sessionNotes,
             recipientType: 'consultor',
           });
         } catch (error) {
@@ -245,6 +263,7 @@ export class ConsultantService {
     meetingTitle: string,
     proposedStartTimes: Date[],
     durationMinutes: number,
+    sessionNotes?: string | null,
   ) {
     try {
       const consultant = await this.consultantRepository.findOne(consultantId);
@@ -280,6 +299,7 @@ export class ConsultantService {
         meetingTitle,
         proposedStartTimes: proposedStartTimes.map((startTime) => this.formatProposedStartTime(startTime)),
         duration: `${durationMinutes} minutos`,
+        sessionNotes,
         recipientType: 'consultor',
       });
     } catch {

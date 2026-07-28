@@ -8,10 +8,13 @@ import { pyme } from '@db/tables/pyme.table';
 import { pymeConsultantMatch } from '@db/tables/pyme-consultant-match.table';
 import { task } from '@db/tables/task.table';
 import { user } from '@db/tables/user.table';
+import { DashboardRepository } from '@repositories/dashboard.repository';
 import { DashboardFilterDto } from './dto/dashboard-filter.dto';
 
 @Injectable()
 export class DashboardService {
+  constructor(private readonly dashboardRepository: DashboardRepository) {}
+
   async summary(filters: DashboardFilterDto) {
     const role = filters.role ?? 'admin';
     const userId = filters.userId;
@@ -58,6 +61,7 @@ export class DashboardService {
       billableMeetingRows,
       matchRows,
       alertRows,
+      meetingStats,
     ] = await Promise.all([
       database
         .select({ total: count() })
@@ -75,12 +79,7 @@ export class DashboardService {
         .select({ pymeId: task.pymeId, status: task.status })
         .from(task)
         .where(and(...taskConditions)),
-      database
-        .select({ id: meeting.id, title: meeting.title, startTime: meeting.startTime, status: meeting.status })
-        .from(meeting)
-        .where(and(...meetingConditions, gte(meeting.startTime, new Date())))
-        .orderBy(meeting.startTime)
-        .limit(5),
+      this.dashboardRepository.findUpcomingConfirmed({ userId, role }, now),
       database
         .select({ durationMinutes: meeting.durationMinutes })
         .from(meeting)
@@ -100,6 +99,7 @@ export class DashboardService {
         .where(and(...alertConditions))
         .orderBy(desc(dashboardAlert.createdAt))
         .limit(5),
+      this.dashboardRepository.getMeetingStats({ userId, role }),
     ]);
 
     const taskStatus = taskRows.reduce(
@@ -155,6 +155,7 @@ export class DashboardService {
         diagnostics: Number(diagnosticCount[0].total),
         billableHours,
       },
+      meetingStats,
       taskStatus,
       upcomingMeetings: upcomingRows,
       workloadByClient: Object.values(workloadByClient),

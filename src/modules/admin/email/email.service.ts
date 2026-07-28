@@ -13,6 +13,21 @@ type MeetingConfirmedEmail = {
   dateTime: string;
   duration: string;
   meetingUrl?: string | null;
+  reminderTime?: string;
+  sessionNotes?: string | null;
+  recipientType: 'pyme' | 'consultor';
+};
+
+type MeetingReminderEmail = {
+  to: string;
+  recipientName: string;
+  counterpartName: string;
+  meetingTitle: string;
+  dateTime: string;
+  duration: string;
+  meetingUrl?: string | null;
+  reminderTime: string;
+  sessionNotes?: string | null;
   recipientType: 'pyme' | 'consultor';
 };
 
@@ -23,6 +38,7 @@ type MeetingPendingEmail = {
   meetingTitle: string;
   proposedStartTimes: string[];
   duration: string;
+  sessionNotes?: string | null;
   recipientType: 'pyme' | 'consultor';
 };
 
@@ -86,16 +102,14 @@ export class EmailService {
 
   sendMeetingConfirmedEmail(data: MeetingConfirmedEmail) {
     const isPyme = data.recipientType === 'pyme';
-    const subject = isPyme
-      ? 'Tu reunión ya fue confirmada - HUBSME'
-      : 'Nueva reunión confirmada en tu agenda - HUBSME';
+    const reminderTime = data.reminderTime?.trim() || '15 minutos';
+    const sessionNotes = data.sessionNotes?.trim();
+    const subject = isPyme ? 'Tu reunión ya fue confirmada - HUBSME' : 'Nueva reunión confirmada en tu agenda - HUBSME';
     const intro = isPyme
       ? `Tu sesión con ${data.counterpartName} ya tiene horario confirmado.`
       : `La reunión con ${data.counterpartName} ya quedó confirmada en tu agenda.`;
     const eyebrow = isPyme ? 'Reunión confirmada' : 'Agenda actualizada';
-    const nextStep = isPyme
-      ? 'Te recomendamos ingresar unos minutos antes y tener listo el tema que quieres revisar.'
-      : 'Recuerda prepararte unos minutos antes para recibir a la PYME y revisar el contexto de la sesión.';
+    const nextStep = `Te enviaremos un recordatorio ${reminderTime} antes de que empiece la reunión.`;
     const cta = data.meetingUrl
       ? `<a href="${this.escapeAttribute(data.meetingUrl)}" style="${this.buttonStyle()}">Abrir reunión</a>`
       : '';
@@ -112,6 +126,8 @@ export class EmailService {
         `Fecha y hora: ${data.dateTime}`,
         `Duración: ${data.duration}`,
         data.meetingUrl ? `Enlace: ${data.meetingUrl}` : undefined,
+        sessionNotes ? '' : undefined,
+        sessionNotes ? `Notas de la sesión:\n${sessionNotes}` : undefined,
         '',
         nextStep,
         '',
@@ -130,7 +146,60 @@ export class EmailService {
           { label: 'Fecha y hora', value: data.dateTime },
           { label: 'Duración', value: data.duration },
         ],
+        sessionNotes,
         note: nextStep,
+        cta,
+      }),
+    });
+  }
+
+  sendMeetingReminderEmail(data: MeetingReminderEmail) {
+    const isPyme = data.recipientType === 'pyme';
+    const sessionNotes = data.sessionNotes?.trim();
+    const subject = `Tu reunión empieza en ${data.reminderTime} - HUBSME`;
+    const intro = isPyme
+      ? `Tu sesión con ${data.counterpartName} comenzará pronto.`
+      : `La reunión con ${data.counterpartName} comenzará pronto.`;
+    const note =
+      'Ingresa desde el botón cuando estés listo. El enlace también está disponible en tu calendario de HUBSME.';
+    const cta = data.meetingUrl
+      ? `<a href="${this.escapeAttribute(data.meetingUrl)}" style="${this.buttonStyle()}">Ingresar a la reunión</a>`
+      : '';
+
+    return this.sendEmail({
+      to: data.to,
+      subject,
+      text: [
+        `Hola ${data.recipientName},`,
+        '',
+        intro,
+        '',
+        `Tema: ${data.meetingTitle}`,
+        `Fecha y hora: ${data.dateTime}`,
+        `Duración: ${data.duration}`,
+        data.meetingUrl ? `Enlace: ${data.meetingUrl}` : undefined,
+        sessionNotes ? '' : undefined,
+        sessionNotes ? `Notas de la sesión:\n${sessionNotes}` : undefined,
+        '',
+        note,
+        '',
+        'El equipo de HUBSME',
+      ]
+        .filter((line): line is string => line !== undefined)
+        .join('\n'),
+      html: this.buildMeetingEmail({
+        eyebrow: 'Recordatorio de reunión',
+        title: `Tu reunión comienza en ${data.reminderTime}`,
+        greeting: `Hola ${this.escapeHtml(data.recipientName)},`,
+        intro: this.escapeHtml(intro),
+        details: [
+          { label: 'Tema', value: data.meetingTitle },
+          { label: isPyme ? 'Consultor' : 'PYME', value: data.counterpartName },
+          { label: 'Fecha y hora', value: data.dateTime },
+          { label: 'Duración', value: data.duration },
+        ],
+        sessionNotes,
+        note,
         cta,
       }),
     });
@@ -138,6 +207,7 @@ export class EmailService {
 
   sendMeetingPendingConfirmationEmail(data: MeetingPendingEmail) {
     const isPyme = data.recipientType === 'pyme';
+    const sessionNotes = data.sessionNotes?.trim();
     const subject = isPyme
       ? 'Tu reunión está pendiente de confirmación - HUBSME'
       : 'Tienes una reunión por confirmar - HUBSME';
@@ -158,6 +228,8 @@ export class EmailService {
         '',
         `Tema: ${data.meetingTitle}`,
         `Duración: ${data.duration}`,
+        sessionNotes ? '' : undefined,
+        sessionNotes ? `Notas de la sesión:\n${sessionNotes}` : undefined,
         '',
         'Horarios propuestos:',
         ...data.proposedStartTimes.map((value, index) => `${index + 1}. ${value}`),
@@ -177,6 +249,7 @@ export class EmailService {
           { label: 'Duración', value: data.duration },
         ],
         options: data.proposedStartTimes,
+        sessionNotes,
         note,
       }),
     });
@@ -189,6 +262,7 @@ export class EmailService {
     intro: string;
     details: Array<{ label: string; value: string }>;
     options?: string[];
+    sessionNotes?: string;
     note: string;
     cta?: string;
   }) {
@@ -219,6 +293,13 @@ export class EmailService {
             .join('')}
         </div>`
       : '';
+    const sessionNotes = data.sessionNotes?.trim()
+      ? `
+        <div style="margin-top:26px;padding:18px 22px;border:1px solid #dbe3ef;border-radius:14px;background:#fbfdff;">
+          <p style="margin:0 0 9px;color:#435775;font-size:15px;font-weight:800;">Notas de la sesión</p>
+          <p style="margin:0;color:#0b1328;font-size:16px;line-height:1.6;">${this.escapeHtml(data.sessionNotes.trim()).replace(/\r?\n/g, '<br>')}</p>
+        </div>`
+      : '';
 
     return `
       <div style="margin:0;padding:0;background:#edf5ff;font-family:Arial,Helvetica,sans-serif;color:#0b1328;">
@@ -246,6 +327,7 @@ export class EmailService {
                       ${details}
                     </table>
                     ${options}
+                    ${sessionNotes}
                     <div style="margin-top:30px;padding:18px 22px;border-radius:14px;background:#eef6ff;color:#253a5b;font-size:16px;line-height:1.55;">
                       <span style="display:inline-block;width:24px;height:24px;border-radius:999px;border:2px solid #0b6ee8;color:#0b6ee8;font-size:16px;font-weight:900;line-height:21px;text-align:center;margin-right:10px;">i</span>
                       <span>${this.escapeHtml(data.note)}</span>
