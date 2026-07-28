@@ -5,11 +5,13 @@ import { TaskRepository } from '@repositories/task.repository';
 import { MeetingCreateDto } from './dto/meeting-create.dto';
 import { MeetingConfirmOptionDto } from './dto/meeting-confirm-option.dto';
 import { MeetingFinalizeDto } from './dto/meeting-finalize.dto';
+import { MeetingCalendarFiltersDto } from './dto/meeting-calendar.dto';
 import { MeetingListFiltersDto } from './dto/meeting-list.dto';
 import { MeetingUpdateDto } from './dto/meeting-update.dto';
 import { TeamsMeetingService } from './teams-meeting.service';
 import { ConsultantAvailabilityService } from '../consultant-availability/consultant-availability.service';
 import { ScheduledNotificationService } from '../scheduled-notification/scheduled-notification.service';
+import { User } from '@db/tables/user.table';
 
 @Injectable()
 export class MeetingService {
@@ -23,6 +25,42 @@ export class MeetingService {
     @Inject(forwardRef(() => ScheduledNotificationService))
     private readonly scheduledNotificationService: ScheduledNotificationService,
   ) {}
+
+  async findCalendarPaginated(filters: MeetingCalendarFiltersDto, requester: Pick<User, 'id' | 'role'>) {
+    const startDate = new Date(filters.startDate);
+    const endDate = new Date(filters.endDate);
+    const rangeMilliseconds = endDate.getTime() - startDate.getTime();
+    const maximumRangeMilliseconds = 62 * 24 * 60 * 60 * 1000;
+
+    if (rangeMilliseconds <= 0) {
+      throw new BadRequestException(['La fecha final debe ser posterior a la fecha inicial']);
+    }
+    if (rangeMilliseconds > maximumRangeMilliseconds) {
+      throw new BadRequestException(['El rango del calendario no puede superar 62 dias']);
+    }
+
+    const page = filters.page ?? 1;
+    const limit = Math.min(filters.limit ?? 50, 100);
+    const { data, total } = await this.meetingRepository.findCalendarPaginated(
+      page,
+      limit,
+      { startDate, endDate },
+      requester,
+    );
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      data,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
+      },
+    };
+  }
 
   async findAllPaginated(filters: MeetingListFiltersDto) {
     const page = filters.page ?? 1;
