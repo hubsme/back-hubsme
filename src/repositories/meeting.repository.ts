@@ -1,11 +1,72 @@
 import { Injectable } from '@nestjs/common';
-import { eq, ilike, and, isNull, count, desc, sql } from 'drizzle-orm';
+import { eq, ilike, and, isNull, count, desc, sql, asc, gte, lt } from 'drizzle-orm';
 import { database } from '@db/connection.db';
 import { meeting, MeetingDTO, meetingStatusEnum } from '@db/tables/meeting.table';
 import { task } from '@db/tables/task.table';
+import { consultant } from '@db/tables/consultant.table';
+import { pyme } from '@db/tables/pyme.table';
+import { User } from '@db/tables/user.table';
 
 @Injectable()
 export class MeetingRepository {
+  async findCalendarPaginated(
+    page: number,
+    limit: number,
+    range: { startDate: Date; endDate: Date },
+    requester: Pick<User, 'id' | 'role'>,
+  ) {
+    const offset = (page - 1) * limit;
+    const calendarStart = sql<Date>`
+      COALESCE(
+        ${meeting.startTime},
+        NULLIF(${meeting.proposedStartTimes}[1], '')::timestamp,
+        ${meeting.createdAt}
+      )
+    `;
+    const conditions = [
+      isNull(meeting.deletedAt),
+      gte(calendarStart, range.startDate),
+      lt(calendarStart, range.endDate),
+    ];
+
+    if (requester.role === 'pyme') {
+      conditions.push(eq(meeting.pymeId, requester.id));
+    } else if (requester.role === 'consultor') {
+      conditions.push(eq(meeting.consultantId, requester.id));
+    }
+
+    const whereClause = and(...conditions);
+    const baseQuery = database
+      .select({
+        id: meeting.id,
+        createdAt: meeting.createdAt,
+        pymeId: meeting.pymeId,
+        pymeName: sql<string>`COALESCE(${pyme.name}, 'PYME')`,
+        consultantId: meeting.consultantId,
+        consultantName: sql<string>`COALESCE(${consultant.fullName}, 'Consultor')`,
+        consultantPhotoUrl: consultant.photoUrl,
+        consultantPricePerHour: sql<string>`COALESCE(${consultant.pricePerHour}, '0.00')`,
+        title: meeting.title,
+        startTime: meeting.startTime,
+        proposedStartTimes: meeting.proposedStartTimes,
+        durationMinutes: meeting.durationMinutes,
+        meetingUrl: meeting.meetingUrl,
+        status: meeting.status,
+        requestedBy: meeting.requestedBy,
+        description: meeting.description,
+        completedAt: meeting.completedAt,
+      })
+      .from(meeting)
+      .leftJoin(consultant, eq(consultant.id, meeting.consultantId))
+      .leftJoin(pyme, eq(pyme.id, meeting.pymeId))
+      .where(whereClause);
+
+    const [{ total }] = await database.select({ total: count() }).from(meeting).where(whereClause);
+    const data = await baseQuery.orderBy(asc(calendarStart), asc(meeting.id)).limit(limit).offset(offset);
+
+    return { data, total: Number(total) };
+  }
+
   async findAllPaginated(
     page: number = 1,
     limit: number = 10,
@@ -55,7 +116,7 @@ export class MeetingRepository {
       .select()
       .from(meeting)
       .where(and(eq(meeting.id, id), isNull(meeting.deletedAt)));
-    
+
     if (!meetingResult[0]) return null;
 
     const tasks = await database

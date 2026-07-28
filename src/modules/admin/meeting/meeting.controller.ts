@@ -1,7 +1,9 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { HttpErrorDto } from '@core/dto/http-error.dto';
+import { User } from '@db/tables/user.table';
 import { JwtAuthGuard } from '@modules/auth/jwt-auth.guard';
+import { MeetingCalendarFiltersDto, MeetingCalendarListDto } from './dto/meeting-calendar.dto';
 import { MeetingCreateDto } from './dto/meeting-create.dto';
 import { MeetingConfirmOptionDto } from './dto/meeting-confirm-option.dto';
 import { MeetingFinalizeDto } from './dto/meeting-finalize.dto';
@@ -12,12 +14,22 @@ import { MeetingUpdateDto } from './dto/meeting-update.dto';
 import { MeetingCopilotSummaryDto } from './dto/meeting-copilot-summary.dto';
 import { MeetingService } from './meeting.service';
 
+type AuthenticatedRequest = { user: User };
+
 @ApiTags('meeting')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('admin/meeting')
 export class MeetingController {
   constructor(private readonly meetingService: MeetingService) {}
+
+  @Get('calendar')
+  @ApiOperation({ summary: 'Get lightweight calendar meetings for the authenticated user and date range' })
+  @ApiResponse({ status: 200, type: MeetingCalendarListDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  calendar(@Request() request: AuthenticatedRequest, @Query() filters: MeetingCalendarFiltersDto) {
+    return this.meetingService.findCalendarPaginated(filters, request.user);
+  }
 
   @Get('find-all')
   @ApiOperation({ summary: 'Get all meetings paginated' })
