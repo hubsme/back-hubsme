@@ -385,6 +385,7 @@ export class MercadoPagoService {
           title,
           proposedStartTimes,
           durationMinutes,
+          meeting.description,
         )
         .catch(() => undefined);
 
@@ -395,6 +396,7 @@ export class MercadoPagoService {
           title,
           proposedStartTimes,
           durationMinutes,
+          meeting.description,
         )
         .catch(() => undefined);
     } catch {

@@ -104,6 +104,7 @@ export class PymeService {
     meetingTitle: string,
     startTime: Date,
     durationMinutes: number,
+    sessionNotes?: string | null,
   ) {
     try {
       const pyme = await this.pymeRepository.findOne(pymeId);
@@ -144,6 +145,7 @@ export class PymeService {
             meetingTitle,
             dateTime: dateStr,
             duration: `${durationMinutes} minutos`,
+            sessionNotes,
             recipientType: 'pyme',
           });
         } catch (error) {
@@ -161,6 +163,7 @@ export class PymeService {
     meetingTitle: string,
     proposedStartTimes: Date[],
     durationMinutes: number,
+    sessionNotes?: string | null,
   ) {
     try {
       const pyme = await this.pymeRepository.findOne(pymeId);
@@ -173,6 +176,7 @@ export class PymeService {
         meetingTitle,
         proposedStartTimes: proposedStartTimes.map((startTime) => this.formatProposedStartTime(startTime)),
         duration: `${durationMinutes} minutos`,
+        sessionNotes,
         recipientType: 'pyme',
       });
     } catch {

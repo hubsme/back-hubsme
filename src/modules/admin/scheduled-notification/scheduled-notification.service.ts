@@ -2,6 +2,7 @@ import { forwardRef, Inject, Injectable, Logger, OnApplicationBootstrap, OnModul
 import { Meeting } from '@db/tables/meeting.table';
 import { ScheduledNotification } from '@db/tables/scheduled-notification.table';
 import { ConsultantRepository } from '@repositories/consultant.repository';
+import { MeetingRepository } from '@repositories/meeting.repository';
 import { PymeRepository } from '@repositories/pyme.repository';
 import { ScheduledNotificationRepository } from '@repositories/scheduled-notification.repository';
 import { EmailService } from '../email/email.service';
@@ -21,6 +22,7 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
 
   constructor(
     private readonly notificationRepository: ScheduledNotificationRepository,
+    private readonly meetingRepository: MeetingRepository,
     private readonly pymeRepository: PymeRepository,
     private readonly consultantRepository: ConsultantRepository,
     @Inject(forwardRef(() => WhatsappService))
@@ -63,8 +65,13 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
     const commonPayload = this.buildPayload(meeting, pyme.name, consultant.fullName);
     const maxAttempts = this.getPositiveInteger('MEETING_REMINDER_MAX_ATTEMPTS', 3);
     const notifications = [];
+    const pymePhone = pyme.ownerPhone?.trim() || '';
+    const pymeEmail = pyme.ownerEmail?.trim() || pyme.userEmail?.trim();
+    const pymeName = pyme.ownerFirstName?.trim() || pyme.name;
+    const consultantPhone = consultant.ownerPhone?.trim() || '';
+    const consultantEmail = consultant.userEmail?.trim();
 
-    if (pyme.ownerPhone?.trim()) {
+    if (pymePhone || pymeEmail) {
       notifications.push({
         meetingId: meeting.id,
         recipient: 'pyme' as const,
@@ -73,20 +80,27 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
         maxAttempts,
         payload: {
           ...commonPayload,
-          to: pyme.ownerPhone.trim(),
-          nombre_pyme: pyme.ownerFirstName?.trim() || pyme.name,
+          to: pymePhone,
+          correo: pymeEmail,
+          nombre_destinatario: pymeName,
+          nombre_pyme: pymeName,
         },
       });
     }
 
-    if (consultant.ownerPhone?.trim()) {
+    if (consultantPhone || consultantEmail) {
       notifications.push({
         meetingId: meeting.id,
         recipient: 'consultor' as const,
         scheduledAt,
         expiresAt: meeting.startTime,
         maxAttempts,
-        payload: { ...commonPayload, to: consultant.ownerPhone.trim() },
+        payload: {
+          ...commonPayload,
+          to: consultantPhone,
+          correo: consultantEmail,
+          nombre_destinatario: consultant.fullName,
+        },
       });
     }
 
@@ -132,6 +146,8 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
         minute: '2-digit',
       });
       const duration = `${meeting.durationMinutes} minutos`;
+      const reminderTime = `${this.getPositiveInteger('MEETING_REMINDER_MINUTES_BEFORE', 15)} minutos`;
+      const sessionNotes = meeting.description?.trim() || undefined;
       const notifications: Promise<unknown>[] = [];
       const pymeName = pyme.ownerFirstName?.trim() || pyme.name;
 
@@ -158,6 +174,8 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
             dateTime,
             duration,
             meetingUrl: meeting.meetingUrl,
+            reminderTime,
+            sessionNotes,
             recipientType: 'consultor',
           }),
         );
@@ -186,6 +204,8 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
             dateTime,
             duration,
             meetingUrl: meeting.meetingUrl,
+            reminderTime,
+            sessionNotes,
             recipientType: 'pyme',
           }),
         );
@@ -195,12 +215,16 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
       results.forEach((result) => {
         if (result.status === 'rejected') {
           const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
-          this.logger.error(`No se pudo enviar una notificacion de confirmacion de la reunion ${meeting.id}: ${message}`);
+          this.logger.error(
+            `No se pudo enviar una notificacion de confirmacion de la reunion ${meeting.id}: ${message}`,
+          );
         }
       });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`No se pudieron preparar las notificaciones de confirmacion de la reunion ${meeting.id}: ${message}`);
+      this.logger.error(
+        `No se pudieron preparar las notificaciones de confirmacion de la reunion ${meeting.id}: ${message}`,
+      );
     }
   }
 
@@ -255,15 +279,52 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
     }
   }
 
-  private sendNotification(notification: ScheduledNotification) {
+  private async sendNotification(notification: ScheduledNotification) {
     const payload = notification.payload;
-    if (notification.recipient === 'pyme') {
-      return this.whatsappService.sendAlertaReunionPyme(payload.to, payload);
+    const recipient = await this.resolveReminderRecipient(notification);
+    const processes: Promise<unknown>[] = [];
+
+    if (payload.to?.trim()) {
+      if (notification.recipient === 'pyme') {
+        processes.push(this.whatsappService.sendAlertaReunionPyme(payload.to, payload));
+      } else {
+        processes.push(
+          this.whatsappService.sendAlertaReunionConsultor(payload.to, {
+            ...payload,
+          }),
+        );
+      }
     }
 
-    return this.whatsappService.sendAlertaReunionConsultor(payload.to, {
-      ...payload,
-    });
+    if (recipient.email) {
+      processes.push(
+        this.emailService.sendMeetingReminderEmail({
+          to: recipient.email,
+          recipientName: recipient.name,
+          counterpartName: notification.recipient === 'pyme' ? payload.nombre_consultor : payload.nombre_pyme,
+          meetingTitle: payload.titulo_sesion,
+          dateTime: payload.fecha_hora,
+          duration: payload.tiempo,
+          meetingUrl: payload.enlace,
+          reminderTime: payload.tiempo_restante,
+          sessionNotes: recipient.sessionNotes,
+          recipientType: notification.recipient,
+        }),
+      );
+    }
+
+    if (!processes.length) {
+      throw new Error(`La notificacion ${notification.id} no tiene WhatsApp ni correo de destino`);
+    }
+
+    const results = await Promise.allSettled(processes);
+    const errors = results
+      .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+      .map((result) => (result.reason instanceof Error ? result.reason.message : String(result.reason)));
+
+    if (errors.length) {
+      throw new Error(errors.join(' | '));
+    }
   }
 
   private async refreshQueue(armTimer = true) {
@@ -322,6 +383,45 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
       }),
       tiempo: `${meeting.durationMinutes} minutos`,
       enlace: meeting.meetingUrl ?? '',
+      notas_sesion: meeting.description?.trim() || undefined,
+    };
+  }
+
+  private async resolveReminderRecipient(notification: ScheduledNotification) {
+    const payload = notification.payload;
+    const storedEmail = payload.correo?.trim();
+    const storedName = payload.nombre_destinatario?.trim();
+    const storedNotes = payload.notas_sesion?.trim();
+
+    if (storedEmail && storedName && storedNotes) {
+      return { email: storedEmail, name: storedName, sessionNotes: storedNotes };
+    }
+
+    const meeting = await this.meetingRepository.findOne(notification.meetingId);
+    const sessionNotes = storedNotes || meeting?.description?.trim() || undefined;
+
+    if (notification.recipient === 'pyme' && meeting) {
+      const pyme = await this.pymeRepository.findOne(meeting.pymeId);
+      return {
+        email: storedEmail || pyme?.ownerEmail?.trim() || pyme?.userEmail?.trim(),
+        name: storedName || pyme?.ownerFirstName?.trim() || pyme?.name || payload.nombre_pyme,
+        sessionNotes,
+      };
+    }
+
+    if (notification.recipient === 'consultor' && meeting) {
+      const consultant = await this.consultantRepository.findOne(meeting.consultantId);
+      return {
+        email: storedEmail || consultant?.userEmail?.trim(),
+        name: storedName || consultant?.fullName || payload.nombre_consultor,
+        sessionNotes,
+      };
+    }
+
+    return {
+      email: storedEmail,
+      name: storedName || (notification.recipient === 'pyme' ? payload.nombre_pyme : payload.nombre_consultor),
+      sessionNotes,
     };
   }
 
