@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsIn, IsInt, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsIn, IsInt, IsNumber, IsOptional, IsString, Matches, Min, ValidateNested } from 'class-validator';
 import { ConsultantCaseStudyDto, ConsultantEducationDto } from './consultant-profile-fields.dto';
 import {
   CONSULTANT_DIAGNOSTIC_AREAS,
@@ -22,6 +22,21 @@ export class ConsultantCreateDto {
   @IsString()
   @IsOptional()
   lastName?: string;
+
+  @ApiPropertyOptional({ example: '72750623', description: 'DNI validado del consultor' })
+  @IsString()
+  @Matches(/^\d{8}$/, { message: 'dni debe contener exactamente 8 dígitos' })
+  @IsOptional()
+  dni?: string;
+
+  @ApiPropertyOptional({
+    example: '1990-05-21',
+    description: 'Fecha de nacimiento validada del consultor en formato YYYY-MM-DD',
+  })
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'birthDate debe tener el formato YYYY-MM-DD' })
+  @IsOptional()
+  birthDate?: string;
 
   @ApiPropertyOptional({ example: 'Carlos Mendoza' })
   @IsString()

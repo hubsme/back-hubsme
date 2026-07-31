@@ -17,6 +17,32 @@ export class DniVerificationMatchesDto {
   birthDate: boolean;
 }
 
+export class DniVerificationIdentityDto {
+  @ApiProperty()
+  id: string;
+
+  @ApiProperty()
+  nombres: string;
+
+  @ApiProperty()
+  apellido_paterno: string;
+
+  @ApiProperty()
+  apellido_materno: string;
+
+  @ApiProperty()
+  nombre_completo: string;
+
+  @ApiProperty()
+  genero: string;
+
+  @ApiProperty()
+  fecha_nacimiento: string;
+
+  @ApiProperty()
+  codigo_verificacion: string;
+}
+
 export class DniVerificationResultDto {
   @ApiProperty({ description: 'Indica si todos los datos enviados coinciden' })
   verified: boolean;
@@ -26,6 +52,13 @@ export class DniVerificationResultDto {
 
   @ApiProperty({ type: DniVerificationMatchesDto })
   matches: DniVerificationMatchesDto;
+
+  @ApiProperty({
+    type: DniVerificationIdentityDto,
+    nullable: true,
+    description: 'Datos devueltos por el proveedor para conservarlos internamente al crear la cuenta',
+  })
+  identity: DniVerificationIdentityDto | null;
 
   @ApiProperty({ example: 'Los datos coinciden con el registro consultado.' })
   message: string;

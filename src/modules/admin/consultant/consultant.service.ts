@@ -131,6 +131,8 @@ export class ConsultantService {
       ...data,
       firstName: data.firstName?.trim(),
       lastName: data.lastName?.trim(),
+      dni: data.dni?.trim(),
+      birthDate: data.birthDate,
       fullName: this.buildFullName(data),
       ownerPhone: data.ownerPhone?.trim(),
       headline: data.headline?.trim(),

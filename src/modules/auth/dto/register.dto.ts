@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsEmail, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Min, MinLength, ValidateNested } from 'class-validator';
+import { IsArray, IsEmail, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Matches, Min, MinLength, ValidateNested } from 'class-validator';
 import {
   ConsultantCaseStudyDto,
   ConsultantEducationDto,
@@ -35,6 +35,28 @@ export class RegisterDto {
   @IsString()
   @IsOptional()
   lastName?: string;
+
+  @ApiPropertyOptional({ example: '72750623', description: 'DNI validado del consultor' })
+  @IsString()
+  @Matches(/^\d{8}$/, { message: 'documentNumber debe contener exactamente 8 dígitos' })
+  @IsOptional()
+  documentNumber?: string;
+
+  @ApiPropertyOptional({ example: 'Pérez', description: 'Apellido paterno usado en la validación de identidad' })
+  @IsString()
+  @IsOptional()
+  paternalLastName?: string;
+
+  @ApiPropertyOptional({ example: 'Gómez', description: 'Apellido materno usado en la validación de identidad' })
+  @IsString()
+  @IsOptional()
+  maternalLastName?: string;
+
+  @ApiPropertyOptional({ example: '1990-05-21', description: 'Fecha de nacimiento usada en la validación de identidad' })
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'birthDate debe tener el formato YYYY-MM-DD' })
+  @IsOptional()
+  birthDate?: string;
 
   @ApiPropertyOptional({ example: '20600000001', description: 'PYME RUC' })
   @IsString()

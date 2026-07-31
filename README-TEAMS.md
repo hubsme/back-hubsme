@@ -1,133 +1,273 @@
-# Integración de Videollamadas de Microsoft Teams & Azure en Hubsme
+# Integración de Microsoft Teams, Calendar y Azure en Hubsme
 
-Este documento contiene un resumen completo de la arquitectura, configuración, permisos y librerías utilizadas para:
-1. Crear reuniones de Microsoft Teams mediante API a nivel del backend.
-2. Embeber y unir a los usuarios de forma nativa a la videollamada desde el frontend de Angular.
+Este documento describe la configuración necesaria para crear reuniones de Microsoft Teams desde Hubsme, permitir el acceso desde el frontend, recuperar grabaciones y leer transcripciones.
 
----
+## Estado actual de la integración
 
-## PARTE 1: Backend - Creación de Reuniones Teams por API
+La creación de reuniones usa el flujo **calendar-backed** de Microsoft Graph:
 
-La creación de las reuniones se realiza de forma automatizada mediante la API de **Microsoft Graph** utilizando credenciales de aplicación (App-only).
+1. Hubsme crea un evento en el calendario de Microsoft 365 del organizador.
+2. El evento se crea con `isOnlineMeeting: true` y `onlineMeetingProvider: 'teamsForBusiness'`.
+3. Graph devuelve el enlace de Teams asociado al evento.
+4. Hubsme resuelve el `onlineMeeting` correspondiente mediante su `joinWebUrl`.
+5. Hubsme configura la reunión con:
+   - `recordAutomatically: true`
+   - `meetingSpokenLanguageTag: 'es-ES'`
+   - `allowedPresenters: 'everyone'`
+   - `lobbyBypassSettings.scope: 'everyone'`
 
-### 🛠️ Librerías Utilizadas (npm)
-* `@microsoft/microsoft-graph-client`: SDK oficial de Microsoft Graph para Node.js/TypeScript.
-* `@azure/identity`: Proveedor de credenciales seguro de Azure para autenticación Oauth 2.0.
+No se debe volver a crear la reunión únicamente con `POST /users/{id}/onlineMeetings`. La API de grabaciones no soporta reuniones creadas de esa forma si no están asociadas a un evento de calendario. Esto fue la causa de que `meeting/recordings` devolviera una lista vacía.
 
-### 🔑 Requisitos Previos en Microsoft Azure & Entra ID
+Referencias oficiales:
 
-Para que la creación de reuniones funcione, es obligatorio realizar las siguientes configuraciones en el portal de Azure:
+- [Crear eventos de calendario con Microsoft Graph](https://learn.microsoft.com/en-us/graph/api/calendar-post-events?view=graph-rest-1.0)
+- [Listar grabaciones de una reunión](https://learn.microsoft.com/en-us/graph/api/onlinemeeting-list-recordings?view=graph-rest-1.0)
+- [Actualizar un onlineMeeting](https://learn.microsoft.com/en-us/graph/api/onlinemeeting-update?view=graph-rest-1.0)
 
-1. **Registro de Aplicación en Microsoft Entra ID:**
-   * Registrar una aplicación multitenant o single-tenant (App Registration).
-   * Generar un **Client Secret** (Secreto del Cliente) que se utilizará para el flujo de autenticación de credenciales de cliente (`Client Credentials Flow`).
+## Variables de entorno
 
-2. **Permisos de API requeridos en Microsoft Graph (Application Permissions):**
-   * Se requiere el permiso de tipo **Aplicación** (Application Permission, no Delegado):
-     * `Calendars.ReadWrite`: Permite crear eventos de calendario con salas de Teams asociadas.
-   * **¡CRÍTICO!** Se debe conceder el **Consentimiento de Administrador** (`Admin Consent`) en el tenant de Azure para que la aplicación pueda actuar en nombre del organizador sin interacción manual de login.
+Configurar en `backend-hubsme/.env`:
 
-3. **Requisito de Cuenta / Licencia de Teams:**
-   * El ID de usuario especificado en `MS_GRAPH_TEAMS_ORGANIZER_USER_ID` debe corresponder a un usuario del tenant que cuente con una **licencia de Microsoft Teams pagada** (ej. Enterprise E3/E5, Business Premium). Las cuentas personales o gratuitas no tienen soporte para agendar `onlineMeetings` mediante Microsoft Graph.
-
-### ⚙️ Variables de Entorno en el Backend (`.env`)
-
-Las siguientes variables deben configurarse en el backend para habilitar la creación de reuniones:
-
-```bash
-# Habilita o deshabilita la automatización de Teams (si es false, fallback a Google Meet u otro)
+```env
+# Activa la creación de reuniones de Microsoft Teams.
 TEAMS_MEETINGS_ENABLED=true
 
-# Azure Communication Services (ACS) para tokens temporales
-AZURE_COMMUNICATION_CONNECTION_STRING="endpoint=https://hubsme-acs.communication.azure.com/;accesskey=..."
+# Microsoft Entra ID / App Registration.
+MS_GRAPH_TENANT_ID="tenant-id"
+MS_GRAPH_CLIENT_ID="application-client-id"
+MS_GRAPH_CLIENT_SECRET="client-secret-value"
 
-# Credenciales de Aplicación en Azure Entra ID
-MS_GRAPH_TENANT_ID="tu-tenant-id-de-azure"
-MS_GRAPH_CLIENT_ID="tu-client-id-de-registro-de-app"
-MS_GRAPH_CLIENT_SECRET="tu-secreto-de-app"
-
-# ID de usuario del Organizador (Usuario corporativo con licencia Teams activa)
-MS_GRAPH_TEAMS_ORGANIZER_USER_ID="id-del-usuario-organizador-en-graph-uuid"
+# Object ID del usuario que será dueño del calendario y organizador de Teams.
+# Ejemplo actual: reunion@hubsme.net.
+MS_GRAPH_TEAMS_ORGANIZER_USER_ID="organizer-user-object-id"
 ```
 
----
+El `MS_GRAPH_TEAMS_ORGANIZER_USER_ID` es el **Object ID** del usuario en Microsoft Entra ID, no su correo y no el Application/Client ID de la aplicación.
 
-## PARTE 2: Frontend - Videollamada Embebida (ACS a Teams Interop)
+Para cambiar de organizador se debe cambiar también la cuenta que tiene configurado Exchange Online, Teams y OneDrive. Por ejemplo, no basta con cambiar el correo si el Object ID todavía apunta a otro usuario.
 
-Para que el usuario pueda unirse a la reunión directamente desde la web (sin descargar Teams ni abrir ventanas externas), se utiliza la interoperabilidad de **Azure Communication Services (ACS)**.
+## 1. Microsoft Entra ID: registro de aplicación
 
-### 🛠️ Librerías Utilizadas (npm)
+En [Microsoft Entra admin center](https://entra.microsoft.com/):
 
-#### En el Backend:
-* `@azure/communication-identity`: Para crear identidades de comunicación efímeras y emitir tokens temporales con el scope `['voip']`.
+1. Crear o reutilizar un **App registration** del tenant.
+2. Copiar:
+   - **Directory (tenant) ID** → `MS_GRAPH_TENANT_ID`.
+   - **Application (client) ID** → `MS_GRAPH_CLIENT_ID`.
+3. Crear un secreto en **Certificates & secrets** y guardar el valor una sola vez en `.env`.
+4. No subir `.env`, secretos ni capturas con el valor del secreto al repositorio.
+5. En **API permissions → Microsoft Graph → Application permissions**, conceder como mínimo los permisos que usa el backend:
 
-#### En el Frontend:
-* `react` & `react-dom` (v18): Motor de UI base requerido para renderizar los componentes nativos de Azure.
-* `@azure/communication-common`: SDK común para tokens y credenciales.
-* `@azure/communication-react`: Contiene el componente pre-diseñado `CallComposite` que envuelve toda la experiencia de audio/video.
-* `@fluentui/react`: Librería de UI de Microsoft en la que se basan los componentes visuales de ACS.
-* **Peer-Dependencies Críticas (para compilador Angular/ESBuild):**
-  * `@azure/communication-calling`
-  * `@azure/communication-chat`
-  * `@azure/communication-calling-effects`
-  *(Estas tres dependencias evitan que el compilador ESBuild de Angular falle al buscar imports internos de `@azure/communication-react`).*
+   | Permiso | Uso en Hubsme |
+   | --- | --- |
+   | `Calendars.ReadWrite` | Crear y consultar el evento calendar-backed. |
+   | `OnlineMeetings.ReadWrite.All` | Buscar y configurar el `onlineMeeting`. |
+   | `OnlineMeetingRecording.Read.All` | Leer las grabaciones de Teams. |
+   | `OnlineMeetingTranscript.Read.All` | Leer el contenido de las transcripciones. |
+   | `Files.ReadWrite.All` | Leer `Recordings` en OneDrive y crear el enlace compartido. |
 
-### 💻 Conexión en Angular (Sala Autocontenida)
+6. Pulsar **Grant admin consent** para el tenant.
 
-La lógica reside dentro del componente Angular Standalone **`<app-teams-meeting-room>`**:
+Los permisos `OnlineMeetings.ReadWrite.All`, `OnlineMeetingRecording.Read.All` y `OnlineMeetingTranscript.Read.All` requieren además una política de acceso de aplicación para limitar el uso al organizador autorizado.
 
-1. **Servicio Centralizado (`TeamsCallService`):**
-   * Es un singleton de módulo que maneja de forma reactiva con *Angular Signals* el estado del panel: `meetingId`, `displayName`, `isOpen` y `isFullscreen`.
-2. **Petición del Token de Acceso:**
-   * El backend genera un usuario de comunicación temporal (`acsUserId`) y un token JWT seguro con vigencia limitada mediante el método `createUserAndToken(['voip'])` de ACS.
-3. **Inicialización en Angular:**
-   * Se crea una credencial cliente: `new AzureCommunicationTokenCredential(token)`.
-   * Se genera el adaptador de llamada: `createAzureCommunicationCallAdapter(...)` apuntando al enlace obtenido de Microsoft Graph (`locator: { meetingLink: meetingUrl }`).
-4. **Montado dinámico en React:**
-   * Se utiliza `createRoot(container)` apuntando a un `#reactContainer` local para inicializar el componente de React `CallComposite`.
-5. **Comportamiento en Caliente y Fullscreen:**
-   * El contenedor del componente cambia de estilos dinámicamente (`w-screen h-screen rounded-none z-[110]` para Pantalla Completa y `w-full max-w-5xl h-[85vh] rounded-2xl` para Modal Normal) **sin destruir el nodo del DOM**, garantizando que el streaming de audio y video nunca sufra micro-cortes o desconexiones.
-6. **Ciclo de vida ultra-limpio (`ngOnDestroy`):**
-   * Se realiza un dispose estricto del adaptador (`callAdapter.dispose()`) y se desmontea la raíz de React (`reactRoot.unmount()`) al cerrar el componente. Esto asegura que la cámara y el micrófono se apaguen inmediatamente en el navegador del usuario al salir de la reunión.
+## 2. Application Access Policy de Teams
 
----
+La política se crea con una cuenta administradora, por ejemplo `erick.flores@cymingenieros.pe`. La cuenta organizadora `reunion@hubsme.net` no necesita entrar al Teams Admin Center.
 
-## PARTE 3: Grabación Automática & Restricciones Temporales de Acceso
+Instalar y conectar el módulo:
 
-Para garantizar la privacidad, la automatización y el control de accesos a la sala de videollamadas, se implementaron dos características críticas en el backend:
+```powershell
+Install-Module -Name MicrosoftTeams -Force -AllowClobber
+Connect-MicrosoftTeams
+```
 
-### 🎙️ 1. Grabación y Transcripción Automática en la Nube (Opción A)
-* **¿Por qué es automática?** Los usuarios de la web embebida (ACS) entran a la llamada como **invitados anónimos**, por lo que Microsoft Teams no les permite presionar manualmente el botón de "Iniciar Grabación".
-* **Solución y Requerimiento de Endpoint:** La creación de reuniones utiliza el endpoint directo `/onlineMeetings` para crear y configurar la reunión de forma óptima en una sola petición.
-* **Cómo habilitar la Grabación Automática y Omisión de Sala de Espera de forma directa (PowerShell de Teams):**
-  Dado que la plataforma utiliza el endpoint directo `/onlineMeetings`, un administrador de TI de tu tenant de Microsoft 365 debe ejecutar exactamente los siguientes comandos en PowerShell de Skype/Teams para conceder la política de acceso de aplicación a tu ID de Cliente de Azure AD:
+Crear la política usando el **Client ID de la aplicación**:
 
-  ```powershell
-  # 1. Instala el módulo oficial de Microsoft Teams (si no lo tienes instalado)
-  Install-Module -Name MicrosoftTeams -Force -AllowClobber
+```powershell
+New-CsApplicationAccessPolicy `
+  -Identity "HubsmeTeamsAccessPolicy" `
+  -AppIds "<MS_GRAPH_CLIENT_ID>" `
+  -Description "Permitir a Hubsme acceder a reuniones y artefactos de Teams"
+```
 
-  # 2. Conéctate a tu portal de Microsoft Teams (te pedirá iniciar sesión con tu cuenta de Administrador Global)
-  Connect-MicrosoftTeams
+Asignarla al **Object ID del organizador**:
 
-  # 3. Crea la política de acceso de aplicación asociándola a tu App ID de Azure AD
-  New-CsApplicationAccessPolicy -Identity "HubsmeTeamsAccessPolicy" -AppIds "5599cc17-d629-4723-bea2-65d3402b4dec" -Description "Permitir a Hubsme interactuar con las reuniones de Teams"
+```powershell
+Grant-CsApplicationAccessPolicy `
+  -PolicyName "HubsmeTeamsAccessPolicy" `
+  -Identity "<MS_GRAPH_TEAMS_ORGANIZER_USER_ID>"
+```
 
-  # 4. Concede la política creada a tu usuario Organizador de Teams
-  Grant-CsApplicationAccessPolicy -PolicyName "HubsmeTeamsAccessPolicy" -Identity "2908bfbb-da90-4493-a334-8cee5c3510b7"
-  ```
+Verificar la asignación:
 
+```powershell
+Get-CsUserPolicyAssignment `
+  -Identity "<MS_GRAPH_TEAMS_ORGANIZER_USER_ID>"
+```
 
-### 📂 2. Obtención de Grabaciones desde OneDrive por API (Implementado)
-* **¿Cómo funciona?** Cuando una reunión de Teams finaliza y ha sido grabada, Teams guarda el archivo `.mp4` automáticamente en la carpeta `Recordings` del OneDrive de la cuenta organizadora (`MS_GRAPH_TEAMS_ORGANIZER_USER_ID`).
-* **Endpoint Implementado:** En [meeting.controller.ts](file:///Users/erixcel/chamba/hubsme/backend-hubsme/src/modules/admin/meeting/meeting.controller.ts) se expuso el endpoint `GET /admin/meeting/recording/:id` que busca dinámicamente este archivo en la cuenta OneDrive de la cuenta corporativa:
-  * Llama a `/users/{organizerUserId}/drive/root:/Recordings:/children`.
-  * Filtra y empareja el archivo de forma inteligente buscando que coincida con el **Título de la Reunión** (`meeting.title`).
-  * Retorna los detalles de la grabación, incluyendo el enlace de descarga directa en la nube de Microsoft (`downloadUrl`).
-* **Permiso Requerido:** Requiere que tu registro de aplicación de Azure AD tenga concedido el permiso de tipo aplicación **`Files.Read.All`** con consentimiento del administrador.
+Los cambios de una Application Access Policy pueden tardar hasta 30 minutos en propagarse en Graph. Si se cambia de organizador, la política debe asignarse también al nuevo usuario.
 
-### ⏱️ 3. Restricción Horaria de Acceso a Videollamadas
-* **Lógica en Backend:** Modificado el método `createTeamsJoinToken` en [meeting.service.ts](file:///Users/erixcel/chamba/hubsme/backend-hubsme/src/modules/admin/meeting/meeting.service.ts) para validar de manera estricta el tiempo actual contra el horario agendado de la reunión:
-  * **Acceso Temprano Limitado:** El usuario solo puede solicitar su token de acceso a partir de **10 minutos antes** de la hora de inicio de la reunión. Si intenta conectarse antes, recibe un mensaje claro indicando la hora exacta de apertura.
-  * **Expiración Limitada:** El enlace deja de admitir conexiones **30 minutos después** de la hora programada de cierre (es decir: `startTime + durationMinutes + 30 minutos`). Intentos de conexión posteriores retornan un error de expiración.
+## 3. Cuenta organizadora en Microsoft 365
 
+El usuario de `MS_GRAPH_TEAMS_ORGANIZER_USER_ID` debe cumplir todo lo siguiente:
 
+- Existir como usuario activo en Entra ID.
+- Tener licencia de Microsoft Teams.
+- Tener un buzón **UserMailbox** de Exchange Online, no solamente un contacto o un buzón sin aprovisionar.
+- Tener OneDrive for Business aprovisionado si se quieren guardar las grabaciones.
+- Tener permisos para crear reuniones privadas.
+
+En este proyecto la cuenta usada para las pruebas fue `reunion@hubsme.net`. La cuenta `erick.flores@cymingenieros.pe` se utilizó para administrar Microsoft 365, Exchange y Teams; no es obligatorio que sea el organizador configurado en el `.env`.
+
+Verificar el buzón desde Exchange Online PowerShell:
+
+```powershell
+Connect-ExchangeOnline -UserPrincipalName <correo-de-administrador>
+
+Get-Mailbox -Identity reunion@hubsme.net |
+  Format-List UserPrincipalName,RecipientTypeDetails
+```
+
+El resultado esperado es `RecipientTypeDetails: UserMailbox`.
+
+## 4. Exchange Online: habilitar Teams como proveedor del calendario
+
+Este es el punto más importante del flujo calendar-backed. El calendario del organizador debe aceptar `teamsForBusiness`.
+
+Consultar la configuración:
+
+```powershell
+Get-MailboxCalendarConfiguration -Identity reunion@hubsme.net |
+  Format-List DefaultOnlineMeetingProvider,OnlineMeetingsByDefaultEnabled
+```
+
+Configurar el proveedor predeterminado:
+
+```powershell
+Set-MailboxCalendarConfiguration `
+  -Identity reunion@hubsme.net `
+  -DefaultOnlineMeetingProvider TeamsForBusiness `
+  -OnlineMeetingsByDefaultEnabled $true
+```
+
+La configuración esperada es:
+
+```text
+DefaultOnlineMeetingProvider    : TeamsForBusiness
+OnlineMeetingsByDefaultEnabled  : True
+```
+
+Importante: `DefaultOnlineMeetingProvider` no es lo mismo que `allowedOnlineMeetingProviders`. Hubsme consulta el calendario mediante Graph y exige que la lista `allowedOnlineMeetingProviders` incluya `teamsForBusiness`. Esa lista es administrada por Microsoft y no se puede completar manualmente desde `Set-MailboxCalendarConfiguration`.
+
+Si Graph devuelve:
+
+```text
+allowed=ninguno, default=teamsForBusiness
+```
+
+el buzón todavía no está aprovisionado para crear reuniones de Teams desde Calendar. Se debe revisar la licencia, el buzón, la integración Teams-Exchange y esperar la propagación de Microsoft 365. Reiniciar NestJS no corrige ese estado.
+
+También se debe comprobar en Outlook o Teams Calendar que un evento nuevo muestre la opción **Teams meeting**. Si no aparece, el problema sigue estando en el aprovisionamiento de Microsoft 365, no en el código de Hubsme.
+
+## 5. Teams Admin Center
+
+Administrar desde [Microsoft Teams admin center](https://admin.teams.microsoft.com/) usando una cuenta administradora, como `erick.flores@cymingenieros.pe`.
+
+En **Meetings → Meeting policies → Global** —o en la política asignada al organizador— verificar:
+
+- **Private meeting scheduling**: On.
+- **Outlook add-in**: On.
+- Grabación y transcripción permitidas según la política de la organización.
+- El usuario organizador debe mostrar `Global (Org-wide default)` o una política equivalente habilitada en su pestaña **Policies**.
+
+La política de Teams por sí sola no agrega `teamsForBusiness` a `allowedOnlineMeetingProviders`; también son necesarios el buzón de Exchange, la licencia y el aprovisionamiento del calendario.
+
+## 6. Flujo implementado en el backend
+
+La lógica está en `src/modules/admin/meeting/teams-meeting.service.ts`:
+
+```text
+confirmar reunión
+  -> validar TEAMS_MEETINGS_ENABLED
+  -> validar allowedOnlineMeetingProviders
+  -> POST /users/{organizerId}/calendar/events
+       isOnlineMeeting = true
+       onlineMeetingProvider = teamsForBusiness
+  -> resolver onlineMeeting.joinUrl
+  -> buscar onlineMeeting por joinWebUrl
+  -> PATCH /users/{organizerId}/onlineMeetings/{meetingId}
+       recordAutomatically = true
+       meetingSpokenLanguageTag = es-ES
+       allowedPresenters = everyone
+       lobbyBypassSettings.scope = everyone
+  -> guardar teamsOnlineMeetingId y joinWebUrl en Meeting
+  -> programar notificaciones y enviar correos/WhatsApp
+```
+
+El frontend usa el `joinWebUrl` para la experiencia de llamada mediante ACS. ACS no almacena las grabaciones ni genera la transcripción; esos artefactos pertenecen a Microsoft Teams.
+
+## 7. Grabaciones y transcripciones
+
+### Grabaciones
+
+El endpoint del backend es:
+
+```text
+GET /admin/meeting/recordings/:id
+```
+
+El backend consulta:
+
+```text
+/users/{organizerId}/onlineMeetings/{onlineMeetingId}/recordings
+```
+
+Después intenta asociar cada grabación con un archivo de la carpeta `Recordings` del OneDrive del organizador:
+
+```text
+/users/{organizerId}/drive/root:/Recordings:/children
+```
+
+Para que el archivo aparezca:
+
+- La reunión debe ser calendar-backed.
+- La grabación automática debe iniciar correctamente.
+- El organizador debe tener OneDrive for Business aprovisionado.
+- La política de almacenamiento/compartición de OneDrive no debe bloquear el acceso.
+
+El enlace anónimo `publicUrl` solo se crea si las políticas del tenant permiten enlaces anónimos. El `webUrl` puede continuar requiriendo inicio de sesión.
+
+### Transcripciones
+
+El endpoint de IA obtiene la transcripción desde:
+
+```text
+/users/{organizerId}/onlineMeetings/{onlineMeetingId}/transcripts
+```
+
+Luego descarga WebVTT, elimina marcas de tiempo y etiquetas de orador, y envía el texto limpio al servicio de IA para generar el resumen y las tareas.
+
+Las reuniones nuevas se configuran con `meetingSpokenLanguageTag: 'es-ES'`. Este valor debe configurarse antes de que comience la grabación/transcripción para que Teams reconozca correctamente el español.
+
+## 8. Diagnóstico rápido
+
+| Síntoma | Causa probable | Revisión |
+| --- | --- | --- |
+| `allowed=ninguno` | Calendario sin proveedor Teams aprovisionado | Licencia, UserMailbox, Exchange y propagación. |
+| `default=teamsForBusiness` pero falla la creación | El valor predeterminado existe, pero Teams no está en la lista permitida | Verificar Outlook/Teams Calendar y esperar aprovisionamiento. |
+| Evento creado sin `joinUrl` | Graph no generó la reunión de Teams | Revisar `allowedOnlineMeetingProviders`, licencia y buzón. |
+| `recordings` devuelve vacío | Reunión creada con `/onlineMeetings` puro, grabación aún no procesada o reunión expirada | Crear reuniones calendar-backed y revisar OneDrive. |
+| Grabación aparece en Teams pero no en OneDrive | Organizador sin OneDrive/licencia o carga fallida | Revisar OneDrive del organizador y reintentar carga. |
+| Transcripción en inglés | Idioma hablado no configurado | Usar una reunión nueva con `meetingSpokenLanguageTag: 'es-ES'`. |
+| Error `403` al leer artefactos | Permiso Graph o Application Access Policy incompleta | Revisar consentimiento y asignación al organizador. |
+
+## Frontend: sala embebida mediante ACS
+
+El frontend usa Azure Communication Services para permitir que los usuarios entren a la reunión desde Hubsme:
+
+- `@azure/communication-identity` genera una identidad ACS temporal y un token `voip`.
+- `@azure/communication-react` renderiza el `CallComposite`.
+- El adaptador usa el `joinWebUrl` generado por Microsoft Graph.
+- Al cerrar la sala se libera el adaptador y se desmonta el componente React para apagar cámara y micrófono.
+
+La conexión de ACS no reemplaza la cuenta organizadora de Teams ni la configuración de Exchange/OneDrive.

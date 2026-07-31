@@ -1,9 +1,18 @@
 export interface GraphListResponse<T> {
   value?: T[];
+  '@odata.nextLink'?: string;
+}
+
+export interface GraphCalendar {
+  id?: string;
+  allowedOnlineMeetingProviders?: string[];
+  defaultOnlineMeetingProvider?: string;
 }
 
 export interface GraphCalendarEvent {
   id?: string;
+  isOnlineMeeting?: boolean;
+  onlineMeetingProvider?: string;
   onlineMeeting?: {
     joinUrl?: string;
   };
@@ -27,6 +36,13 @@ export interface GraphCallRecording {
   endDateTime?: string;
   recordingContentUrl?: string;
   meetingOrganizer?: unknown;
+}
+
+export interface GraphCallTranscript {
+  id?: string;
+  meetingId?: string;
+  contentCorrelationId?: string;
+  createdDateTime?: string;
 }
 
 export interface GraphDriveItem {
