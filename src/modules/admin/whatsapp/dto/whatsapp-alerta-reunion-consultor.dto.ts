@@ -41,8 +41,8 @@ export class WhatsappAlertaReunionConsultorDto {
   tiempo: string;
 
   @ApiProperty({
-    example: 'https://teams.microsoft.com/l/meetup-join/example',
-    description: 'Enlace de la reunión',
+    example: 'https://www.hubsme.net/reuniones/42',
+    description: 'Enlace protegido de la reunión en el frontend',
   })
   @IsString()
   @IsNotEmpty()

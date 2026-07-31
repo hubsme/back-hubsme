@@ -8,6 +8,7 @@ import { ScheduledNotificationRepository } from '@repositories/scheduled-notific
 import { EmailService } from '../email/email.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { MeetingReminderPayload } from './scheduled-notification.types';
+import { buildMeetingAccessUrl } from '@functions/meeting-access-url.function';
 
 const QUEUE_REFRESH_MS = 60_000;
 const PROCESSING_STALE_MS = 5 * 60_000;
@@ -148,6 +149,7 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
       const duration = `${meeting.durationMinutes} minutos`;
       const reminderTime = `${this.getPositiveInteger('MEETING_REMINDER_MINUTES_BEFORE', 15)} minutos`;
       const sessionNotes = meeting.description?.trim() || undefined;
+      const meetingAccessUrl = buildMeetingAccessUrl(meeting.id);
       const notifications: Promise<unknown>[] = [];
       const pymeName = pyme.ownerFirstName?.trim() || pyme.name;
 
@@ -173,7 +175,7 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
             meetingTitle: meeting.title,
             dateTime,
             duration,
-            meetingUrl: meeting.meetingUrl,
+            meetingUrl: meetingAccessUrl,
             reminderTime,
             sessionNotes,
             recipientType: 'consultor',
@@ -203,7 +205,7 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
             meetingTitle: meeting.title,
             dateTime,
             duration,
-            meetingUrl: meeting.meetingUrl,
+            meetingUrl: meetingAccessUrl,
             reminderTime,
             sessionNotes,
             recipientType: 'pyme',
@@ -280,7 +282,10 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
   }
 
   private async sendNotification(notification: ScheduledNotification) {
-    const payload = notification.payload;
+    const payload = {
+      ...notification.payload,
+      enlace: buildMeetingAccessUrl(notification.meetingId),
+    };
     const recipient = await this.resolveReminderRecipient(notification);
     const processes: Promise<unknown>[] = [];
 
@@ -382,7 +387,7 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
         timeZone: 'America/Lima',
       }),
       tiempo: `${meeting.durationMinutes} minutos`,
-      enlace: meeting.meetingUrl ?? '',
+      enlace: buildMeetingAccessUrl(meeting.id),
       notas_sesion: meeting.description?.trim() || undefined,
     };
   }

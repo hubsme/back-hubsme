@@ -143,8 +143,8 @@ export class TeamsMeetingService {
 
   private async updateOnlineMeetingSettings(onlineMeetingId: string): Promise<void> {
     const organizerUserId = process.env.MS_GRAPH_TEAMS_ORGANIZER_USER_ID;
-
-    await this.appGraphClient!.api(`/users/${organizerUserId}/onlineMeetings/${onlineMeetingId}`).patch({
+    const meetingPath = `/users/${organizerUserId}/onlineMeetings/${onlineMeetingId}`;
+    await this.appGraphClient!.api(meetingPath).patch({
       recordAutomatically: true,
       meetingSpokenLanguageTag: 'es-ES',
       allowedPresenters: 'everyone',

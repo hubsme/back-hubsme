@@ -1,4 +1,12 @@
-import { BadRequestException, forwardRef, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  forwardRef,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { TaskDTO } from '@db/tables/task.table';
 import { MeetingRepository } from '@repositories/meeting.repository';
 import { TaskRepository } from '@repositories/task.repository';
@@ -12,6 +20,9 @@ import { TeamsMeetingService } from './teams-meeting.service';
 import { ConsultantAvailabilityService } from '../consultant-availability/consultant-availability.service';
 import { ScheduledNotificationService } from '../scheduled-notification/scheduled-notification.service';
 import { User } from '@db/tables/user.table';
+import { MeetingAccessStatus } from './dto/meeting-access.dto';
+
+const MEETING_ACCESS_MARGIN_MS = 15 * 60 * 1000;
 
 @Injectable()
 export class MeetingService {
@@ -62,14 +73,24 @@ export class MeetingService {
     };
   }
 
-  async findAllPaginated(filters: MeetingListFiltersDto) {
+  async findAllPaginated(filters: MeetingListFiltersDto, requester?: Pick<User, 'id' | 'role'>) {
     const page = filters.page ?? 1;
     const limit = filters.limit ?? 10;
-    const { data, total } = await this.meetingRepository.findAllPaginated(page, limit, filters);
+    const scopedFilters = { ...filters };
+
+    if (requester?.role === 'pyme') {
+      scopedFilters.pymeId = requester.id;
+      scopedFilters.consultantId = undefined;
+    } else if (requester?.role === 'consultor') {
+      scopedFilters.consultantId = requester.id;
+      scopedFilters.pymeId = undefined;
+    }
+
+    const { data, total } = await this.meetingRepository.findAllPaginated(page, limit, scopedFilters);
     const totalPages = Math.ceil(total / limit);
 
     return {
-      data,
+      data: data.map((meeting) => this.toMeetingResult(meeting)),
       meta: { total, page, limit, totalPages, hasNextPage: page < totalPages, hasPreviousPage: page > 1 },
     };
   }
@@ -78,6 +99,55 @@ export class MeetingService {
     const meeting = await this.meetingRepository.findOne(id);
     if (!meeting) throw new NotFoundException(`Meeting with ID ${id} not found`);
     return meeting;
+  }
+
+  async findOneResult(id: number) {
+    return this.toMeetingResult(await this.findOne(id));
+  }
+
+  async findOneForRequester(id: number, requester: Pick<User, 'id' | 'role'>) {
+    const meeting = await this.findOne(id);
+    this.assertMeetingParticipant(meeting, requester);
+    return this.toMeetingResult(meeting);
+  }
+
+  async resolveAccess(id: number, requester: Pick<User, 'id' | 'role'>) {
+    const meeting = await this.findOne(id);
+    this.assertMeetingParticipant(meeting, requester);
+
+    const hasMinutes = meeting.status === 'finalizada' && Boolean(meeting.description?.trim());
+    if (!meeting.startTime || !meeting.meetingUrl || !['confirmada', 'finalizada'].includes(meeting.status)) {
+      return {
+        id: meeting.id,
+        title: meeting.title,
+        status: 'unavailable' as MeetingAccessStatus,
+        startTime: meeting.startTime,
+        endTime: null,
+        accessStartsAt: null,
+        accessEndsAt: null,
+        redirectUrl: null,
+        hasMinutes,
+      };
+    }
+
+    const endTime = new Date(meeting.startTime.getTime() + meeting.durationMinutes * 60_000);
+    const accessStartsAt = new Date(meeting.startTime.getTime() - MEETING_ACCESS_MARGIN_MS);
+    const accessEndsAt = new Date(endTime.getTime() + MEETING_ACCESS_MARGIN_MS);
+    const now = new Date();
+    const status: MeetingAccessStatus =
+      now < accessStartsAt ? 'upcoming' : now > accessEndsAt ? 'expired' : 'available';
+
+    return {
+      id: meeting.id,
+      title: meeting.title,
+      status,
+      startTime: meeting.startTime,
+      endTime,
+      accessStartsAt,
+      accessEndsAt,
+      redirectUrl: status === 'available' ? meeting.meetingUrl : null,
+      hasMinutes,
+    };
   }
 
   async create(data: MeetingCreateDto) {
@@ -104,7 +174,7 @@ export class MeetingService {
       );
     }
 
-    return this.meetingRepository.create({
+    const meeting = await this.meetingRepository.create({
       ...data,
       startTime: requestedBy === 'pyme' ? null : startTime,
       proposedStartTimes,
@@ -116,6 +186,7 @@ export class MeetingService {
       status: requestedBy === 'pyme' ? 'pago_pendiente' : 'solicitada',
       requestedBy,
     });
+    return this.toMeetingResult(meeting);
   }
 
   async confirm(id: number) {
@@ -126,7 +197,7 @@ export class MeetingService {
 
     if (meeting.status === 'confirmada') {
       await this.scheduledNotificationService.scheduleMeetingReminders(meeting);
-      return meeting;
+      return this.toMeetingResult(meeting);
     }
 
     if (!meeting.startTime) {
@@ -153,7 +224,7 @@ export class MeetingService {
 
     await this.scheduledNotificationService.scheduleMeetingReminders(confirmedMeeting);
     await this.scheduledNotificationService.sendMeetingConfirmedNotifications(confirmedMeeting);
-    return confirmedMeeting;
+    return this.toMeetingResult(confirmedMeeting);
   }
 
   async markPaidPendingConfirmation(id: number) {
@@ -213,7 +284,7 @@ export class MeetingService {
 
     await this.scheduledNotificationService.scheduleMeetingReminders(confirmedMeeting);
     await this.scheduledNotificationService.sendMeetingConfirmedNotifications(confirmedMeeting);
-    return confirmedMeeting;
+    return this.toMeetingResult(confirmedMeeting);
   }
 
   async listMeetingRecordings(id: number) {
@@ -269,7 +340,7 @@ export class MeetingService {
       await this.scheduledNotificationService.cancelMeetingReminders(id);
     }
 
-    return updatedMeeting;
+    return this.toMeetingResult(updatedMeeting);
   }
 
   async finalize(id: number, data: MeetingFinalizeDto) {
@@ -304,13 +375,13 @@ export class MeetingService {
       }));
 
     const tasks = await this.taskRepository.createMany(tasksPayload);
-    return { meeting, tasks };
+    return { meeting: this.toMeetingResult(meeting), tasks };
   }
 
   async delete(id: number) {
     await this.findOne(id);
     await this.scheduledNotificationService.cancelMeetingReminders(id);
-    return this.meetingRepository.delete(id);
+    return this.toMeetingResult(await this.meetingRepository.delete(id));
   }
 
   async getCopilotSummary(id: number) {
@@ -358,5 +429,25 @@ export class MeetingService {
     if (values.length !== 3) {
       throw new BadRequestException(['Selecciona exactamente 3 opciones de horario']);
     }
+  }
+
+  private assertMeetingParticipant(
+    meeting: { pymeId: number; consultantId: number },
+    requester: Pick<User, 'id' | 'role'>,
+  ) {
+    const belongsToRequester =
+      (requester.role === 'pyme' && meeting.pymeId === requester.id) ||
+      (requester.role === 'consultor' && meeting.consultantId === requester.id);
+
+    if (!belongsToRequester) {
+      throw new ForbiddenException('No tienes acceso a esta reunión');
+    }
+  }
+
+  private toMeetingResult<T extends { meetingUrl: string | null; teamsOnlineMeetingId: string | null }>(
+    meeting: T,
+  ): Omit<T, 'meetingUrl' | 'teamsOnlineMeetingId'> & { hasMeetingLink: boolean } {
+    const { meetingUrl, teamsOnlineMeetingId: _teamsOnlineMeetingId, ...result } = meeting;
+    return { ...result, hasMeetingLink: Boolean(meetingUrl) };
   }
 }

@@ -50,7 +50,7 @@ export class MeetingRepository {
         startTime: meeting.startTime,
         proposedStartTimes: meeting.proposedStartTimes,
         durationMinutes: meeting.durationMinutes,
-        meetingUrl: meeting.meetingUrl,
+        hasMeetingLink: sql<boolean>`${meeting.meetingUrl} IS NOT NULL`,
         status: meeting.status,
         requestedBy: meeting.requestedBy,
         description: meeting.description,

@@ -32,11 +32,8 @@ export class MeetingResultDto {
   @ApiProperty()
   durationMinutes: number;
 
-  @ApiProperty({ nullable: true })
-  meetingUrl: string | null;
-
-  @ApiProperty({ nullable: true })
-  teamsOnlineMeetingId: string | null;
+  @ApiProperty({ description: 'Indica si la reunión tiene un acceso virtual configurado' })
+  hasMeetingLink: boolean;
 
   @ApiProperty({ enum: ['solicitada', 'pago_pendiente', 'por_confirmar', 'confirmada', 'finalizada', 'cancelada'] })
   status: 'solicitada' | 'pago_pendiente' | 'por_confirmar' | 'confirmada' | 'finalizada' | 'cancelada';

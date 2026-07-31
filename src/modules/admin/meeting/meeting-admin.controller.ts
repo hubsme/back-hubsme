@@ -27,6 +27,6 @@ export class MeetingAdminController {
   @ApiResponse({ status: 200, type: MeetingResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
   findOne(@Param('id') id: string) {
-    return this.meetingService.findOne(+id);
+    return this.meetingService.findOneResult(+id);
   }
 }
