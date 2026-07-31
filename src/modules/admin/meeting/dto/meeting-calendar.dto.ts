@@ -55,8 +55,8 @@ export class MeetingCalendarItemDto {
   @ApiProperty()
   durationMinutes: number;
 
-  @ApiProperty({ nullable: true, type: String })
-  meetingUrl: string | null;
+  @ApiProperty({ description: 'Indica si la reunión tiene un acceso virtual configurado' })
+  hasMeetingLink: boolean;
 
   @ApiProperty({
     enum: ['solicitada', 'pago_pendiente', 'por_confirmar', 'confirmada', 'finalizada', 'cancelada'],

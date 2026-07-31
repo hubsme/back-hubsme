@@ -12,6 +12,7 @@ import { MeetingRecordingDto } from './dto/meeting-recording.dto';
 import { MeetingFinalizeResultDto, MeetingResultDto } from './dto/meeting-result.dto';
 import { MeetingUpdateDto } from './dto/meeting-update.dto';
 import { MeetingCopilotSummaryDto } from './dto/meeting-copilot-summary.dto';
+import { MeetingAccessResultDto } from './dto/meeting-access.dto';
 import { MeetingService } from './meeting.service';
 
 type AuthenticatedRequest = { user: User };
@@ -35,8 +36,8 @@ export class MeetingController {
   @ApiOperation({ summary: 'Get all meetings paginated' })
   @ApiResponse({ status: 200, type: MeetingListDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  findAll(@Query() filters: MeetingListFiltersDto) {
-    return this.meetingService.findAllPaginated(filters);
+  findAll(@Request() request: AuthenticatedRequest, @Query() filters: MeetingListFiltersDto) {
+    return this.meetingService.findAllPaginated(filters, request.user);
   }
 
   @Get('find-one/:id')
@@ -44,8 +45,18 @@ export class MeetingController {
   @ApiParam({ name: 'id', type: 'number' })
   @ApiResponse({ status: 200, type: MeetingResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  findOne(@Param('id') id: string) {
-    return this.meetingService.findOne(+id);
+  findOne(@Request() request: AuthenticatedRequest, @Param('id') id: string) {
+    return this.meetingService.findOneForRequester(+id, request.user);
+  }
+
+  @Get('access/:id')
+  @ApiOperation({ summary: 'Resolve protected Teams access for an authenticated meeting participant' })
+  @ApiParam({ name: 'id', type: 'number' })
+  @ApiResponse({ status: 200, type: MeetingAccessResultDto })
+  @ApiResponse({ status: 403, type: HttpErrorDto })
+  @ApiResponse({ status: 404, type: HttpErrorDto })
+  access(@Request() request: AuthenticatedRequest, @Param('id') id: string) {
+    return this.meetingService.resolveAccess(+id, request.user);
   }
 
   @Post('create')
