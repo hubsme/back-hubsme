@@ -5,7 +5,10 @@ import { TokenCredentialAuthenticationProvider } from '@microsoft/microsoft-grap
 import { AiService } from '../ai/ai.service';
 import { HubsmeAiResultDto } from '../ai/dto/hubsme-ai/hubsme-ai-result.dto';
 import {
+  GraphCalendar,
+  GraphCalendarEvent,
   GraphCallRecording,
+  GraphCallTranscript,
   GraphDriveItem,
   GraphListResponse,
   GraphOnlineMeeting,
@@ -58,34 +61,97 @@ export class TeamsMeetingService {
     const startDateTime = data.startTime.toISOString();
     const endDateTime = new Date(data.startTime.getTime() + data.durationMinutes * 60_000).toISOString();
 
-    const meetingPayload = {
+    const eventPayload = {
       subject: data.title,
-      startDateTime,
-      endDateTime,
-      lobbyBypassSettings: {
-        scope: 'everyone',
+      start: {
+        dateTime: startDateTime,
+        timeZone: 'UTC',
       },
-      recordAutomatically: true,
-      allowedPresenters: 'everyone',
+      end: {
+        dateTime: endDateTime,
+        timeZone: 'UTC',
+      },
+      isOnlineMeeting: true,
+      onlineMeetingProvider: 'teamsForBusiness',
     };
 
     try {
-      const onlineMeeting = (await this.appGraphClient!.api(`/users/${organizerUserId}/onlineMeetings`).post(
-        meetingPayload,
-      )) as GraphOnlineMeeting;
+      await this.assertTeamsCalendarProvider(organizerUserId!);
 
-      if (!onlineMeeting.id || !onlineMeeting.joinWebUrl) {
-        throw new Error('La creación de la reunión de Teams no devolvió ID o joinWebUrl.');
+      const calendarEvent = (await this.appGraphClient!.api(`/users/${organizerUserId}/calendar/events`).post(
+        eventPayload,
+      )) as GraphCalendarEvent;
+
+      const joinWebUrl = await this.resolveCalendarEventJoinUrl(organizerUserId!, calendarEvent);
+      const onlineMeeting = await this.findOnlineMeetingByJoinWebUrl(joinWebUrl);
+
+      if (!onlineMeeting?.id || !onlineMeeting.joinWebUrl) {
+        throw new Error('No se pudo resolver el onlineMeeting asociado al evento de calendario.');
       }
 
-      this.logger.log(`Reunión virtual pura de Teams creada con grabación automática y bypass de lobby restrictivo: ${data.title}`);
+      await this.updateOnlineMeetingSettings(onlineMeeting.id);
+
+      this.logger.log(`Reunión calendar-backed creada y configurada con grabación automática: ${data.title}`);
 
       return { id: onlineMeeting.id, joinWebUrl: onlineMeeting.joinWebUrl };
-    } catch (error: any) {
-      const graphError = error.message || JSON.stringify(error);
-      this.logger.error(`Microsoft Graph onlineMeetings creation failed: ${graphError}`);
+    } catch (error: unknown) {
+      const graphError = this.getGraphErrorDetails(error);
+      this.logger.error(`Microsoft Graph calendar-backed Teams meeting creation failed: ${graphError}`);
       throw new InternalServerErrorException(`No se pudo crear la reunión de Microsoft Teams (${graphError})`);
     }
+  }
+
+  private async assertTeamsCalendarProvider(organizerUserId: string): Promise<void> {
+    const calendar = (await this.appGraphClient!.api(`/users/${organizerUserId}/calendar`)
+      .select('id,allowedOnlineMeetingProviders,defaultOnlineMeetingProvider')
+      .get()) as GraphCalendar;
+    const allowedProviders = calendar.allowedOnlineMeetingProviders ?? [];
+
+    if (!allowedProviders.includes('teamsForBusiness')) {
+      throw new Error(
+        'El calendario del organizador no tiene Teams habilitado como proveedor de reuniones. ' +
+          `Proveedores permitidos: ${allowedProviders.join(', ') || 'ninguno'}.`,
+      );
+    }
+  }
+
+  private async resolveCalendarEventJoinUrl(
+    organizerUserId: string,
+    calendarEvent: GraphCalendarEvent,
+  ): Promise<string> {
+    if (calendarEvent.onlineMeeting?.joinUrl) {
+      return calendarEvent.onlineMeeting.joinUrl;
+    }
+
+    if (!calendarEvent.id) {
+      throw new Error('El evento de calendario no devolvió id ni joinUrl.');
+    }
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await this.sleep(500);
+      const event = (await this.appGraphClient!.api(`/users/${organizerUserId}/calendar/events/${calendarEvent.id}`)
+        .select('id,onlineMeeting')
+        .get()) as GraphCalendarEvent;
+
+      if (event.onlineMeeting?.joinUrl) {
+        return event.onlineMeeting.joinUrl;
+      }
+    }
+
+    throw new Error('El evento de calendario no generó un enlace de Teams.');
+  }
+
+  private async updateOnlineMeetingSettings(onlineMeetingId: string): Promise<void> {
+    const organizerUserId = process.env.MS_GRAPH_TEAMS_ORGANIZER_USER_ID;
+
+    await this.appGraphClient!.api(`/users/${organizerUserId}/onlineMeetings/${onlineMeetingId}`).patch({
+      recordAutomatically: true,
+      meetingSpokenLanguageTag: 'es-ES',
+      allowedPresenters: 'everyone',
+      lobbyBypassSettings: {
+        scope: 'everyone',
+      },
+    });
   }
 
   private async findOnlineMeetingByJoinWebUrl(meetingUrl: string): Promise<GraphOnlineMeeting | null> {
@@ -94,7 +160,8 @@ export class TeamsMeetingService {
       .filter(`joinWebUrl eq '${this.escapeODataString(meetingUrl)}'`)
       .get()) as GraphListResponse<GraphOnlineMeeting>;
 
-    return response.value?.[0] ?? null;
+    const onlineMeetings = response.value ?? [];
+    return onlineMeetings[0] ?? null;
   }
 
   async resolveOnlineMeetingByJoinWebUrl(meetingUrl: string): Promise<GraphOnlineMeeting | null> {
@@ -124,9 +191,7 @@ export class TeamsMeetingService {
     const organizerUserId = process.env.MS_GRAPH_TEAMS_ORGANIZER_USER_ID;
 
     try {
-      const response = (await this.appGraphClient!.api(
-        `/users/${organizerUserId}/drive/root:/Recordings:/children`,
-      )
+      const response = (await this.appGraphClient!.api(`/users/${organizerUserId}/drive/root:/Recordings:/children`)
         .top(999)
         .get()) as GraphListResponse<GraphDriveItem>;
 
@@ -215,7 +280,9 @@ export class TeamsMeetingService {
 
       return permission.link?.webUrl ?? null;
     } catch (error: unknown) {
-      this.logger.warn(`No se pudo crear link publico para la grabacion ${driveItemId}: ${this.getErrorMessage(error)}`);
+      this.logger.warn(
+        `No se pudo crear link publico para la grabacion ${driveItemId}: ${this.getErrorMessage(error)}`,
+      );
       return null;
     }
   }
@@ -252,6 +319,36 @@ export class TeamsMeetingService {
     return error instanceof Error ? error.message : String(error);
   }
 
+  private getGraphErrorDetails(error: unknown): string {
+    if (!error || typeof error !== 'object') return String(error);
+
+    const graphError = error as {
+      message?: unknown;
+      statusCode?: unknown;
+      code?: unknown;
+      body?: unknown;
+      response?: {
+        statusCode?: unknown;
+        body?: unknown;
+        headers?: Record<string, unknown>;
+      };
+    };
+
+    const details = {
+      message: graphError.message,
+      code: graphError.code,
+      statusCode: graphError.statusCode ?? graphError.response?.statusCode,
+      body: graphError.body ?? graphError.response?.body,
+      requestId: graphError.response?.headers?.['request-id'] ?? graphError.response?.headers?.['client-request-id'],
+    };
+
+    try {
+      return JSON.stringify(details);
+    } catch {
+      return this.getErrorMessage(error);
+    }
+  }
+
   private escapeODataString(value: string): string {
     return value.replace(/'/g, "''");
   }
@@ -268,45 +365,57 @@ export class TeamsMeetingService {
 
     const organizerUserId = process.env.MS_GRAPH_TEAMS_ORGANIZER_USER_ID;
 
-    let transcriptContent = '';
+    let transcripts: GraphCallTranscript[] = [];
     try {
-      // 1. Listar transcripciones
-      const transcriptsResponse = (await this.appGraphClient!.api(
-        `/users/${organizerUserId}/onlineMeetings/${onlineMeetingId}/transcripts`,
-      ).get()) as GraphListResponse<{ id: string }>;
+      let transcriptRequestUrl = `/users/${organizerUserId}/onlineMeetings/${onlineMeetingId}/transcripts`;
+      while (transcriptRequestUrl) {
+        const transcriptsResponse = (await this.appGraphClient!.api(
+          transcriptRequestUrl,
+        ).get()) as GraphListResponse<GraphCallTranscript>;
+        transcripts.push(...(transcriptsResponse.value ?? []));
+        transcriptRequestUrl = transcriptsResponse['@odata.nextLink'] ?? '';
+      }
 
-      const transcripts = transcriptsResponse.value ?? [];
-      if (transcripts.length > 0) {
-        const transcriptId = transcripts[0].id;
+      transcripts = transcripts
+        .filter((transcript): transcript is GraphCallTranscript & { id: string } => Boolean(transcript.id))
+        .sort((left, right) => {
+          const leftTime = left.createdDateTime ? new Date(left.createdDateTime).getTime() : 0;
+          const rightTime = right.createdDateTime ? new Date(right.createdDateTime).getTime() : 0;
+          return leftTime - rightTime;
+        });
+    } catch (error: unknown) {
+      this.logger.warn(`Error al listar transcripciones desde Graph API: ${this.getErrorMessage(error)}`);
+    }
 
-        // 2. Descargar el contenido de la transcripción en formato WebVTT
-        transcriptContent = (await this.appGraphClient!.api(
-          `/users/${organizerUserId}/onlineMeetings/${onlineMeetingId}/transcripts/${transcriptId}/content`,
+    const transcriptParts: string[] = [];
+    for (const [index, transcript] of transcripts.entries()) {
+      try {
+        const transcriptContent = (await this.appGraphClient!.api(
+          `/users/${organizerUserId}/onlineMeetings/${onlineMeetingId}/transcripts/${transcript.id}/content`,
         )
-          .query({ '$format': 'text/vtt' })
+          .query({ $format: 'text/vtt' })
           .responseType(ResponseType.TEXT)
           .get()) as string;
+        const cleanedTranscript = this.cleanTranscript(transcriptContent);
+
+        if (cleanedTranscript) {
+          transcriptParts.push(`## Transcripción ${transcriptParts.length + 1}\n${cleanedTranscript}`);
+        }
+      } catch (error: unknown) {
+        this.logger.warn(
+          `No se pudo leer la transcripción ${index + 1}; se continuará con las demás: ${this.getErrorMessage(error)}`,
+        );
       }
-    } catch (error: any) {
-      this.logger.warn(`Error al intentar obtener transcripción desde Graph API: ${error.message || error}`);
     }
 
-    if (!transcriptContent) {
-      throw new BadRequestException([
-        'No se encontró ninguna transcripción activa para esta reunión de Teams. Asegúrate de haber iniciado y guardado la grabación y transcripción en Teams.',
-      ]);
-    }
-
-
-    // 3. Limpiar la transcripción (formato WebVTT -> texto plano)
-    const cleanedText = this.cleanTranscript(transcriptContent);
+    const cleanedText = transcriptParts.join('\n\n---\n\n');
     if (!cleanedText) {
       throw new BadRequestException([
-        'La transcripción de la reunión está vacía. No hay suficiente contenido para resumir.',
+        'No se encontró ninguna transcripción disponible para esta reunión de Teams. Asegúrate de haber iniciado y guardado la grabación y transcripción.',
       ]);
     }
 
-    // 4. Invocar el flujo de IA con Groq
+    // Fusionar todas las transcripciones disponibles antes de invocar el flujo de IA.
     return this.aiService.runHubsmeAiPrompt(cleanedText);
   }
 

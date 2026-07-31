@@ -36,6 +36,12 @@ export class ConsultantResultDto {
   @ApiProperty({ nullable: true })
   lastName: string | null;
 
+  @ApiProperty({ nullable: true, example: '72750623' })
+  dni: string | null;
+
+  @ApiProperty({ nullable: true, example: '1990-05-21', format: 'date' })
+  birthDate: string | null;
+
   @ApiProperty({ nullable: true })
   ownerPhone: string | null;
 

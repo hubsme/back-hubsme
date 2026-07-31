@@ -194,6 +194,8 @@ export class ConsultantRepository {
         fullName: consultant.fullName,
         firstName: consultant.firstName,
         lastName: consultant.lastName,
+        dni: consultant.dni,
+        birthDate: consultant.birthDate,
         ownerPhone: consultant.ownerPhone,
         headline: consultant.headline,
         location: consultant.location,

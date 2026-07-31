@@ -9,6 +9,7 @@ import { ConsultantRepository } from '@repositories/consultant.repository';
 import { PymeRepository } from '@repositories/pyme.repository';
 import { SubscriptionRepository } from '@repositories/subscription.repository';
 import { EmailModule } from '@modules/admin/email/email.module';
+import { IdentityVerificationModule } from '@modules/admin/identity-verification/identity-verification.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { EmailModule } from '@modules/admin/email/email.module';
       signOptions: { expiresIn: '30d' },
     }),
     EmailModule,
+    IdentityVerificationModule,
   ],
   controllers: [AuthController],
   providers: [

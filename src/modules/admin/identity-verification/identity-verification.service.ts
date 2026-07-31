@@ -1,14 +1,22 @@
-import { BadGatewayException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import { BadGatewayException, BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { DniVerificationDto } from './dto/dni-verification.dto';
-import { DniVerificationMatchesDto, DniVerificationResultDto } from './dto/dni-verification-result.dto';
-
-type JsonRecord = Record<string, unknown>;
+import {
+  DniVerificationIdentityDto,
+  DniVerificationMatchesDto,
+  DniVerificationResultDto,
+} from './dto/dni-verification-result.dto';
+import { PeruDevsRucResponse } from './dto/perudevs-ruc-response.dto';
+import { PeruDevsDniResponse, PeruDevsDniResult } from './dto/perudevs-dni-response.dto';
+import { RucVerificationDto } from './dto/ruc-verification.dto';
+import { RucVerificationResultDto } from './dto/ruc-verification-result.dto';
 
 const DNI_PROVIDER_URL = 'https://api.perudevs.com/api/v1/dni/complete';
+const RUC_PROVIDER_URL = 'https://api.perudevs.com/api/v1/ruc';
 const DNI_PROVIDER_TIMEOUT_MS = 10_000;
 
-const isRecord = (value: unknown): value is JsonRecord => {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+export type VerifiedDniProviderResult = {
+  dni: string;
+  birthDate: string;
 };
 
 @Injectable()
@@ -16,125 +24,134 @@ export class IdentityVerificationService {
   private readonly logger = new Logger(IdentityVerificationService.name);
 
   async verifyDni(verificationDto: DniVerificationDto): Promise<DniVerificationResultDto> {
+    const providerBody = await this.requestProvider<PeruDevsDniResponse>(
+      DNI_PROVIDER_URL,
+      verificationDto.documentNumber,
+      'DNI',
+    );
+    return this.compareWithProvider(verificationDto, providerBody);
+  }
+
+  async verifyDniForRegistration(verificationDto: DniVerificationDto): Promise<VerifiedDniProviderResult> {
+    const providerBody = await this.requestProvider<PeruDevsDniResponse>(
+      DNI_PROVIDER_URL,
+      verificationDto.documentNumber,
+      'DNI',
+    );
+    const verification = this.compareWithProvider(verificationDto, providerBody);
+    const result = providerBody?.estado ? providerBody.resultado : null;
+
+    if (!verification.verified || !result) {
+      throw new BadRequestException('Los datos de identidad no pudieron ser verificados');
+    }
+
+    const dni = this.normalizeDocument(result.id);
+    const birthDate = this.normalizeBirthDate(result.fecha_nacimiento);
+    if (!birthDate) {
+      throw new BadRequestException('La fecha de nacimiento devuelta por el proveedor no es válida');
+    }
+
+    return {
+      dni,
+      birthDate,
+    };
+  }
+
+  async verifyRuc(verificationDto: RucVerificationDto): Promise<RucVerificationResultDto> {
+    const providerBody = await this.requestProvider<PeruDevsRucResponse>(
+      RUC_PROVIDER_URL,
+      verificationDto.ruc,
+      'RUC',
+      [400, 404, 422],
+    );
+    const providerFound = Boolean(providerBody?.estado && providerBody.resultado);
+
+    return {
+      verified: providerFound,
+      providerFound,
+      nombreComercial: providerFound ? providerBody?.resultado?.nombre_comercial ?? null : null,
+      message: providerFound
+        ? 'El RUC existe en el registro consultado.'
+        : 'No se encontró información para el RUC enviado.',
+    };
+  }
+
+  private async requestProvider<T>(
+    url: string,
+    document: string,
+    documentType: 'DNI' | 'RUC',
+    notFoundStatuses = [404, 422],
+  ): Promise<T | null> {
     const apiKey = process.env.PERUDEVS_API_KEY?.trim();
 
     if (!apiKey) {
       this.logger.error('PeruDevs API key is not configured in environment variables');
-      throw new InternalServerErrorException('La validación de DNI no está configurada');
+      throw new InternalServerErrorException(`La validación de ${documentType} no está configurada`);
     }
 
-    const params = new URLSearchParams({
-      document: verificationDto.documentNumber,
-      key: apiKey,
-    });
-
+    const params = new URLSearchParams({ document, key: apiKey });
     let response: Response;
 
     try {
-      response = await fetch(`${DNI_PROVIDER_URL}?${params.toString()}`, {
-        headers: {
-          Accept: 'application/json',
-          'Accept-Language': 'es-PE,es;q=0.9',
-        },
+      response = await fetch(`${url}?${params.toString()}`, {
+        headers: { Accept: 'application/json', 'Accept-Language': 'es-PE,es;q=0.9' },
         signal: AbortSignal.timeout(DNI_PROVIDER_TIMEOUT_MS),
       });
     } catch (error) {
-      this.logger.error('Error connecting to PeruDevs DNI API', error instanceof Error ? error.stack : undefined);
-      throw new BadGatewayException('No se pudo consultar el servicio de validación de DNI');
+      this.logger.error(`Error connecting to PeruDevs ${documentType} API`, error instanceof Error ? error.stack : undefined);
+      throw new BadGatewayException(`No se pudo consultar el servicio de validación de ${documentType}`);
     }
 
-    const providerBody = await this.parseProviderResponse(response);
+    const providerBody = await this.parseProviderResponse<T>(response);
 
-    if (response.status === 404 || response.status === 422) {
-      return this.buildNotFoundResult();
-    }
-
+    if (notFoundStatuses.includes(response.status)) return null;
     if (response.status === 401 || response.status === 403) {
-      this.logger.error(`PeruDevs DNI API rejected the configured credentials: ${response.status}`);
-      throw new InternalServerErrorException('La configuración del servicio de validación de DNI no es válida');
+      this.logger.error(`PeruDevs ${documentType} API rejected the configured credentials: ${response.status}`);
+      throw new InternalServerErrorException(`La configuración del servicio de validación de ${documentType} no es válida`);
     }
-
     if (!response.ok) {
-      this.logger.error(`PeruDevs DNI API failed with status ${response.status}`);
-      throw new BadGatewayException('El servicio de validación de DNI no está disponible');
+      this.logger.error(`PeruDevs ${documentType} API failed with status ${response.status}`);
+      throw new BadGatewayException(`El servicio de validación de ${documentType} no está disponible`);
     }
 
-    return this.compareWithProvider(verificationDto, providerBody);
+    return providerBody;
   }
 
-  private async parseProviderResponse(response: Response): Promise<unknown> {
+  private async parseProviderResponse<T>(response: Response): Promise<T | null> {
     try {
-      return await response.json();
+      return (await response.json()) as T;
     } catch {
       return null;
     }
   }
 
-  private compareWithProvider(verificationDto: DniVerificationDto, providerBody: unknown): DniVerificationResultDto {
-    const providerFound = this.hasIdentityData(providerBody);
+  private compareWithProvider(
+    verificationDto: DniVerificationDto,
+    providerBody: PeruDevsDniResponse | null,
+  ): DniVerificationResultDto {
+    const result = providerBody?.estado ? providerBody.resultado : null;
 
-    if (!providerFound) {
+    if (!result) {
       return this.buildNotFoundResult();
     }
 
-    const providerDocument = this.findProviderValue(providerBody, [
-      'document',
-      'documento',
-      'dni',
-      'numero',
-      'numero_documento',
-      'document_number',
-    ]);
-    const providerFirstName = this.findProviderValue(providerBody, ['nombres', 'nombre', 'first_name', 'firstname']);
-    const providerPaternalLastName = this.findProviderValue(providerBody, [
-      'apellido_paterno',
-      'paterno',
-      'paternal_last_name',
-      'paternal_surname',
-    ]);
-    const providerMaternalLastName = this.findProviderValue(providerBody, [
-      'apellido_materno',
-      'materno',
-      'maternal_last_name',
-      'maternal_surname',
-    ]);
-    const providerBirthDate = this.findProviderValue(providerBody, [
-      'fecha_nacimiento',
-      'birth_date',
-      'birthdate',
-      'date_of_birth',
-    ]);
-    const providerFullName = this.findProviderValue(providerBody, ['nombre_completo', 'full_name', 'fullname']);
-
-    const fullNameMatches = providerFullName
-      ? this.normalizeText(providerFullName) ===
-        this.normalizeText(
-          `${verificationDto.firstName} ${verificationDto.paternalLastName} ${verificationDto.maternalLastName}`,
-        )
-      : null;
-
     const matches: DniVerificationMatchesDto = {
-      documentNumber: providerDocument
-        ? this.normalizeDocument(providerDocument) === verificationDto.documentNumber
-        : true,
-      firstName: providerFirstName
-        ? this.normalizeText(providerFirstName) === this.normalizeText(verificationDto.firstName)
-        : (fullNameMatches ?? false),
-      paternalLastName: providerPaternalLastName
-        ? this.normalizeText(providerPaternalLastName) === this.normalizeText(verificationDto.paternalLastName)
-        : (fullNameMatches ?? false),
-      maternalLastName: providerMaternalLastName
-        ? this.normalizeText(providerMaternalLastName) === this.normalizeText(verificationDto.maternalLastName)
-        : (fullNameMatches ?? false),
-      birthDate: providerBirthDate ? this.normalizeBirthDate(providerBirthDate) === verificationDto.birthDate : false,
+      documentNumber: this.normalizeDocument(result.id) === verificationDto.documentNumber,
+      firstName: this.normalizeText(result.nombres) === this.normalizeText(verificationDto.firstName),
+      paternalLastName:
+        this.normalizeText(result.apellido_paterno) === this.normalizeText(verificationDto.paternalLastName),
+      maternalLastName:
+        this.normalizeText(result.apellido_materno) === this.normalizeText(verificationDto.maternalLastName),
+      birthDate: this.normalizeBirthDate(result.fecha_nacimiento) === verificationDto.birthDate,
     };
 
     const verified = Object.values(matches).every(Boolean);
 
     return {
       verified,
-      providerFound,
+      providerFound: true,
       matches,
+      identity: this.mapIdentity(result),
       message: verified
         ? 'Los datos coinciden con el registro consultado.'
         : 'Los datos no coinciden completamente con el registro consultado.',
@@ -152,63 +169,22 @@ export class IdentityVerificationService {
         maternalLastName: false,
         birthDate: false,
       },
+      identity: null,
       message: 'No se encontró información verificable para el DNI enviado.',
     };
   }
 
-  private hasIdentityData(payload: unknown): boolean {
-    return Boolean(
-      this.findProviderValue(payload, [
-        'document',
-        'documento',
-        'dni',
-        'numero',
-        'numero_documento',
-        'nombres',
-        'nombre',
-        'nombre_completo',
-        'full_name',
-        'fecha_nacimiento',
-        'birth_date',
-      ]),
-    );
-  }
-
-  private findProviderValue(payload: unknown, aliases: string[], depth = 0): string | null {
-    if (!isRecord(payload) || depth > 3) {
-      return null;
-    }
-
-    const normalizedAliases = aliases.map((alias) => alias.toLowerCase());
-    const directEntry = Object.entries(payload).find(([key, value]) => {
-      return normalizedAliases.includes(key.toLowerCase()) && this.toStringValue(value) !== null;
-    });
-
-    if (directEntry) {
-      return this.toStringValue(directEntry[1]);
-    }
-
-    for (const value of Object.values(payload)) {
-      const nestedValue = this.findProviderValue(value, aliases, depth + 1);
-
-      if (nestedValue !== null) {
-        return nestedValue;
-      }
-    }
-
-    return null;
-  }
-
-  private toStringValue(value: unknown): string | null {
-    if (typeof value === 'string' && value.trim()) {
-      return value.trim();
-    }
-
-    if (typeof value === 'number') {
-      return String(value);
-    }
-
-    return null;
+  private mapIdentity(result: PeruDevsDniResult): DniVerificationIdentityDto {
+    return {
+      id: result.id,
+      nombres: result.nombres,
+      apellido_paterno: result.apellido_paterno,
+      apellido_materno: result.apellido_materno,
+      nombre_completo: result.nombre_completo,
+      genero: result.genero,
+      fecha_nacimiento: result.fecha_nacimiento,
+      codigo_verificacion: result.codigo_verificacion,
+    };
   }
 
   private normalizeText(value: string): string {

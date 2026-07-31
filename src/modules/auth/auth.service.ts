@@ -14,6 +14,8 @@ import { randomUUID } from 'crypto';
 import { EmailService } from '@modules/admin/email/email.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { DniVerificationDto } from '@modules/admin/identity-verification/dto/dni-verification.dto';
+import { IdentityVerificationService, VerifiedDniProviderResult } from '@modules/admin/identity-verification/identity-verification.service';
 
 type AuthRole = 'pyme' | 'consultor';
 type GoogleAuthFlow = 'login' | 'register';
@@ -45,6 +47,7 @@ export class AuthService {
     private readonly userRepository: UserRepository,
     private readonly pymeRepository: PymeRepository,
     private readonly consultantRepository: ConsultantRepository,
+    private readonly identityVerificationService: IdentityVerificationService,
     private readonly jwtService: JwtService,
     private readonly emailService: EmailService,
     private readonly subscriptionRepository: SubscriptionRepository,
@@ -103,6 +106,28 @@ export class AuthService {
         throw new BadRequestException(['Selecciona al menos un área de diagnóstico']);
       }
 
+      let verifiedDni: VerifiedDniProviderResult | null = null;
+      if (role === 'consultor') {
+        const identityDto: DniVerificationDto = {
+          documentNumber: registerDto.documentNumber ?? '',
+          firstName: firstName ?? '',
+          paternalLastName: registerDto.paternalLastName?.trim() ?? '',
+          maternalLastName: registerDto.maternalLastName?.trim() ?? '',
+          birthDate: registerDto.birthDate ?? '',
+        };
+
+        if (
+          !identityDto.documentNumber ||
+          !identityDto.paternalLastName ||
+          !identityDto.maternalLastName ||
+          !identityDto.birthDate
+        ) {
+          throw new BadRequestException(['Completa y valida los datos de identidad del consultor']);
+        }
+
+        verifiedDni = await this.identityVerificationService.verifyDniForRegistration(identityDto);
+      }
+
       if (role === 'pyme' && (!registerDto.name?.trim() || !registerDto.ruc?.trim() || !firstName || !lastName)) {
         throw new BadRequestException(['Completa empresa, RUC y datos del dueño']);
       }
@@ -125,6 +150,8 @@ export class AuthService {
           fullName: user.name,
           firstName,
           lastName,
+          dni: verifiedDni?.dni || registerDto.documentNumber,
+          birthDate: verifiedDni?.birthDate || registerDto.birthDate,
           ownerPhone: registerDto.ownerPhone?.trim(),
           headline: registerDto.headline?.trim(),
           location: registerDto.location?.trim(),
@@ -147,6 +174,7 @@ export class AuthService {
           active: 'true',
           validated: 'false',
         });
+
       } else if (user.role === 'pyme') {
         await this.pymeRepository.create({
           id: user.id,
