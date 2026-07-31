@@ -138,7 +138,7 @@ export class ConsultantService {
       headline: data.headline?.trim(),
       location: data.location?.trim(),
       workModality: data.workModality?.trim(),
-      linkedinUrl: data.linkedinUrl?.trim(),
+      linkedinUrl: this.normalizeLinkedInUrl(data.linkedinUrl),
       bio: data.bio?.trim(),
       diagnosticAreas: this.cleanDiagnosticAreas(data.diagnosticAreas),
       specialties: this.cleanTextList(data.specialties),
@@ -168,6 +168,15 @@ export class ConsultantService {
 
   private cleanTextList(value?: string[]) {
     return value?.map((item) => item.trim().replace(/\s+/g, ' ')).filter(Boolean);
+  }
+
+  private normalizeLinkedInUrl(value?: string) {
+    const trimmedValue = value?.trim();
+    if (!trimmedValue) return undefined;
+
+    return /^https?:\/\//i.test(trimmedValue)
+      ? trimmedValue
+      : `https://${trimmedValue.replace(/^\/+/, '')}`;
   }
 
   private cleanDiagnosticAreas(value?: ConsultantDiagnosticArea[]) {
