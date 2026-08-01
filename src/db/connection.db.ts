@@ -19,6 +19,9 @@ import { consultantMercadoPagoAccount } from '@db/tables/consultant-mercado-pago
 import { mercadoPagoPayment } from '@db/tables/mercado-pago-payment.table';
 import { promotionCode, promotionCodeRedemption } from '@db/tables/promotion-code.table';
 import { scheduledNotification } from '@db/tables/scheduled-notification.table';
+import { feedback } from '@db/tables/feedback.table';
+import { feedbackAttachment } from '@db/tables/feedback-attachment.table';
+import { feedbackReply } from '@db/tables/feedback-reply.table';
 
 const pool = new Pool(dbConfig);
 
@@ -41,6 +44,9 @@ const schema = {
   promotionCode,
   promotionCodeRedemption,
   scheduledNotification,
+  feedback,
+  feedbackAttachment,
+  feedbackReply,
 };
 
 export const database = drizzle(pool, { schema: schema });

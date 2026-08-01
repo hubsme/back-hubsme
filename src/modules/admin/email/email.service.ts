@@ -42,6 +42,18 @@ type MeetingPendingEmail = {
   recipientType: 'pyme' | 'consultor';
 };
 
+type SupportFeedbackNotificationEmail = {
+  to: string;
+  feedbackId: number;
+  title: string;
+  description: string;
+  userName: string;
+  userEmail: string;
+  userRole: 'pyme' | 'consultor';
+  attachmentCount: number;
+  adminUrl: string;
+};
+
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
@@ -252,6 +264,60 @@ export class EmailService {
         sessionNotes,
         note,
       }),
+    });
+  }
+
+  sendSupportFeedbackNotification(data: SupportFeedbackNotificationEmail) {
+    const userRole = data.userRole === 'pyme' ? 'PYME' : 'Consultor';
+    const attachmentLabel = data.attachmentCount === 1 ? '1 imagen' : `${data.attachmentCount} imágenes`;
+    const subject = `[Soporte #${data.feedbackId}] ${data.title}`;
+
+    return this.sendEmail({
+      to: data.to,
+      subject,
+      text: [
+        'Se recibió un nuevo comentario de soporte en HUBSME.',
+        '',
+        `Ticket: #${data.feedbackId}`,
+        `Usuario: ${data.userName}`,
+        `Correo: ${data.userEmail}`,
+        `Perfil: ${userRole}`,
+        `Título: ${data.title}`,
+        `Descripción: ${data.description}`,
+        `Adjuntos: ${attachmentLabel}`,
+        '',
+        `Revisar en el panel administrativo: ${data.adminUrl}`,
+      ].join('\n'),
+      html: `
+        <div style="margin:0;padding:0;background:#edf5ff;font-family:Arial,Helvetica,sans-serif;color:#0b1328;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#edf5ff;padding:24px 12px;">
+            <tr>
+              <td align="center">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:680px;background:#ffffff;border:1px solid #dce6f2;border-radius:20px;">
+                  <tr>
+                    <td style="padding:38px 42px;">
+                      <img src="https://www.hubsme.net/avif/logo_completo.png" width="185" alt="HUBSME" style="display:block;border:0;max-width:185px;height:auto;margin:0 0 28px;" />
+                      <div style="display:inline-block;padding:6px 12px;border-radius:999px;background:#eaf3ff;color:#0b6ee8;font-size:12px;font-weight:800;text-transform:uppercase;">Nuevo comentario de soporte</div>
+                      <h1 style="margin:18px 0 10px;font-size:29px;line-height:1.2;">Ticket #${data.feedbackId}</h1>
+                      <p style="margin:0;color:#435775;font-size:16px;line-height:1.55;">${this.escapeHtml(data.title)}</p>
+                      <div style="height:1px;background:#dbe3ef;margin:28px 0;"></div>
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="font-size:15px;line-height:1.5;">
+                        <tr><td style="padding:7px 0;color:#667792;width:115px;">Usuario</td><td style="padding:7px 0;font-weight:700;">${this.escapeHtml(data.userName)}</td></tr>
+                        <tr><td style="padding:7px 0;color:#667792;">Correo</td><td style="padding:7px 0;font-weight:700;">${this.escapeHtml(data.userEmail)}</td></tr>
+                        <tr><td style="padding:7px 0;color:#667792;">Perfil</td><td style="padding:7px 0;font-weight:700;">${userRole}</td></tr>
+                        <tr><td style="padding:7px 0;color:#667792;">Adjuntos</td><td style="padding:7px 0;font-weight:700;">${attachmentLabel}</td></tr>
+                      </table>
+                      <div style="margin-top:24px;padding:18px 20px;background:#f6f9fd;border:1px solid #dbe3ef;border-radius:13px;color:#253a5b;font-size:15px;line-height:1.65;">${this.escapeHtml(data.description).replace(/\r?\n/g, '<br>')}</div>
+                      <div style="margin-top:28px;text-align:center;">
+                        <a href="${this.escapeAttribute(data.adminUrl)}" style="${this.buttonStyle()}">Revisar comentario</a>
+                      </div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </div>`,
     });
   }
 

@@ -22,6 +22,7 @@ import { PublicConsultantModule } from './modules/public/consultant/public-consu
 import { AdminAuthModule } from './modules/admin/admin-auth/admin-auth.module';
 import { PromotionCodeModule } from './modules/admin/promotion-code/promotion-code.module';
 import { IdentityVerificationModule } from './modules/admin/identity-verification/identity-verification.module';
+import { FeedbackModule } from './modules/admin/feedback/feedback.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { IdentityVerificationModule } from './modules/admin/identity-verificatio
     AdminAuthModule,
     PromotionCodeModule,
     IdentityVerificationModule,
+    FeedbackModule,
   ],
   controllers: [AppController],
   providers: [AppService],
