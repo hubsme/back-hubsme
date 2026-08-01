@@ -62,6 +62,7 @@ export class DashboardService {
       matchRows,
       alertRows,
       meetingStats,
+      latestDiagnostic,
     ] = await Promise.all([
       database
         .select({ total: count() })
@@ -100,6 +101,7 @@ export class DashboardService {
         .orderBy(desc(dashboardAlert.createdAt))
         .limit(5),
       this.dashboardRepository.getMeetingStats({ userId, role }),
+      this.dashboardRepository.findLatestDiagnostic({ userId, role }),
     ]);
 
     const taskStatus = taskRows.reduce(
@@ -155,6 +157,7 @@ export class DashboardService {
         diagnostics: Number(diagnosticCount[0].total),
         billableHours,
       },
+      latestDiagnostic,
       meetingStats,
       taskStatus,
       upcomingMeetings: upcomingRows,
