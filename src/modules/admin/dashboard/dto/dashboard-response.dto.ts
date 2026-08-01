@@ -17,6 +17,17 @@ export class DashboardStatsDto {
   billableHours: number;
 }
 
+export class DashboardLatestDiagnosticDto {
+  @ApiProperty()
+  id: number;
+
+  @ApiProperty()
+  createdAt: Date;
+
+  @ApiProperty()
+  score: number;
+}
+
 export class DashboardMeetingStatsDto {
   @ApiProperty()
   total: number;
@@ -93,6 +104,9 @@ export class DashboardAlertDto {
 export class DashboardResponseDto {
   @ApiProperty({ type: DashboardStatsDto })
   stats: DashboardStatsDto;
+
+  @ApiProperty({ type: DashboardLatestDiagnosticDto, nullable: true })
+  latestDiagnostic: DashboardLatestDiagnosticDto | null;
 
   @ApiProperty({ type: DashboardMeetingStatsDto })
   meetingStats: DashboardMeetingStatsDto;

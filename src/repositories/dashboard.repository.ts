@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { and, count, eq, gte, isNotNull, isNull, lt, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gte, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import { database } from '@db/connection.db';
+import { diagnostic } from '@db/tables/diagnostic.table';
 import { meeting } from '@db/tables/meeting.table';
 
 type DashboardRole = 'admin' | 'pyme' | 'consultor';
@@ -18,8 +19,27 @@ export type DashboardMeetingStats = {
   completed: number;
 };
 
+export type DashboardLatestDiagnostic = {
+  id: number;
+  createdAt: Date;
+  score: number;
+};
+
 @Injectable()
 export class DashboardRepository {
+  async findLatestDiagnostic(scope: DashboardMeetingScope): Promise<DashboardLatestDiagnostic | null> {
+    if (!scope.userId || scope.role !== 'pyme') return null;
+
+    const [latestDiagnostic] = await database
+      .select({ id: diagnostic.id, createdAt: diagnostic.createdAt, score: diagnostic.score })
+      .from(diagnostic)
+      .where(and(isNull(diagnostic.deletedAt), eq(diagnostic.pymeId, scope.userId)))
+      .orderBy(desc(diagnostic.createdAt), desc(diagnostic.id))
+      .limit(1);
+
+    return latestDiagnostic ?? null;
+  }
+
   async getMeetingStats(scope: DashboardMeetingScope): Promise<DashboardMeetingStats> {
     const conditions = this.getMeetingScopeConditions(scope);
 
@@ -62,10 +82,7 @@ export class DashboardRepository {
     return stats;
   }
 
-  async findUpcomingConfirmed(
-    scope: DashboardMeetingScope,
-    now = new Date(),
-  ) {
+  async findUpcomingConfirmed(scope: DashboardMeetingScope, now = new Date()) {
     const weekEnd = this.getNextBusinessWeekStart(now);
 
     return database
