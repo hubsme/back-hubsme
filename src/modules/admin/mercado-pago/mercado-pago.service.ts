@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Consultant } from '@db/tables/consultant.table';
 import { ConsultantMercadoPagoAccount } from '@db/tables/consultant-mercado-pago-account.table';
 import { MercadoPagoPaymentRaw } from '@db/tables/mercado-pago-payment.table';
+import { User } from '@db/tables/user.table';
 import { ConsultantMercadoPagoAccountRepository } from '@repositories/consultant-mercado-pago-account.repository';
 import { ConsultantRepository } from '@repositories/consultant.repository';
 import { PymeRepository } from '@repositories/pyme.repository';
@@ -15,6 +16,7 @@ import { MercadoPagoAuthUrlDto, MercadoPagoCallbackDto } from './dto/mercado-pag
 
 import { SubscriptionService } from '../subscription/subscription.service';
 import { MercadoPagoCreateCheckoutDto, MercadoPagoPaymentWebhookQueryDto } from './dto/mercado-pago-checkout.dto';
+import { MercadoPagoPaymentHistoryFiltersDto } from './dto/mercado-pago-payment-history.dto';
 
 type MercadoPagoState = {
   flow: 'consultant-mercado-pago';
@@ -224,6 +226,47 @@ export class MercadoPagoService {
     return checkout;
   }
 
+  async findPayments(currentUser: User, filters: MercadoPagoPaymentHistoryFiltersDto) {
+    const role = this.getPaymentHistoryRole(currentUser);
+    const page = filters.page ?? 1;
+    const limit = Math.min(filters.limit ?? 10, 10);
+    const year = filters.year ?? new Date().getFullYear();
+    const month = filters.month ?? new Date().getMonth() + 1;
+    const from = new Date(Date.UTC(year, month - 1, 1));
+    const to = new Date(Date.UTC(year, month, 1));
+    const result = await this.paymentRepository.findAllForUser({
+      userId: currentUser.id,
+      role,
+      page,
+      limit,
+      from,
+      to,
+    });
+    const totalPages = result.total > 0 ? Math.ceil(result.total / limit) : 0;
+
+    return {
+      data: result.data,
+      meta: {
+        total: result.total,
+        page,
+        limit,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1 && totalPages > 0,
+      },
+    };
+  }
+
+  async findPayment(currentUser: User, id: number) {
+    const role = this.getPaymentHistoryRole(currentUser);
+    const payment = await this.paymentRepository.findOneForUser(id, currentUser.id, role);
+    if (!payment) {
+      throw new NotFoundException(`Mercado Pago payment with ID ${id} not found`);
+    }
+
+    return payment;
+  }
+
   async prepareCheckoutPayment(currentUserId: number, id: number) {
     const checkout = await this.findCheckout(currentUserId, id);
 
@@ -258,6 +301,14 @@ export class MercadoPagoService {
       initPoint: preference.init_point ?? null,
       sandboxInitPoint: preference.sandbox_init_point ?? null,
     });
+  }
+
+  private getPaymentHistoryRole(currentUser: User): 'pyme' | 'consultor' {
+    if (currentUser.role === 'pyme' || currentUser.role === 'consultor') {
+      return currentUser.role;
+    }
+
+    throw new UnauthorizedException('Solo una PYME o un consultor puede consultar su historial de pagos');
   }
 
   async handleWebhook(query: MercadoPagoPaymentWebhookQueryDto = {}) {

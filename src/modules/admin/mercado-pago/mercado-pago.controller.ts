@@ -25,6 +25,11 @@ import {
   MercadoPagoCreateCheckoutDto,
   MercadoPagoPaymentWebhookQueryDto,
 } from './dto/mercado-pago-checkout.dto';
+import {
+  MercadoPagoPaymentHistoryFiltersDto,
+  MercadoPagoPaymentHistoryItemDto,
+  MercadoPagoPaymentHistoryResponseDto,
+} from './dto/mercado-pago-payment-history.dto';
 import { MercadoPagoStatusDto } from './dto/mercado-pago-status.dto';
 import { MercadoPagoService } from './mercado-pago.service';
 
@@ -81,6 +86,27 @@ export class MercadoPagoController {
   @ApiResponse({ status: 400, type: HttpErrorDto })
   createCheckout(@Request() req: AuthenticatedRequest, @Body() body: MercadoPagoCreateCheckoutDto) {
     return this.mercadoPagoService.createCheckout(req.user.id, body);
+  }
+
+  @Get('payments')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List Mercado Pago payments for the authenticated user' })
+  @ApiResponse({ status: 200, type: MercadoPagoPaymentHistoryResponseDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  findPayments(@Request() req: AuthenticatedRequest, @Query() filters: MercadoPagoPaymentHistoryFiltersDto) {
+    return this.mercadoPagoService.findPayments(req.user, filters);
+  }
+
+  @Get('payments/:id')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get a Mercado Pago payment detail for the authenticated user' })
+  @ApiParam({ name: 'id', type: 'number' })
+  @ApiResponse({ status: 200, type: MercadoPagoPaymentHistoryItemDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  findPayment(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.mercadoPagoService.findPayment(req.user, +id);
   }
 
   @Get('checkout/:id')
