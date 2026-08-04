@@ -101,8 +101,8 @@ export class MeetingService {
     return meeting;
   }
 
-  async findOneResult(id: number) {
-    return this.toMeetingResult(await this.findOne(id));
+  async findOneForAdmin(id: number) {
+    return this.toMeetingAdminResult(await this.findOne(id));
   }
 
   async findOneForRequester(id: number, requester: Pick<User, 'id' | 'role'>) {
@@ -449,5 +449,12 @@ export class MeetingService {
   ): Omit<T, 'meetingUrl' | 'teamsOnlineMeetingId'> & { hasMeetingLink: boolean } {
     const { meetingUrl, teamsOnlineMeetingId: _teamsOnlineMeetingId, ...result } = meeting;
     return { ...result, hasMeetingLink: Boolean(meetingUrl) };
+  }
+
+  private toMeetingAdminResult<T extends { meetingUrl: string | null; teamsOnlineMeetingId: string | null }>(
+    meeting: T,
+  ): Omit<T, 'teamsOnlineMeetingId'> & { hasMeetingLink: boolean } {
+    const { teamsOnlineMeetingId: _teamsOnlineMeetingId, ...result } = meeting;
+    return { ...result, hasMeetingLink: Boolean(meeting.meetingUrl) };
   }
 }
