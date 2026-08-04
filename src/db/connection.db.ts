@@ -17,6 +17,7 @@ import { consultantAvailability } from '@db/tables/consultant-availability.table
 import { consultantGoogleCalendar } from '@db/tables/consultant-google-calendar.table';
 import { consultantMercadoPagoAccount } from '@db/tables/consultant-mercado-pago-account.table';
 import { mercadoPagoPayment } from '@db/tables/mercado-pago-payment.table';
+import { serviceRequest } from '@db/tables/service-request.table';
 import { promotionCode, promotionCodeRedemption } from '@db/tables/promotion-code.table';
 import { scheduledNotification } from '@db/tables/scheduled-notification.table';
 import { feedback } from '@db/tables/feedback.table';
@@ -41,6 +42,7 @@ const schema = {
   consultantGoogleCalendar,
   consultantMercadoPagoAccount,
   mercadoPagoPayment,
+  serviceRequest,
   promotionCode,
   promotionCodeRedemption,
   scheduledNotification,

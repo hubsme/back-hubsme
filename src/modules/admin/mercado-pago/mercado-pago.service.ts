@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Consultant } from '@db/tables/consultant.table';
 import { ConsultantMercadoPagoAccount } from '@db/tables/consultant-mercado-pago-account.table';
 import { MercadoPagoPaymentRaw } from '@db/tables/mercado-pago-payment.table';
+import { User } from '@db/tables/user.table';
 import { ConsultantMercadoPagoAccountRepository } from '@repositories/consultant-mercado-pago-account.repository';
 import { ConsultantRepository } from '@repositories/consultant.repository';
 import { PymeRepository } from '@repositories/pyme.repository';
@@ -14,7 +15,9 @@ import { PymeService } from '../pyme/pyme.service';
 import { MercadoPagoAuthUrlDto, MercadoPagoCallbackDto } from './dto/mercado-pago-auth.dto';
 
 import { SubscriptionService } from '../subscription/subscription.service';
+import { ServiceRequestService } from '../service-request/service-request.service';
 import { MercadoPagoCreateCheckoutDto, MercadoPagoPaymentWebhookQueryDto } from './dto/mercado-pago-checkout.dto';
+import { MercadoPagoPaymentHistoryFiltersDto } from './dto/mercado-pago-payment-history.dto';
 
 type MercadoPagoState = {
   flow: 'consultant-mercado-pago';
@@ -61,6 +64,8 @@ type MercadoPagoPaymentResponse = MercadoPagoPaymentRaw & {
   external_reference?: string;
 };
 
+const HUBSME_SERVICE_PAYMENT_REFERENCE_PREFIX = 'service-hubsme:';
+
 @Injectable()
 export class MercadoPagoService {
   private readonly logger = new Logger(MercadoPagoService.name);
@@ -76,6 +81,7 @@ export class MercadoPagoService {
     private readonly consultantService: ConsultantService,
     private readonly pymeService: PymeService,
     private readonly subscriptionService: SubscriptionService,
+    private readonly serviceRequestService: ServiceRequestService,
   ) {}
 
   async getAuthUrl(query: MercadoPagoAuthUrlDto) {
@@ -224,6 +230,47 @@ export class MercadoPagoService {
     return checkout;
   }
 
+  async findPayments(currentUser: User, filters: MercadoPagoPaymentHistoryFiltersDto) {
+    const role = this.getPaymentHistoryRole(currentUser);
+    const page = filters.page ?? 1;
+    const limit = Math.min(filters.limit ?? 10, 10);
+    const year = filters.year ?? new Date().getFullYear();
+    const month = filters.month ?? new Date().getMonth() + 1;
+    const from = new Date(Date.UTC(year, month - 1, 1));
+    const to = new Date(Date.UTC(year, month, 1));
+    const result = await this.paymentRepository.findAllForUser({
+      userId: currentUser.id,
+      role,
+      page,
+      limit,
+      from,
+      to,
+    });
+    const totalPages = result.total > 0 ? Math.ceil(result.total / limit) : 0;
+
+    return {
+      data: result.data,
+      meta: {
+        total: result.total,
+        page,
+        limit,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1 && totalPages > 0,
+      },
+    };
+  }
+
+  async findPayment(currentUser: User, id: number) {
+    const role = this.getPaymentHistoryRole(currentUser);
+    const payment = await this.paymentRepository.findOneForUser(id, currentUser.id, role);
+    if (!payment) {
+      throw new NotFoundException(`Mercado Pago payment with ID ${id} not found`);
+    }
+
+    return payment;
+  }
+
   async prepareCheckoutPayment(currentUserId: number, id: number) {
     const checkout = await this.findCheckout(currentUserId, id);
 
@@ -260,6 +307,79 @@ export class MercadoPagoService {
     });
   }
 
+  async prepareServicePayment(currentUserId: number, serviceRequestId: number) {
+    const serviceRequest = await this.serviceRequestService.findPayableForPyme(serviceRequestId, currentUserId);
+    const amount = Number(serviceRequest.proposedPrice);
+
+    let checkout = await this.paymentRepository.findByServiceRequestId(serviceRequestId);
+    if (checkout?.status === 'approved') {
+      await this.serviceRequestService.markPaid(serviceRequestId);
+      return checkout;
+    }
+    if (
+      checkout &&
+      this.isHubsmeServicePayment(checkout) &&
+      checkout.preferenceId &&
+      (checkout.initPoint || checkout.sandboxInitPoint)
+    ) {
+      await this.serviceRequestService.markPaymentPending(serviceRequestId);
+      return checkout;
+    }
+
+    const externalReference = this.buildHubsmeServicePaymentReference(serviceRequestId);
+    if (!checkout) {
+      checkout = await this.paymentRepository.create({
+        meetingId: null,
+        serviceRequestId,
+        pymeId: serviceRequest.pymeId,
+        consultantId: serviceRequest.consultantId,
+        preferenceId: null,
+        initPoint: null,
+        sandboxInitPoint: null,
+        externalReference,
+        status: 'created',
+        amount: amount.toFixed(2),
+        marketplaceFee: '0.00',
+        currency: serviceRequest.currency,
+      });
+    } else {
+      checkout = await this.paymentRepository.update(checkout.id, {
+        preferenceId: null,
+        initPoint: null,
+        sandboxInitPoint: null,
+        externalReference,
+        status: 'created',
+        amount: amount.toFixed(2),
+        marketplaceFee: '0.00',
+        currency: serviceRequest.currency,
+      });
+    }
+
+    const accessToken = this.getPlatformAccessToken();
+    const preference = await this.createPreference(accessToken, {
+      serviceRequestId,
+      title: serviceRequest.title,
+      amount,
+      externalReference: checkout.externalReference,
+    });
+    const updatedCheckout = await this.paymentRepository.update(checkout.id, {
+      preferenceId: preference.id,
+      initPoint: preference.init_point ?? null,
+      sandboxInitPoint: preference.sandbox_init_point ?? null,
+      marketplaceFee: '0.00',
+    });
+    await this.serviceRequestService.markPaymentPending(serviceRequestId);
+    return updatedCheckout;
+  }
+
+  private getPaymentHistoryRole(currentUser: User): 'pyme' | 'consultor' {
+    if (currentUser.role === 'pyme' || currentUser.role === 'consultor') {
+      return currentUser.role;
+    }
+
+    throw new UnauthorizedException('Solo una PYME o un consultor puede consultar su historial de pagos');
+  }
+
   async handleWebhook(query: MercadoPagoPaymentWebhookQueryDto = {}) {
     const paymentId = this.getPaymentIdFromWebhookQuery(query);
     const topic = (query.type ?? query.topic ?? this.getTopicFromWebhookAction(query.action))?.toLowerCase();
@@ -286,9 +406,10 @@ export class MercadoPagoService {
     const checkoutFromQuery = queryExternalReference
       ? await this.paymentRepository.findByExternalReference(queryExternalReference)
       : undefined;
-    const consultantToken = checkoutFromQuery
-      ? await this.getPaymentAccessTokenForCheckout(checkoutFromQuery.consultantId)
-      : undefined;
+    const consultantToken =
+      checkoutFromQuery && !this.isHubsmeServicePayment(checkoutFromQuery)
+        ? await this.getPaymentAccessTokenForCheckout(checkoutFromQuery.consultantId)
+        : undefined;
     const payment = await this.getPayment(paymentId, consultantToken);
     const externalReference = payment.external_reference ?? queryExternalReference;
     if (!externalReference) {
@@ -317,10 +438,18 @@ export class MercadoPagoService {
     });
 
     if (!approvedCheckout) {
+      if (checkout.status === 'approved' && checkout.serviceRequestId) {
+        await this.serviceRequestService.markPaid(checkout.serviceRequestId);
+      }
       return { received: true };
     }
 
     try {
+      if (approvedCheckout.serviceRequestId) {
+        await this.serviceRequestService.markPaid(approvedCheckout.serviceRequestId);
+        return { received: true };
+      }
+
       let meetingId = approvedCheckout.meetingId;
       if (meetingId) {
         await this.meetingService.markPaidPendingConfirmation(meetingId);
@@ -495,7 +624,14 @@ export class MercadoPagoService {
 
   private async createPreference(
     accessToken: string,
-    data: { meetingId?: number; title: string; amount: number; marketplaceFee: number; externalReference: string },
+    data: {
+      meetingId?: number;
+      serviceRequestId?: number;
+      title: string;
+      amount: number;
+      marketplaceFee?: number;
+      externalReference: string;
+    },
   ): Promise<Required<Pick<MercadoPagoPreferenceResponse, 'id'>> & MercadoPagoPreferenceResponse> {
     const response = await fetch('https://api.mercadopago.com/checkout/preferences', {
       method: 'POST',
@@ -513,12 +649,13 @@ export class MercadoPagoService {
             unit_price: data.amount,
           },
         ],
-        marketplace_fee: data.marketplaceFee,
+        ...(data.marketplaceFee && data.marketplaceFee > 0 ? { marketplace_fee: data.marketplaceFee } : {}),
         external_reference: data.externalReference,
         notification_url: this.getWebhookUrl(data.externalReference),
         metadata: {
           external_reference: data.externalReference,
           ...(data.meetingId ? { meeting_id: data.meetingId } : {}),
+          ...(data.serviceRequestId ? { service_request_id: data.serviceRequestId } : {}),
         },
       }),
     });
@@ -635,6 +772,25 @@ export class MercadoPagoService {
 
   private getCurrency() {
     return process.env.MERCADO_PAGO_CURRENCY ?? 'PEN';
+  }
+
+  private getPlatformAccessToken() {
+    const accessToken = process.env.MERCADO_PAGO_ACCESS_TOKEN?.trim();
+    if (!accessToken) {
+      throw new BadRequestException(['MERCADO_PAGO_ACCESS_TOKEN no configurado']);
+    }
+    return accessToken;
+  }
+
+  private buildHubsmeServicePaymentReference(serviceRequestId: number) {
+    return `${HUBSME_SERVICE_PAYMENT_REFERENCE_PREFIX}${serviceRequestId}:${Date.now()}`;
+  }
+
+  private isHubsmeServicePayment(checkout: { serviceRequestId?: number | null; externalReference: string }) {
+    return (
+      Boolean(checkout.serviceRequestId) &&
+      checkout.externalReference.startsWith(HUBSME_SERVICE_PAYMENT_REFERENCE_PREFIX)
+    );
   }
 
   private getWebhookUrl(externalReference?: string) {

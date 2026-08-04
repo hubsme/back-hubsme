@@ -11,6 +11,7 @@ import { MeetingModule } from '../meeting/meeting.module';
 import { ConsultantModule } from '../consultant/consultant.module';
 import { PymeModule } from '../pyme/pyme.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
+import { ServiceRequestModule } from '../service-request/service-request.module';
 import { MercadoPagoController } from './mercado-pago.controller';
 import { MercadoPagoService } from './mercado-pago.service';
 
@@ -22,6 +23,7 @@ import { MercadoPagoService } from './mercado-pago.service';
     ConsultantModule,
     PymeModule,
     SubscriptionModule,
+    ServiceRequestModule,
   ],
   controllers: [MercadoPagoController],
   providers: [

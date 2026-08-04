@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { eq, ilike, or, and, isNull, isNotNull, count, desc, sql } from 'drizzle-orm';
+import { eq, ilike, or, and, isNull, isNotNull, count, desc, inArray, sql } from 'drizzle-orm';
 import { database } from '@db/connection.db';
 import { consultant, ConsultantDTO } from '@db/tables/consultant.table';
 import { user } from '@db/tables/user.table';
@@ -76,10 +76,7 @@ export class ConsultantRepository {
     filters?: { search?: string; active?: string; validated?: string; sector?: string },
   ) {
     const offset = (page - 1) * limit;
-    const conditions = [
-      or(isNotNull(meeting.id), isNotNull(task.id)),
-      isNull(consultant.deletedAt),
-    ];
+    const conditions = [or(isNotNull(meeting.id), isNotNull(task.id)), isNull(consultant.deletedAt)];
 
     if (filters?.search) {
       const searchTerm = filters.search.trim();
@@ -124,10 +121,7 @@ export class ConsultantRepository {
         meeting,
         and(eq(meeting.consultantId, consultant.id), eq(meeting.pymeId, pymeId), isNull(meeting.deletedAt)),
       )
-      .leftJoin(
-        task,
-        and(eq(task.consultantId, consultant.id), eq(task.pymeId, pymeId), isNull(task.deletedAt)),
-      )
+      .leftJoin(task, and(eq(task.consultantId, consultant.id), eq(task.pymeId, pymeId), isNull(task.deletedAt)))
       .where(whereClause);
 
     const data = await database
@@ -169,10 +163,7 @@ export class ConsultantRepository {
         meeting,
         and(eq(meeting.consultantId, consultant.id), eq(meeting.pymeId, pymeId), isNull(meeting.deletedAt)),
       )
-      .leftJoin(
-        task,
-        and(eq(task.consultantId, consultant.id), eq(task.pymeId, pymeId), isNull(task.deletedAt)),
-      )
+      .leftJoin(task, and(eq(task.consultantId, consultant.id), eq(task.pymeId, pymeId), isNull(task.deletedAt)))
       .where(whereClause)
       .orderBy(desc(consultant.createdAt))
       .limit(limit)
@@ -231,6 +222,46 @@ export class ConsultantRepository {
 
   async findByUserId(userId: number) {
     return this.findOne(userId);
+  }
+
+  async findAvailableByUserIds(userIds: number[]) {
+    if (!userIds.length) return [];
+    return database
+      .select({ id: consultant.id })
+      .from(consultant)
+      .where(
+        and(
+          inArray(consultant.id, userIds),
+          eq(consultant.active, 'true'),
+          eq(consultant.validated, 'true'),
+          isNull(consultant.deletedAt),
+        ),
+      );
+  }
+
+  async findAvailableForAiMatching(limit: number = 100) {
+    return database
+      .select({
+        id: consultant.id,
+        userId: consultant.id,
+        fullName: consultant.fullName,
+        headline: consultant.headline,
+        bio: consultant.bio,
+        photoUrl: consultant.photoUrl,
+        diagnosticAreas: consultant.diagnosticAreas,
+        specialties: consultant.specialties,
+        sectors: consultant.sectors,
+        industries: consultant.industries,
+        companyTypes: consultant.companyTypes,
+        services: consultant.services,
+        yearsExperience: consultant.yearsExperience,
+        rating: consultant.rating,
+        totalReviews: consultant.totalReviews,
+      })
+      .from(consultant)
+      .where(and(eq(consultant.active, 'true'), eq(consultant.validated, 'true'), isNull(consultant.deletedAt)))
+      .orderBy(desc(consultant.rating), desc(consultant.yearsExperience), desc(consultant.totalReviews))
+      .limit(Math.min(Math.max(limit, 3), 100));
   }
 
   async create(data: ConsultantDTO) {

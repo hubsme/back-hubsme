@@ -1,55 +1,147 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { GoogleGenAI } from '@google/genai';
+import { FunctionCallingConfigMode, FunctionDeclaration, GoogleGenAI } from '@google/genai';
+import { User } from '@db/tables/user.table';
 import {
   ConsultantCaseStudyDto,
   ConsultantEducationDto,
 } from '@modules/admin/consultant/dto/consultant-profile-fields.dto';
+import { ConsultantRepository } from '@repositories/consultant.repository';
 import { ConsultantCvProfileResultDto } from './dto/consultant-cv/consultant-cv-profile-result.dto';
 import { HubsmeAiResultDto } from './dto/hubsme-ai/hubsme-ai-result.dto';
+import { ServiceConsultantMatchRunDto } from './dto/service-request/service-consultant-match-run.dto';
+import {
+  ServiceConsultantMatchDto,
+  ServiceConsultantMatchesResultDto,
+} from './dto/service-request/service-consultant-match-result.dto';
+import { ServiceRequestChatRunDto } from './dto/service-request/service-request-chat-run.dto';
+import { ServiceRequestChatResultDto } from './dto/service-request/service-request-chat-result.dto';
+import { ServiceRequestDraftDto } from './dto/service-request/service-request-draft.dto';
 
 type UnknownRecord = Record<string, unknown>;
+type RunPromptOptions = {
+  useGoogleSearch?: boolean;
+  temperature?: number;
+  responseJsonSchema?: UnknownRecord;
+};
+type ServiceChatMessage = { role: 'assistant' | 'user'; content: string };
+type ConsultantMatchCandidate = Awaited<ReturnType<ConsultantRepository['findAvailableForAiMatching']>>[number];
+
+const SERVICE_REQUEST_DRAFT_SCHEMA: UnknownRecord = {
+  type: 'object',
+  additionalProperties: false,
+  propertyOrdering: ['title', 'description', 'requirements', 'details'],
+  properties: {
+    title: { type: 'string' },
+    description: { type: 'string' },
+    requirements: { type: 'string' },
+    details: { type: 'string' },
+  },
+  required: ['title', 'description', 'requirements', 'details'],
+};
+
+const SERVICE_REQUEST_DRAFT_EXTRACTION_SCHEMA: UnknownRecord = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    draft: SERVICE_REQUEST_DRAFT_SCHEMA,
+  },
+  required: ['draft'],
+};
+
+const SERVICE_REQUEST_COMPLETION_SCHEMA: UnknownRecord = {
+  type: 'object',
+  additionalProperties: false,
+  propertyOrdering: ['message', 'isComplete', 'needsConfirmation', 'missingInformation'],
+  properties: {
+    message: { type: 'string' },
+    isComplete: { type: 'boolean' },
+    needsConfirmation: { type: 'boolean' },
+    missingInformation: {
+      type: 'array',
+      maxItems: 6,
+      items: { type: 'string' },
+    },
+  },
+  required: ['message', 'isComplete', 'needsConfirmation', 'missingInformation'],
+};
 
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
   private ai?: GoogleGenAI;
 
+  constructor(private readonly consultantRepository: ConsultantRepository) {}
+
   private getAiClient(): GoogleGenAI {
     if (!this.ai) {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) {
         this.logger.error('GEMINI_API_KEY no configurado en variables de entorno');
-        throw new InternalServerErrorException('Error de configuración del servicio de IA (falta la clave API de Gemini)');
+        throw new InternalServerErrorException(
+          'Error de configuración del servicio de IA (falta la clave API de Gemini)',
+        );
       }
       this.ai = new GoogleGenAI({ apiKey });
     }
     return this.ai;
   }
 
-  async runPrompt(text: string, prompt?: string): Promise<{ result: string }> {
-    const defaultPrompt = 'Genera un resumen ejecutivo en texto plano, corrido y fluido de la reunión (en párrafos cohesivos, sin viñetas, sin listas de tareas y sin divisiones artificiales) en español.';
+  async runPrompt(text: string, prompt?: string, options: RunPromptOptions = {}): Promise<{ result: string }> {
+    const defaultPrompt =
+      'Genera un resumen ejecutivo en texto plano, corrido y fluido de la reunión (en párrafos cohesivos, sin viñetas, sin listas de tareas y sin divisiones artificiales) en español.';
     const activePrompt = prompt || defaultPrompt;
 
     const model = process.env.GEMINI_MODEL || 'models/gemini-2.5-flash-lite';
     const combinedPrompt = `${activePrompt}\n\n# Texto a procesar:\n${text}`;
 
     try {
-      const interaction = await this.getAiClient().interactions.create({
+      if (options.responseJsonSchema) {
+        const response = await this.getAiClient().models.generateContent({
+          model,
+          contents: combinedPrompt,
+          config: {
+            temperature: options.temperature ?? 0.35,
+            maxOutputTokens: 8192,
+            topP: 0.95,
+            responseMimeType: 'application/json',
+            responseJsonSchema: options.responseJsonSchema,
+          },
+        });
+        const usage = response.usageMetadata;
+        if (usage) {
+          this.logger.log(
+            `Tokens consumidos - Entrada: ${usage.promptTokenCount ?? 0} | Salida: ${usage.candidatesTokenCount ?? 0} | Total: ${usage.totalTokenCount ?? 0}`,
+          );
+        }
+        return { result: response.text ?? '' };
+      }
+
+      const interaction = (await this.getAiClient().interactions.create({
         model,
         input: combinedPrompt,
-        tools: [
-          {
-            type: 'google_search',
-          },
-        ],
+        ...(options.useGoogleSearch === false
+          ? {}
+          : {
+              tools: [
+                {
+                  type: 'google_search' as const,
+                },
+              ],
+            }),
         generation_config: {
-          temperature: 1,
+          temperature: options.temperature ?? 1,
           max_output_tokens: 65536,
           top_p: 0.95,
         },
-      }) as any;
+      })) as any;
 
       let resultText = '';
 
@@ -85,7 +177,7 @@ export class AiService {
         const outputTokens = interaction.usage.total_output_tokens ?? 0;
         const totalTokens = interaction.usage.total_tokens ?? 0;
         this.logger.log(
-          `Tokens consumidos - Entrada: ${inputTokens} | Salida: ${outputTokens} | Total: ${totalTokens}`
+          `Tokens consumidos - Entrada: ${inputTokens} | Salida: ${outputTokens} | Total: ${totalTokens}`,
         );
       }
 
@@ -93,9 +185,7 @@ export class AiService {
     } catch (error: unknown) {
       const message = this.errorMessage(error);
       this.logger.error(`Error al ejecutar prompt con Gemini: ${message}`);
-      throw new InternalServerErrorException(
-        `Error al comunicarse con el proveedor de IA (${message})`,
-      );
+      throw new InternalServerErrorException(`Error al comunicarse con el proveedor de IA (${message})`);
     }
   }
 
@@ -182,6 +272,159 @@ export class AiService {
     return normalized;
   }
 
+  async runServiceRequestChat(data: ServiceRequestChatRunDto, currentUser: User): Promise<ServiceRequestChatResultDto> {
+    this.assertPyme(currentUser);
+    const conversation: ServiceChatMessage[] = data.messages
+      .map((message) => ({
+        role: message.role,
+        content: this.readLongText(message.content, 2000),
+      }))
+      .filter((message) => message.content);
+    if (conversation.length < 2 || conversation.at(-1)?.role !== 'user') {
+      throw new BadRequestException(['La conversación debe incluir el último mensaje de la PYME']);
+    }
+
+    const currentDraft = this.normalizeServiceDraft(data.draft);
+    const extractionPrompt =
+      'Actúas como analista de requisitos de HUBSME. Tu única tarea es mantener un borrador estructurado de la solicitud de servicio.\n' +
+      'Lee toda la conversación y currentDraft. Conserva lo ya registrado y agrega o mejora información solamente cuando la PYME la haya expresado. No inventes datos ni elimines información válida.\n' +
+      'title debe nombrar el servicio; description debe explicar objetivo y contexto; requirements debe contener alcance, tareas y entregables; details debe guardar plazo, volumen, modalidad, restricciones u otros datos relevantes.\n' +
+      'Interpreta las respuestas según su contexto conversacional, no por coincidencia de palabras aisladas. Devuelve únicamente el draft estructurado solicitado por el esquema.';
+    const extractionPayload = JSON.stringify({
+      currentDraft,
+      conversation,
+    });
+    const { result: extractionResult } = await this.runPrompt(extractionPayload, extractionPrompt, {
+      useGoogleSearch: false,
+      temperature: 0.1,
+      responseJsonSchema: SERVICE_REQUEST_DRAFT_EXTRACTION_SCHEMA,
+    });
+    const extraction = this.parseServiceRequestJson(extractionResult, 'la extracción del servicio');
+    const draft = this.mergeServiceDraft(currentDraft, this.normalizeServiceDraft(extraction.draft));
+
+    const supervisorPrompt =
+      'Eres el supervisor del chat de solicitud de servicios de HUBSME. Evalúa semánticamente la conversación completa y el draft, y genera el único mensaje que verá la PYME.\n' +
+      'Tu decisión no puede basarse en listas de palabras, coincidencias literales ni una cantidad fija de turnos. Debes comprender cada respuesta dentro de la pregunta que la precede.\n' +
+      'Usa isComplete=true únicamente cuando la conversación demuestre que: (1) el servicio tiene objetivo, contexto y alcance suficientes para que un consultor lo comprenda, y (2) la PYME ya confirmó, después de una pregunta final de revisión, que no desea agregar o corregir información. En ese caso, genera un mensaje breve de finalización.\n' +
+      'Si el draft ya es suficiente pero todavía falta esa confirmación final, usa isComplete=false, needsConfirmation=true y pregunta si desea agregar o corregir algo antes de revisar.\n' +
+      'Si falta información esencial, usa ambos booleanos en false, indica en missingInformation solo lo esencial y formula UNA pregunta concreta. Revisa todas las preguntas anteriores y no repitas ninguna ya respondida.\n' +
+      'No preguntes por el consultor, precio ni método de pago. missingInformation debe usar frases naturales en español, nunca variables internas ni guiones bajos.';
+    const supervisorPayload = JSON.stringify({
+      draft,
+      conversation,
+      previousAssistantMessages: conversation
+        .filter((message) => message.role === 'assistant')
+        .map((message) => message.content),
+    });
+    const { result: supervisorResult } = await this.runPrompt(supervisorPayload, supervisorPrompt, {
+      useGoogleSearch: false,
+      temperature: 0.1,
+      responseJsonSchema: SERVICE_REQUEST_COMPLETION_SCHEMA,
+    });
+    const supervisor = this.parseServiceRequestJson(supervisorResult, 'la supervisión del servicio');
+    const response = this.normalizeServiceRequestSupervisor(supervisor, draft);
+    await this.validateServiceRequestChat(response);
+    return response;
+  }
+
+  async runServiceConsultantMatches(
+    data: ServiceConsultantMatchRunDto,
+    currentUser: User,
+  ): Promise<ServiceConsultantMatchesResultDto> {
+    this.assertPyme(currentUser);
+    const draft = this.normalizeServiceDraft(data.draft);
+    const missingInformation = this.getDraftMissingInformation(draft);
+    if (missingInformation.length) {
+      throw new BadRequestException([
+        `Completa la solicitud antes de buscar consultores: ${missingInformation.join(', ')}`,
+      ]);
+    }
+
+    const candidates = await this.consultantRepository.findAvailableForAiMatching();
+    if (candidates.length < 3) {
+      throw new BadRequestException([
+        'Se necesitan al menos 3 consultores activos y validados para generar recomendaciones',
+      ]);
+    }
+
+    const functionName = 'select_best_service_consultants';
+    const functionDeclaration: FunctionDeclaration = {
+      name: functionName,
+      description:
+        'Selecciona exactamente tres consultores cuyo perfil se ajuste mejor a la solicitud de servicio de la PYME.',
+      parametersJsonSchema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          matches: {
+            type: 'array',
+            minItems: 3,
+            maxItems: 3,
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                consultantId: { type: 'integer' },
+                reason: {
+                  type: 'string',
+                  description: 'Razón breve y específica de la coincidencia con el servicio.',
+                },
+              },
+              required: ['consultantId', 'reason'],
+            },
+          },
+        },
+        required: ['matches'],
+      },
+    };
+    const prompt =
+      'Analiza la solicitud y los perfiles disponibles. Prioriza primero las áreas de diagnóstico, luego especialidades, servicios, sectores, experiencia y evidencia del perfil.\n' +
+      'Debes llamar a la función con exactamente 3 IDs distintos que existan en candidates. No inventes consultores. La razón debe explicar la coincidencia concreta en máximo 300 caracteres.\n\n' +
+      JSON.stringify({
+        serviceRequest: draft,
+        candidates: candidates.map((candidate) => this.toMatchPromptCandidate(candidate)),
+      });
+    const args = await this.runFunctionPrompt(prompt, functionDeclaration, functionName);
+    const normalized = this.normalizeConsultantMatches(args, candidates);
+    await this.validateConsultantMatches(normalized);
+    return normalized;
+  }
+
+  async runFunctionPrompt(
+    prompt: string,
+    functionDeclaration: FunctionDeclaration,
+    functionName: string,
+  ): Promise<UnknownRecord> {
+    const model = process.env.GEMINI_MODEL || 'models/gemini-2.5-flash-lite';
+    let response: Awaited<ReturnType<GoogleGenAI['models']['generateContent']>>;
+    try {
+      response = await this.getAiClient().models.generateContent({
+        model,
+        contents: prompt,
+        config: {
+          temperature: 0.2,
+          toolConfig: {
+            functionCallingConfig: {
+              mode: FunctionCallingConfigMode.ANY,
+              allowedFunctionNames: [functionName],
+            },
+          },
+          tools: [{ functionDeclarations: [functionDeclaration] }],
+        },
+      });
+    } catch (error: unknown) {
+      const message = this.errorMessage(error);
+      this.logger.error(`Error al ejecutar función con Gemini: ${message}`);
+      throw new InternalServerErrorException(`Error al comunicarse con el proveedor de IA (${message})`);
+    }
+
+    const functionCall = response.functionCalls?.find((call) => call.name === functionName);
+    if (!functionCall?.args || !this.isRecord(functionCall.args)) {
+      throw new BadRequestException(['La IA no devolvió una selección válida de consultores']);
+    }
+    return functionCall.args;
+  }
+
   private parseJsonObject(value: string): UnknownRecord {
     const jsonMatch = value.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
@@ -224,6 +467,210 @@ export class AiService {
       workedSectors: this.readStringArray(data.workedSectors),
       caseStudies: this.normalizeCaseStudies(data.caseStudies),
     };
+  }
+
+  private parseServiceRequestJson(value: string, context: string): UnknownRecord {
+    const candidates = [value.trim(), ...this.extractJsonObjects(value)].filter(Boolean);
+    if (!candidates.length) {
+      throw new BadRequestException([`La IA no devolvió un JSON válido para ${context}`]);
+    }
+
+    for (const candidate of new Set(candidates)) {
+      try {
+        const parsed = JSON.parse(candidate) as unknown;
+        if (this.isRecord(parsed)) return parsed;
+      } catch {
+        // Gemini puede envolver el objeto en markdown o texto; se prueban los demás bloques encontrados.
+      }
+    }
+
+    this.logger.warn(`Gemini devolvió una respuesta no parseable para ${context}`);
+    throw new BadRequestException([`La IA devolvió un JSON mal formado para ${context}`]);
+  }
+
+  private extractJsonObjects(value: string): string[] {
+    const objects: string[] = [];
+    let start = -1;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let index = 0; index < value.length; index += 1) {
+      const character = value[index];
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (character === '\\') {
+          escaped = true;
+        } else if (character === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (character === '"') {
+        inString = true;
+      } else if (character === '{') {
+        if (depth === 0) start = index;
+        depth += 1;
+      } else if (character === '}' && depth > 0) {
+        depth -= 1;
+        if (depth === 0 && start >= 0) {
+          objects.push(value.slice(start, index + 1));
+          start = -1;
+        }
+      }
+    }
+
+    return objects;
+  }
+
+  private normalizeServiceRequestSupervisor(
+    data: UnknownRecord,
+    draft: ServiceRequestDraftDto,
+  ): ServiceRequestChatResultDto {
+    const requiredMissing = this.getDraftMissingInformation(draft);
+    const reportedMissing = this.readStringArray(data.missingInformation)
+      .map((item) => item.replace(/[_-]+/g, ' ').slice(0, 160))
+      .slice(0, 6);
+    let isComplete = data.isComplete === true;
+    let needsConfirmation = data.needsConfirmation === true;
+    const supervisorContradictsRequiredFields = requiredMissing.length > 0 && (isComplete || needsConfirmation);
+    let missingInformation = [...new Set([...requiredMissing, ...reportedMissing])].slice(0, 6);
+
+    if (requiredMissing.length) {
+      isComplete = false;
+      needsConfirmation = false;
+    }
+
+    const phase: ServiceRequestChatResultDto['phase'] = isComplete
+      ? 'complete'
+      : needsConfirmation
+        ? 'confirming'
+        : 'gathering';
+    if (phase !== 'gathering') missingInformation = [];
+
+    const fallbackMessage = isComplete
+      ? 'Tu solicitud está completa y lista para revisar.'
+      : needsConfirmation
+        ? 'La solicitud ya tiene la información necesaria. Confirma si deseas agregar o corregir algo antes de revisarla.'
+        : `Necesito completar un dato más: ${missingInformation[0] ?? 'información esencial del servicio'}.`;
+
+    return {
+      message: (supervisorContradictsRequiredFields ? '' : this.readLongText(data.message, 1500)) || fallbackMessage,
+      phase,
+      isComplete,
+      draft,
+      missingInformation,
+    };
+  }
+
+  private mergeServiceDraft(
+    previousDraft: ServiceRequestDraftDto,
+    nextDraft: ServiceRequestDraftDto,
+  ): ServiceRequestDraftDto {
+    return {
+      title: nextDraft.title || previousDraft.title,
+      description: nextDraft.description || previousDraft.description,
+      requirements: nextDraft.requirements || previousDraft.requirements,
+      details: nextDraft.details || previousDraft.details,
+    };
+  }
+
+  private normalizeServiceDraft(value: unknown): ServiceRequestDraftDto {
+    const data = this.isRecord(value) ? value : {};
+    return {
+      title: this.readString(data.title).slice(0, 160),
+      description: this.readLongText(data.description, 5000),
+      requirements: this.readLongText(data.requirements, 5000),
+      details: this.readLongText(data.details, 5000),
+    };
+  }
+
+  private getDraftMissingInformation(draft: ServiceRequestDraftDto) {
+    const missing: string[] = [];
+    if (draft.title.length < 3) missing.push('título del servicio');
+    if (draft.description.length < 10) missing.push('objetivo y contexto');
+    if (draft.requirements.length < 5) missing.push('alcance o entregables');
+    return missing;
+  }
+
+  private toMatchPromptCandidate(candidate: ConsultantMatchCandidate) {
+    return {
+      consultantId: candidate.id,
+      fullName: candidate.fullName,
+      headline: candidate.headline,
+      bio: candidate.bio?.slice(0, 700) ?? '',
+      diagnosticAreas: candidate.diagnosticAreas,
+      specialties: candidate.specialties.slice(0, 12),
+      services: candidate.services.slice(0, 12),
+      sectors: candidate.sectors.slice(0, 10),
+      industries: candidate.industries.slice(0, 10),
+      companyTypes: candidate.companyTypes.slice(0, 8),
+      yearsExperience: candidate.yearsExperience,
+      rating: candidate.rating,
+      totalReviews: candidate.totalReviews,
+    };
+  }
+
+  private normalizeConsultantMatches(
+    data: UnknownRecord,
+    candidates: ConsultantMatchCandidate[],
+  ): ServiceConsultantMatchesResultDto {
+    const candidateMap = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+    const matches: ServiceConsultantMatchDto[] = [];
+    const usedIds = new Set<number>();
+    const rawMatches = Array.isArray(data.matches) ? data.matches : [];
+
+    for (const item of rawMatches) {
+      if (!this.isRecord(item)) continue;
+      const consultantId = this.readNumber(item.consultantId);
+      const candidate = candidateMap.get(consultantId);
+      if (!candidate || usedIds.has(consultantId)) continue;
+      usedIds.add(consultantId);
+      matches.push({
+        consultantId,
+        fullName: candidate.fullName,
+        headline: candidate.headline,
+        photoUrl: candidate.photoUrl,
+        diagnosticAreas: candidate.diagnosticAreas,
+        specialties: candidate.specialties,
+        services: candidate.services,
+        yearsExperience: candidate.yearsExperience,
+        rating: candidate.rating,
+        reason:
+          this.readLongText(item.reason, 400) ||
+          'Su perfil profesional coincide con las necesidades descritas en el servicio.',
+      });
+      if (matches.length === 3) break;
+    }
+
+    if (matches.length !== 3) {
+      throw new BadRequestException(['La IA no seleccionó exactamente 3 consultores válidos']);
+    }
+    return { matches };
+  }
+
+  private async validateServiceRequestChat(data: ServiceRequestChatResultDto) {
+    const instance = plainToInstance(ServiceRequestChatResultDto, data);
+    const errors = await validate(instance, { whitelist: true });
+    if (errors.length) {
+      throw new BadRequestException(['La IA devolvió una conversación con formato inválido']);
+    }
+  }
+
+  private async validateConsultantMatches(data: ServiceConsultantMatchesResultDto) {
+    const instance = plainToInstance(ServiceConsultantMatchesResultDto, data);
+    const errors = await validate(instance, { whitelist: true });
+    if (errors.length) {
+      throw new BadRequestException(['La IA devolvió consultores con un formato inválido']);
+    }
+  }
+
+  private assertPyme(currentUser: User) {
+    if (currentUser.role !== 'pyme') {
+      throw new ForbiddenException('Solo una PYME puede usar el asistente de servicios');
+    }
   }
 
   private async validateConsultantCvProfile(data: ConsultantCvProfileResultDto) {
@@ -270,6 +717,16 @@ export class AiService {
       .filter((item): item is string => typeof item === 'string')
       .map((item) => item.trim().replace(/\s+/g, ' '))
       .filter(Boolean);
+  }
+
+  private readLongText(value: unknown, maxLength: number) {
+    if (typeof value !== 'string') return '';
+    return value
+      .trim()
+      .replace(/\r\n/g, '\n')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .slice(0, maxLength);
   }
 
   private readNumber(value: unknown) {

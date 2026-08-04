@@ -1,6 +1,19 @@
-import { decimal, index, integer, jsonb, pgEnum, pgTable, serial, text, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
+import {
+  decimal,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  serial,
+  text,
+  timestamp,
+  uniqueIndex,
+  varchar,
+} from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { meeting } from './meeting.table';
+import { serviceRequest } from './service-request.table';
 import { user } from './user.table';
 
 export const mercadoPagoPaymentStatusEnum = pgEnum('mercado_pago_payment_status', [
@@ -21,8 +34,8 @@ export const mercadoPagoPayment = pgTable(
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
     deletedAt: timestamp('deleted_at'),
-    meetingId: integer('meeting_id')
-      .references(() => meeting.id, { onDelete: 'cascade' }),
+    meetingId: integer('meeting_id').references(() => meeting.id, { onDelete: 'cascade' }),
+    serviceRequestId: integer('service_request_id').references(() => serviceRequest.id, { onDelete: 'cascade' }),
     pymeId: integer('pyme_id')
       .notNull()
       .references(() => user.id),
@@ -49,12 +62,16 @@ export const mercadoPagoPayment = pgTable(
   },
   (t) => [
     index('mercado_pago_payment_meeting_id_idx').on(t.meetingId),
+    index('mercado_pago_payment_service_request_id_idx').on(t.serviceRequestId),
     index('mercado_pago_payment_preference_id_idx').on(t.preferenceId),
     index('mercado_pago_payment_external_reference_idx').on(t.externalReference),
     index('mercado_pago_payment_status_idx').on(t.status),
     uniqueIndex('mercado_pago_payment_meeting_unique_active_idx')
       .on(t.meetingId)
       .where(sql`${t.deletedAt} IS NULL AND ${t.meetingId} IS NOT NULL`),
+    uniqueIndex('mercado_pago_payment_service_request_unique_active_idx')
+      .on(t.serviceRequestId)
+      .where(sql`${t.deletedAt} IS NULL AND ${t.serviceRequestId} IS NOT NULL`),
   ],
 );
 

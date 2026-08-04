@@ -1,8 +1,10 @@
 import { generateApi } from 'swagger-typescript-api';
 import path from 'path';
 import fs from 'fs';
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from '../src/app.module';
+import { createSwaggerDocument } from '../src/core/swagger.core';
 
-const SWAGGER_URL = process.env.SWAGGER_URL ?? 'http://localhost:6001/api-json';
 const OUTPUT_DIR = path.resolve(__dirname, '../../frontend-hubsme/src/api');
 const OUTPUT_FILE = 'backend.api.ts';
 
@@ -121,10 +123,17 @@ async function generate(): Promise<void> {
   console.log('🚀 Generando tipos y cliente API desde Swagger...');
 
   try {
+    const app = await NestFactory.create(AppModule, {
+      bodyParser: false,
+      logger: false,
+    });
+    const spec = createSwaggerDocument(app);
+    await app.close();
+
     await generateApi({
       fileName: OUTPUT_FILE,
       output: OUTPUT_DIR,
-      url: SWAGGER_URL,
+      spec,
 
       generateClient: true,
       httpClientType: 'fetch',
