@@ -71,6 +71,8 @@ export class PromotionCodeService {
         maxRedemptions: data.maxRedemptions,
         startsAt: data.startsAt,
         expiresAt: data.expiresAt,
+        allowedPymeIds: data.allowedPymeIds ?? null,
+        allowedConsultantIds: data.allowedConsultantIds ?? null,
       });
     } catch (error) {
       if (this.isUniqueViolation(error)) {

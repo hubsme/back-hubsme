@@ -19,6 +19,7 @@ import { WhatsappAlertaReunionConsultorDto } from './dto/whatsapp-alerta-reunion
 import { WhatsappAlertaReunionDto } from './dto/whatsapp-alerta-reunion.dto';
 import { WhatsappConsultorConfirmarReunionDto } from './dto/whatsapp-consultor-confirmar-reunion.dto';
 import { WhatsappWebhookAcceptedDto, WhatsappWebhookPayloadDto } from './dto/whatsapp-webhook.dto';
+import { WhatsappNotificacionCancelacionPymeDto } from './dto/whatsapp-notificacion-cancelacion-pyme.dto';
 import { WhatsappService } from './whatsapp.service';
 import type { WhatsappWebhookRequest } from './types/whatsapp-webhook.types';
 
@@ -58,6 +59,19 @@ export class WhatsappController {
   @ApiResponse({ status: 500, type: HttpErrorDto })
   async sendNotificacionConsultor(@Body() dto: WhatsappNotificacionConsultorDto): Promise<WhatsappSendResultDto> {
     return this.whatsappService.sendNotificacionConsultor(dto.to, dto);
+  }
+
+  @Post('notificacion-cancelacion-pyme')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Enviar plantilla notificacion_cancelacion_pyme' })
+  @ApiResponse({ status: 201, type: WhatsappSendResultDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  @ApiResponse({ status: 500, type: HttpErrorDto })
+  async sendNotificacionCancelacionPyme(
+    @Body() dto: WhatsappNotificacionCancelacionPymeDto,
+  ): Promise<WhatsappSendResultDto> {
+    return this.whatsappService.sendNotificacionCancelacionPyme(dto.to, dto);
   }
 
   @Post('alerta-reunion-consultor')

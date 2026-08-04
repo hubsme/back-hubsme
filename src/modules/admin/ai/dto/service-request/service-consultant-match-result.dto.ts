@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ArrayMaxSize, ArrayMinSize, IsArray, IsInt, IsString, MaxLength, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
-import { CONSULTANT_DIAGNOSTIC_AREAS, ConsultantDiagnosticArea } from '@core/consultant-diagnostic-area';
+import { CONSULTANT_DIAGNOSTIC_AREAS, ConsultantDiagnosticArea } from '@db/tables/consultant.table';
 
 export class ServiceConsultantMatchDto {
   @ApiProperty()

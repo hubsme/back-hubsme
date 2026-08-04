@@ -33,6 +33,7 @@ export const meeting = pgTable(
     status: meetingStatusEnum('status').default('solicitada').notNull(),
     requestedBy: meetingRequestedByEnum('requested_by').default('pyme').notNull(),
     description: text('description'),
+    cancellationReason: text('cancellation_reason'),
     completedAt: timestamp('completed_at'),
   },
   (t) => [

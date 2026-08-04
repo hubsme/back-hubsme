@@ -5,7 +5,9 @@ import { ConsultantCaseStudyDto, ConsultantEducationDto } from './consultant-pro
 import {
   CONSULTANT_DIAGNOSTIC_AREAS,
   ConsultantDiagnosticArea,
-} from '@core/consultant-diagnostic-area';
+  CONSULTANT_WORK_MODALITIES,
+} from '@db/tables/consultant.table';
+import type { ConsultantWorkModality } from '@db/tables/consultant.table';
 
 export class ConsultantCreateDto {
   @ApiProperty({ example: 3 })
@@ -58,10 +60,10 @@ export class ConsultantCreateDto {
   @IsOptional()
   location?: string;
 
-  @ApiPropertyOptional({ example: 'Presencial en Lima y remoto a nivel nacional' })
-  @IsString()
+  @ApiPropertyOptional({ enum: CONSULTANT_WORK_MODALITIES, example: 'remote', default: 'remote' })
+  @IsIn(CONSULTANT_WORK_MODALITIES)
   @IsOptional()
-  workModality?: string;
+  workModality?: ConsultantWorkModality;
 
   @ApiPropertyOptional({ example: 'https://www.linkedin.com/in/carlos-mendoza' })
   @IsString()

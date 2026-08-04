@@ -42,6 +42,18 @@ type MeetingPendingEmail = {
   recipientType: 'pyme' | 'consultor';
 };
 
+type MeetingCancellationEmail = {
+  to: string;
+  recipientName: string;
+  counterpartName: string;
+  meetingTitle: string;
+  dateTime: string;
+  duration: string;
+  cancellationReason: string;
+  couponCode?: string;
+  recipientType: 'pyme' | 'consultor';
+};
+
 type SupportFeedbackNotificationEmail = {
   to: string;
   feedbackId: number;
@@ -262,6 +274,60 @@ export class EmailService {
         ],
         options: data.proposedStartTimes,
         sessionNotes,
+        note,
+      }),
+    });
+  }
+
+  sendMeetingCancellationEmail(data: MeetingCancellationEmail) {
+    const isPyme = data.recipientType === 'pyme';
+    const subject = isPyme
+      ? 'Tu reunión fue cancelada y tienes un cupón de reposición - HUBSME'
+      : 'Cancelación de reunión registrada - HUBSME';
+    const intro = isPyme
+      ? `${data.counterpartName} canceló la reunión. Hemos generado un cupón para que puedas reservar nuevamente con el mismo consultor sin realizar otro pago.`
+      : `Registramos la cancelación de tu reunión con ${data.counterpartName}. La PYME recibirá un cupón de reposición.`;
+    const note = isPyme
+      ? 'Copia el código y utilízalo al reservar una nueva reunión con el mismo consultor.'
+      : 'La PYME fue notificada por correo y WhatsApp con el motivo indicado.';
+    const details = [
+      { label: 'Tema', value: data.meetingTitle },
+      { label: isPyme ? 'Consultor' : 'PYME', value: data.counterpartName },
+      { label: 'Fecha y hora', value: data.dateTime },
+      { label: 'Duración', value: data.duration },
+      { label: 'Motivo', value: data.cancellationReason },
+    ];
+    if (isPyme && data.couponCode) {
+      details.push({ label: 'Cupón', value: data.couponCode });
+    }
+
+    return this.sendEmail({
+      to: data.to,
+      subject,
+      text: [
+        `Hola ${data.recipientName},`,
+        '',
+        intro,
+        '',
+        `Tema: ${data.meetingTitle}`,
+        `${isPyme ? 'Consultor' : 'PYME'}: ${data.counterpartName}`,
+        `Fecha y hora: ${data.dateTime}`,
+        `Duración: ${data.duration}`,
+        `Motivo: ${data.cancellationReason}`,
+        isPyme && data.couponCode ? `Cupón: ${data.couponCode}` : undefined,
+        '',
+        note,
+        '',
+        'El equipo de HUBSME',
+      ]
+        .filter((line): line is string => line !== undefined)
+        .join('\n'),
+      html: this.buildMeetingEmail({
+        eyebrow: 'Reunión cancelada',
+        title: isPyme ? 'Tu reunión fue cancelada' : 'Cancelación registrada',
+        greeting: `Hola ${this.escapeHtml(data.recipientName)},`,
+        intro: this.escapeHtml(intro),
+        details,
         note,
       }),
     });

@@ -230,6 +230,104 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
     }
   }
 
+  async sendMeetingCancelledByConsultantNotifications(
+    meeting: Meeting,
+    cancellationReason: string,
+    promotionCode: string,
+  ) {
+    if (meeting.status !== 'cancelada') return;
+
+    try {
+      const [pyme, consultant] = await Promise.all([
+        this.pymeRepository.findOne(meeting.pymeId),
+        this.consultantRepository.findOne(meeting.consultantId),
+      ]);
+      if (!pyme || !consultant) {
+        this.logger.warn(`No se encontraron los participantes para notificar la cancelacion ${meeting.id}`);
+        return;
+      }
+
+      const startTimeValue = meeting.startTime ?? meeting.proposedStartTimes?.[0];
+      const startTime = startTimeValue ? new Date(startTimeValue) : null;
+      const dateTime =
+        startTime && !Number.isNaN(startTime.getTime())
+          ? startTime.toLocaleString('es-PE', {
+              timeZone: 'America/Lima',
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+            })
+          : 'Horario pendiente de confirmacion';
+      const duration = `${meeting.durationMinutes} minutos`;
+      const pymeName = pyme.ownerFirstName?.trim() || pyme.name;
+      const pymeEmail = pyme.ownerEmail?.trim() || pyme.userEmail?.trim();
+      const notifications: Promise<unknown>[] = [];
+
+      if (consultant.userEmail?.trim()) {
+        notifications.push(
+          this.emailService.sendMeetingCancellationEmail({
+            to: consultant.userEmail,
+            recipientName: consultant.fullName,
+            counterpartName: pyme.name,
+            meetingTitle: meeting.title,
+            dateTime,
+            duration,
+            cancellationReason,
+            recipientType: 'consultor',
+          }),
+        );
+      }
+
+      if (pyme.ownerPhone?.trim()) {
+        notifications.push(
+          this.whatsappService.sendNotificacionCancelacionPyme(pyme.ownerPhone, {
+            to: pyme.ownerPhone,
+            nombre_pyme: pymeName,
+            tema_reunion: meeting.title,
+            nombre_consultor: consultant.fullName,
+            fecha_hora: dateTime,
+            duracion_reunion: duration,
+            motivo_cancelacion: cancellationReason,
+            codigo_cupon: promotionCode,
+          }),
+        );
+      }
+
+      if (pymeEmail) {
+        notifications.push(
+          this.emailService.sendMeetingCancellationEmail({
+            to: pymeEmail,
+            recipientName: pymeName,
+            counterpartName: consultant.fullName,
+            meetingTitle: meeting.title,
+            dateTime,
+            duration,
+            cancellationReason,
+            couponCode: promotionCode,
+            recipientType: 'pyme',
+          }),
+        );
+      }
+
+      const results = await Promise.allSettled(notifications);
+      results.forEach((result) => {
+        if (result.status === 'rejected') {
+          const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
+          this.logger.error(
+            `No se pudo enviar una notificacion de cancelacion de la reunion ${meeting.id}: ${message}`,
+          );
+        }
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `No se pudieron preparar las notificaciones de cancelacion de la reunion ${meeting.id}: ${message}`,
+      );
+    }
+  }
+
   private async wake() {
     if (this.processing) return;
 

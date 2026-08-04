@@ -69,6 +69,9 @@ export class MeetingCalendarItemDto {
   @ApiProperty({ nullable: true, type: String })
   description: string | null;
 
+  @ApiProperty({ nullable: true, type: String })
+  cancellationReason: string | null;
+
   @ApiProperty({ nullable: true, type: Date })
   completedAt: Date | null;
 }

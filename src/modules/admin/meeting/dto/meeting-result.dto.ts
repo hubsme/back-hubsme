@@ -45,6 +45,9 @@ export class MeetingResultDto {
   description: string | null;
 
   @ApiProperty({ nullable: true })
+  cancellationReason: string | null;
+
+  @ApiProperty({ nullable: true })
   completedAt: Date | null;
 
   @ApiProperty({ type: [TaskResultDto], required: false })
@@ -57,4 +60,12 @@ export class MeetingFinalizeResultDto {
 
   @ApiProperty({ type: [TaskResultDto] })
   tasks: TaskResultDto[];
+}
+
+export class MeetingConsultantCancelResultDto {
+  @ApiProperty({ type: MeetingResultDto })
+  meeting: MeetingResultDto;
+
+  @ApiProperty({ example: 'REUNION-FREE-A1B2C3D4E5F6' })
+  promotionCode: string;
 }

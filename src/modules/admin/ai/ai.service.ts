@@ -247,7 +247,7 @@ export class AiService {
       '  "fullName": "",\n' +
       '  "headline": "",\n' +
       '  "location": "",\n' +
-      '  "workModality": "",\n' +
+      '  "workModality": "remote",\n' +
       '  "bio": "",\n' +
       '  "ownerPhone": "",\n' +
       '  "linkedinUrl": "",\n' +
@@ -262,6 +262,7 @@ export class AiService {
       '  "workedSectors": [],\n' +
       '  "caseStudies": [{ "title": "", "problem": "", "action": "", "result": "", "sector": "" }]\n' +
       '}\n' +
+      'workModality siempre debe ser exactamente "remote", porque por el momento la plataforma solo admite consultoría remota. ' +
       'El headline debe ser una frase corta profesional. El bio debe resumir experiencia, enfoque y valor para PYMES en maximo 500 caracteres.';
 
     const activePrompt = prompt || defaultPrompt;
@@ -452,7 +453,7 @@ export class AiService {
       fullName: this.readString(data.fullName),
       headline: this.readString(data.headline),
       location: this.readString(data.location),
-      workModality: this.readString(data.workModality),
+      workModality: 'remote',
       bio: this.readString(data.bio),
       ownerPhone: this.readString(data.ownerPhone),
       linkedinUrl: this.readString(data.linkedinUrl),
