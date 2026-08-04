@@ -2,8 +2,8 @@ import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { HttpErrorDto } from '@core/dto/http-error.dto';
 import { AdminAuthGuard } from '../admin-auth/admin-auth.guard';
+import { MeetingAdminResultDto } from './dto/meeting-admin-result.dto';
 import { MeetingListDto, MeetingListFiltersDto } from './dto/meeting-list.dto';
-import { MeetingResultDto } from './dto/meeting-result.dto';
 import { MeetingService } from './meeting.service';
 
 @ApiTags('meetingAdmin')
@@ -24,9 +24,9 @@ export class MeetingAdminController {
   @Get('find-one/:id')
   @ApiOperation({ summary: 'Get a meeting for the internal admin panel' })
   @ApiParam({ name: 'id', type: 'number' })
-  @ApiResponse({ status: 200, type: MeetingResultDto })
+  @ApiResponse({ status: 200, type: MeetingAdminResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
   findOne(@Param('id') id: string) {
-    return this.meetingService.findOneResult(+id);
+    return this.meetingService.findOneForAdmin(+id);
   }
 }
