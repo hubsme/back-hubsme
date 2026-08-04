@@ -26,6 +26,8 @@ export const promotionCode = pgTable(
     redemptionCount: integer('redemption_count').default(0).notNull(),
     startsAt: timestamp('starts_at'),
     expiresAt: timestamp('expires_at'),
+    allowedPymeIds: integer('allowed_pyme_ids').array(),
+    allowedConsultantIds: integer('allowed_consultant_ids').array(),
     isActive: boolean('is_active').default(true).notNull(),
   },
   (t) => [

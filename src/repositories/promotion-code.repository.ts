@@ -148,6 +148,14 @@ export class PromotionCodeRepository {
               lt(promotionCode.redemptionCount, promotionCode.maxRedemptions),
               or(isNull(promotionCode.startsAt), lte(promotionCode.startsAt, now)),
               or(isNull(promotionCode.expiresAt), gte(promotionCode.expiresAt, now)),
+              or(
+                isNull(promotionCode.allowedPymeIds),
+                sql`${pymeId} = ANY(${promotionCode.allowedPymeIds})`,
+              ),
+              or(
+                isNull(promotionCode.allowedConsultantIds),
+                sql`${consultantId} = ANY(${promotionCode.allowedConsultantIds})`,
+              ),
             ),
           )
           .returning();

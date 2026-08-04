@@ -1,10 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsInt, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { IsArray, IsIn, IsInt, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
 import {
   ConsultantCaseStudyDto,
   ConsultantEducationDto,
 } from '@modules/admin/consultant/dto/consultant-profile-fields.dto';
+import { CONSULTANT_WORK_MODALITIES } from '@db/tables/consultant.table';
+import type { ConsultantWorkModality } from '@db/tables/consultant.table';
 
 export class ConsultantCvProfileResultDto {
   @ApiPropertyOptional({ example: 'Carlos' })
@@ -32,10 +34,9 @@ export class ConsultantCvProfileResultDto {
   @IsOptional()
   location?: string;
 
-  @ApiPropertyOptional({ example: 'Presencial en Lima y remoto a nivel nacional' })
-  @IsString()
-  @IsOptional()
-  workModality?: string;
+  @ApiProperty({ enum: CONSULTANT_WORK_MODALITIES, example: 'remote' })
+  @IsIn(CONSULTANT_WORK_MODALITIES)
+  workModality: ConsultantWorkModality;
 
   @ApiPropertyOptional({ example: 'Consultor financiero con foco en orden tributario.' })
   @IsString()

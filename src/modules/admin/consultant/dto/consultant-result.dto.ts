@@ -3,7 +3,9 @@ import { ConsultantCaseStudyDto, ConsultantEducationDto } from './consultant-pro
 import {
   CONSULTANT_DIAGNOSTIC_AREAS,
   ConsultantDiagnosticArea,
-} from '@core/consultant-diagnostic-area';
+  CONSULTANT_WORK_MODALITIES,
+} from '@db/tables/consultant.table';
+import type { ConsultantWorkModality } from '@db/tables/consultant.table';
 
 export class ConsultantResultDto {
   @ApiProperty()
@@ -51,8 +53,8 @@ export class ConsultantResultDto {
   @ApiProperty({ nullable: true })
   location: string | null;
 
-  @ApiProperty({ nullable: true })
-  workModality: string | null;
+  @ApiProperty({ enum: CONSULTANT_WORK_MODALITIES })
+  workModality: ConsultantWorkModality;
 
   @ApiProperty({ nullable: true })
   linkedinUrl: string | null;

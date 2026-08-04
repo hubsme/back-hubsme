@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { eq, ilike, and, isNull, count, desc, sql, asc, gte, lt } from 'drizzle-orm';
+import { eq, ilike, and, isNull, count, desc, sql, asc, gte, inArray, lt } from 'drizzle-orm';
 import { database } from '@db/connection.db';
 import { meeting, MeetingDTO, meetingStatusEnum } from '@db/tables/meeting.table';
 import { task } from '@db/tables/task.table';
 import { consultant } from '@db/tables/consultant.table';
 import { pyme } from '@db/tables/pyme.table';
 import { User } from '@db/tables/user.table';
+import { promotionCode, PromotionCodeDTO } from '@db/tables/promotion-code.table';
 
 @Injectable()
 export class MeetingRepository {
@@ -54,6 +55,7 @@ export class MeetingRepository {
         status: meeting.status,
         requestedBy: meeting.requestedBy,
         description: meeting.description,
+        cancellationReason: meeting.cancellationReason,
         completedAt: meeting.completedAt,
       })
       .from(meeting)
@@ -139,6 +141,45 @@ export class MeetingRepository {
       .where(and(eq(meeting.id, id), isNull(meeting.deletedAt)))
       .returning();
     return result[0];
+  }
+
+  async cancelByConsultantWithPromotionCode(
+    id: number,
+    consultantId: number,
+    cancellationReason: string,
+    promotionData: PromotionCodeDTO,
+  ) {
+    return database.transaction(async (tx) => {
+      const cancelledMeetings = await tx
+        .update(meeting)
+        .set({
+          status: 'cancelada',
+          cancellationReason,
+          meetingUrl: null,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(meeting.id, id),
+            eq(meeting.consultantId, consultantId),
+            inArray(meeting.status, ['por_confirmar', 'confirmada']),
+            isNull(meeting.deletedAt),
+          ),
+        )
+        .returning();
+
+      if (!cancelledMeetings[0]) return undefined;
+
+      const promotionCodes = await tx
+        .insert(promotionCode)
+        .values(promotionData)
+        .returning();
+
+      return {
+        meeting: cancelledMeetings[0],
+        promotionCode: promotionCodes[0],
+      };
+    });
   }
 
   async delete(id: number) {

@@ -17,6 +17,7 @@ import { WhatsappNotificacionConsultorDto } from './dto/whatsapp-notificacion-co
 import { WhatsappAlertaReunionConsultorDto } from './dto/whatsapp-alerta-reunion-consultor.dto';
 import { WhatsappAlertaReunionDto } from './dto/whatsapp-alerta-reunion.dto';
 import { WhatsappConsultorConfirmarReunionDto } from './dto/whatsapp-consultor-confirmar-reunion.dto';
+import { WhatsappNotificacionCancelacionPymeDto } from './dto/whatsapp-notificacion-cancelacion-pyme.dto';
 import { normalizeWhatsappPhone } from './utils/whatsapp.utils';
 import type { WhatsappWebhookMessage, WhatsappWebhookPayload } from './types/whatsapp-webhook.types';
 
@@ -217,6 +218,46 @@ export class WhatsappService {
 
     return {
       message: 'Plantilla de notificación consultor enviada exitosamente',
+      phone,
+      providerStatus: result.status,
+      providerResponse: result.body,
+    };
+  }
+
+  async sendNotificacionCancelacionPyme(
+    to: string,
+    dto: WhatsappNotificacionCancelacionPymeDto,
+  ): Promise<WhatsappSendResultDto> {
+    const phone = normalizeWhatsappPhone(to);
+    const payload = {
+      messaging_product: 'whatsapp',
+      to: phone,
+      type: 'template',
+      template: {
+        name: 'notificacion_cancelacion_pyme',
+        language: { code: 'es_PE' },
+        components: [
+          {
+            type: 'body',
+            parameters: [
+              { type: 'text', parameter_name: 'nombre_pyme', text: dto.nombre_pyme },
+              { type: 'text', parameter_name: 'tema_reunion', text: dto.tema_reunion },
+              { type: 'text', parameter_name: 'nombre_consultor', text: dto.nombre_consultor },
+              { type: 'text', parameter_name: 'fecha_hora', text: dto.fecha_hora },
+              { type: 'text', parameter_name: 'duracion_reunion', text: dto.duracion_reunion },
+              { type: 'text', parameter_name: 'motivo_cancelacion', text: dto.motivo_cancelacion },
+              { type: 'text', parameter_name: 'codigo_cupon', text: dto.codigo_cupon },
+            ],
+          },
+        ],
+      },
+    };
+
+    const result = await this.sendToMeta(payload);
+    this.logger.log(`WhatsApp template notificacion_cancelacion_pyme sent to ${phone}`);
+
+    return {
+      message: 'Plantilla de cancelación enviada a la PYME',
       phone,
       providerStatus: result.status,
       providerResponse: result.body,

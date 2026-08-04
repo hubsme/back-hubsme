@@ -21,8 +21,11 @@ import { ConsultantAvailabilityService } from '../consultant-availability/consul
 import { ScheduledNotificationService } from '../scheduled-notification/scheduled-notification.service';
 import { User } from '@db/tables/user.table';
 import { MeetingAccessStatus } from './dto/meeting-access.dto';
+import { MeetingConsultantCancelDto } from './dto/meeting-consultant-cancel.dto';
+import { randomBytes } from 'crypto';
 
 const MEETING_ACCESS_MARGIN_MS = 15 * 60 * 1000;
+const CONSULTANT_CANCELLATION_GRACE_MS = 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class MeetingService {
@@ -341,6 +344,69 @@ export class MeetingService {
     }
 
     return this.toMeetingResult(updatedMeeting);
+  }
+
+  async cancelByConsultant(
+    id: number,
+    data: MeetingConsultantCancelDto,
+    requester: Pick<User, 'id' | 'role'>,
+  ) {
+    if (requester.role !== 'consultor') {
+      throw new ForbiddenException('Solo el consultor puede usar este flujo de cancelación');
+    }
+
+    const meeting = await this.findOne(id);
+    this.assertMeetingParticipant(meeting, requester);
+
+    if (!['por_confirmar', 'confirmada'].includes(meeting.status)) {
+      throw new BadRequestException([
+        'Solo se pueden cancelar reuniones pagadas que estén por confirmar o confirmadas',
+      ]);
+    }
+    const meetingStart = meeting.startTime ?? meeting.proposedStartTimes[0];
+    const meetingStartTimestamp = meetingStart ? new Date(meetingStart).getTime() : Number.NaN;
+    const cancellationDeadline = meetingStartTimestamp + CONSULTANT_CANCELLATION_GRACE_MS;
+
+    if (!Number.isFinite(meetingStartTimestamp) || Date.now() > cancellationDeadline) {
+      throw new BadRequestException([
+        'La fecha límite para cancelar esta reunión venció 24 horas después de su inicio',
+      ]);
+    }
+
+    const reason = data.reason.trim();
+    if (reason.length < 10) {
+      throw new BadRequestException(['El motivo de la cancelación debe tener al menos 10 caracteres']);
+    }
+    const code = `REUNION-FREE-${randomBytes(6).toString('hex').toUpperCase()}`;
+    const result = await this.meetingRepository.cancelByConsultantWithPromotionCode(
+      meeting.id,
+      requester.id,
+      reason,
+      {
+        code,
+        description: `Reposición automática por cancelación de la reunión #${meeting.id}`,
+        maxRedemptions: 1,
+        startsAt: new Date(),
+        allowedPymeIds: [meeting.pymeId],
+        allowedConsultantIds: [meeting.consultantId],
+      },
+    );
+
+    if (!result) {
+      throw new BadRequestException(['La reunión ya no está disponible para cancelación']);
+    }
+
+    await this.scheduledNotificationService.cancelMeetingReminders(meeting.id);
+    await this.scheduledNotificationService.sendMeetingCancelledByConsultantNotifications(
+      result.meeting,
+      reason,
+      result.promotionCode.code,
+    );
+
+    return {
+      meeting: this.toMeetingResult(result.meeting),
+      promotionCode: result.promotionCode.code,
+    };
   }
 
   async finalize(id: number, data: MeetingFinalizeDto) {

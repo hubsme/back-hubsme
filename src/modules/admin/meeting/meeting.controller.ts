@@ -9,10 +9,15 @@ import { MeetingConfirmOptionDto } from './dto/meeting-confirm-option.dto';
 import { MeetingFinalizeDto } from './dto/meeting-finalize.dto';
 import { MeetingListDto, MeetingListFiltersDto } from './dto/meeting-list.dto';
 import { MeetingRecordingDto } from './dto/meeting-recording.dto';
-import { MeetingFinalizeResultDto, MeetingResultDto } from './dto/meeting-result.dto';
+import {
+  MeetingConsultantCancelResultDto,
+  MeetingFinalizeResultDto,
+  MeetingResultDto,
+} from './dto/meeting-result.dto';
 import { MeetingUpdateDto } from './dto/meeting-update.dto';
 import { MeetingCopilotSummaryDto } from './dto/meeting-copilot-summary.dto';
 import { MeetingAccessResultDto } from './dto/meeting-access.dto';
+import { MeetingConsultantCancelDto } from './dto/meeting-consultant-cancel.dto';
 import { MeetingService } from './meeting.service';
 
 type AuthenticatedRequest = { user: User };
@@ -110,6 +115,20 @@ export class MeetingController {
   @ApiResponse({ status: 400, type: HttpErrorDto })
   update(@Param('id') id: string, @Body() updateMeetingDto: MeetingUpdateDto) {
     return this.meetingService.update(+id, updateMeetingDto);
+  }
+
+  @Post('cancel-by-consultant/:id')
+  @ApiOperation({ summary: 'Cancel a paid meeting as its consultant and issue a restricted replacement code' })
+  @ApiParam({ name: 'id', type: 'number' })
+  @ApiResponse({ status: 200, type: MeetingConsultantCancelResultDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  @ApiResponse({ status: 403, type: HttpErrorDto })
+  cancelByConsultant(
+    @Request() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: MeetingConsultantCancelDto,
+  ) {
+    return this.meetingService.cancelByConsultant(+id, body, request.user);
   }
 
   @Post('finalize/:id')

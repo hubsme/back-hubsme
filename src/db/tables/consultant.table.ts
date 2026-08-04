@@ -1,11 +1,35 @@
 import { date, pgTable, text, varchar, timestamp, integer, decimal, index, uniqueIndex, jsonb, pgEnum } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { user } from './user.table';
-import { CONSULTANT_DIAGNOSTIC_AREAS } from '@core/consultant-diagnostic-area';
+
+export const CONSULTANT_DIAGNOSTIC_AREAS = [
+  'Estratégica',
+  'Financiera',
+  'Comercial / Ventas',
+  'Marketing',
+  'Servicio al cliente',
+  'Operaciones',
+  'Organizacional / RRHH',
+  'Tecnología',
+  'Legal',
+  'Laboral',
+  'Tributario / Contable',
+] as const;
+
+export type ConsultantDiagnosticArea = (typeof CONSULTANT_DIAGNOSTIC_AREAS)[number];
+
+export const CONSULTANT_WORK_MODALITIES = ['remote'] as const;
+
+export type ConsultantWorkModality = (typeof CONSULTANT_WORK_MODALITIES)[number];
 
 export const consultantDiagnosticAreaEnum = pgEnum(
   'consultant_diagnostic_area',
   CONSULTANT_DIAGNOSTIC_AREAS,
+);
+
+export const consultantWorkModalityEnum = pgEnum(
+  'consultant_work_modality',
+  CONSULTANT_WORK_MODALITIES,
 );
 
 export type ConsultantEducationItem = {
@@ -39,7 +63,7 @@ export const consultant = pgTable(
     ownerPhone: varchar('owner_phone', { length: 30 }),
     headline: varchar('headline', { length: 240 }),
     location: varchar('location', { length: 160 }),
-    workModality: varchar('work_modality', { length: 160 }),
+    workModality: consultantWorkModalityEnum('work_modality').default('remote').notNull(),
     linkedinUrl: text('linkedin_url'),
     bio: text('bio'),
     diagnosticAreas: consultantDiagnosticAreaEnum('diagnostic_areas').array().default([]).notNull(),

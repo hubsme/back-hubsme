@@ -4,7 +4,7 @@ import { PaginationFiltersDto, PaginationMetaDto } from '@modules/admin/common/p
 import {
   CONSULTANT_DIAGNOSTIC_AREAS,
   ConsultantDiagnosticArea,
-} from '@core/consultant-diagnostic-area';
+} from '@db/tables/consultant.table';
 
 export class PublicConsultantListFiltersDto extends PaginationFiltersDto {
   @ApiPropertyOptional({ description: 'Search by name, bio or specialty' })

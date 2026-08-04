@@ -8,12 +8,11 @@ import { ConsultantMeetingPymesFiltersDto } from './dto/consultant-meeting-pymes
 import { ConsultantUpdateDto } from './dto/consultant-update.dto';
 import { ConsultantApprovalDto } from './dto/consultant-approval.dto';
 import { ConsultantActiveDto } from './dto/consultant-active.dto';
-import { ConsultantDTO } from '@db/tables/consultant.table';
+import { ConsultantDiagnosticArea, ConsultantDTO } from '@db/tables/consultant.table';
 import { ConsultantCaseStudyDto, ConsultantEducationDto } from './dto/consultant-profile-fields.dto';
 import { UserService } from '../user/user.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { EmailService } from '../email/email.service';
-import { ConsultantDiagnosticArea } from '@core/consultant-diagnostic-area';
 import { ConsultantMercadoPagoAccountRepository } from '@repositories/consultant-mercado-pago-account.repository';
 
 @Injectable()
@@ -137,7 +136,7 @@ export class ConsultantService {
       ownerPhone: data.ownerPhone?.trim(),
       headline: data.headline?.trim(),
       location: data.location?.trim(),
-      workModality: data.workModality?.trim(),
+      workModality: data.workModality,
       linkedinUrl: this.normalizeLinkedInUrl(data.linkedinUrl),
       bio: data.bio?.trim(),
       diagnosticAreas: this.cleanDiagnosticAreas(data.diagnosticAreas),

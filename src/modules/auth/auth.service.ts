@@ -155,7 +155,7 @@ export class AuthService {
           ownerPhone: registerDto.ownerPhone?.trim(),
           headline: registerDto.headline?.trim(),
           location: registerDto.location?.trim(),
-          workModality: registerDto.workModality?.trim(),
+          workModality: registerDto.workModality ?? 'remote',
           linkedinUrl: registerDto.linkedinUrl?.trim(),
           bio: registerDto.bio?.trim(),
           diagnosticAreas: registerDto.diagnosticAreas,

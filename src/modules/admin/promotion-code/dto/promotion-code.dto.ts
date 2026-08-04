@@ -1,6 +1,8 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  ArrayUnique,
+  IsArray,
   IsBoolean,
   IsDate,
   IsInt,
@@ -42,6 +44,32 @@ export class PromotionCodeCreateDto {
   @IsDate()
   @IsOptional()
   expiresAt?: Date;
+
+  @ApiPropertyOptional({
+    type: [Number],
+    nullable: true,
+    description: 'IDs de PYMEs autorizadas. Null permite cualquier PYME.',
+  })
+  @IsArray()
+  @ArrayUnique()
+  @Type(() => Number)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @IsOptional()
+  allowedPymeIds?: number[] | null;
+
+  @ApiPropertyOptional({
+    type: [Number],
+    nullable: true,
+    description: 'IDs de consultores autorizados. Null permite cualquier consultor.',
+  })
+  @IsArray()
+  @ArrayUnique()
+  @Type(() => Number)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @IsOptional()
+  allowedConsultantIds?: number[] | null;
 }
 
 export class PromotionCodeUpdateDto extends PartialType(PromotionCodeCreateDto) {
@@ -85,6 +113,12 @@ export class PromotionCodeResultDto {
 
   @ApiPropertyOptional({ nullable: true })
   expiresAt: Date | null;
+
+  @ApiPropertyOptional({ type: [Number], nullable: true })
+  allowedPymeIds: number[] | null;
+
+  @ApiPropertyOptional({ type: [Number], nullable: true })
+  allowedConsultantIds: number[] | null;
 
   @ApiProperty()
   isActive: boolean;
