@@ -4,6 +4,7 @@ import { database } from '@db/connection.db';
 import { mercadoPagoPayment, MercadoPagoPaymentDTO } from '@db/tables/mercado-pago-payment.table';
 import { consultant } from '@db/tables/consultant.table';
 import { pyme } from '@db/tables/pyme.table';
+import { serviceRequest } from '@db/tables/service-request.table';
 
 type PaymentHistoryRole = 'pyme' | 'consultor';
 
@@ -21,6 +22,7 @@ const paymentHistorySelection = {
   createdAt: mercadoPagoPayment.createdAt,
   updatedAt: mercadoPagoPayment.updatedAt,
   meetingId: mercadoPagoPayment.meetingId,
+  serviceRequestId: mercadoPagoPayment.serviceRequestId,
   pymeId: mercadoPagoPayment.pymeId,
   consultantId: mercadoPagoPayment.consultantId,
   mercadoPagoPaymentId: mercadoPagoPayment.mercadoPagoPaymentId,
@@ -30,6 +32,8 @@ const paymentHistorySelection = {
   marketplaceFee: mercadoPagoPayment.marketplaceFee,
   currency: mercadoPagoPayment.currency,
   meetingDetails: mercadoPagoPayment.meetingDetails,
+  serviceTitle: serviceRequest.title,
+  serviceDescription: serviceRequest.description,
   pymeName: pyme.name,
   consultantName: consultant.fullName,
 };
@@ -49,6 +53,14 @@ export class MercadoPagoPaymentRepository {
       .select()
       .from(mercadoPagoPayment)
       .where(and(eq(mercadoPagoPayment.meetingId, meetingId), isNull(mercadoPagoPayment.deletedAt)));
+    return result[0];
+  }
+
+  async findByServiceRequestId(serviceRequestId: number) {
+    const result = await database
+      .select()
+      .from(mercadoPagoPayment)
+      .where(and(eq(mercadoPagoPayment.serviceRequestId, serviceRequestId), isNull(mercadoPagoPayment.deletedAt)));
     return result[0];
   }
 
@@ -87,6 +99,7 @@ export class MercadoPagoPaymentRepository {
         .from(mercadoPagoPayment)
         .leftJoin(pyme, eq(mercadoPagoPayment.pymeId, pyme.id))
         .leftJoin(consultant, eq(mercadoPagoPayment.consultantId, consultant.id))
+        .leftJoin(serviceRequest, eq(mercadoPagoPayment.serviceRequestId, serviceRequest.id))
         .where(where)
         .orderBy(desc(mercadoPagoPayment.createdAt), desc(mercadoPagoPayment.id))
         .limit(filters.limit)
@@ -112,6 +125,7 @@ export class MercadoPagoPaymentRepository {
       .from(mercadoPagoPayment)
       .leftJoin(pyme, eq(mercadoPagoPayment.pymeId, pyme.id))
       .leftJoin(consultant, eq(mercadoPagoPayment.consultantId, consultant.id))
+      .leftJoin(serviceRequest, eq(mercadoPagoPayment.serviceRequestId, serviceRequest.id))
       .where(and(eq(mercadoPagoPayment.id, id), userCondition, isNull(mercadoPagoPayment.deletedAt)));
 
     return result[0];

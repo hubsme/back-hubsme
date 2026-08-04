@@ -42,6 +42,9 @@ export class MercadoPagoPaymentHistoryItemDto {
   @ApiProperty({ nullable: true })
   meetingId: number | null;
 
+  @ApiProperty({ nullable: true })
+  serviceRequestId: number | null;
+
   @ApiProperty()
   pymeId: number;
 
@@ -65,6 +68,12 @@ export class MercadoPagoPaymentHistoryItemDto {
 
   @ApiPropertyOptional({ type: CheckoutMeetingDetailsDto, nullable: true })
   meetingDetails?: CheckoutMeetingDetailsDto | null;
+
+  @ApiProperty({ nullable: true })
+  serviceTitle: string | null;
+
+  @ApiProperty({ nullable: true })
+  serviceDescription: string | null;
 
   @ApiProperty({ nullable: true })
   mercadoPagoPaymentId: string | null;

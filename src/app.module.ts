@@ -23,6 +23,7 @@ import { AdminAuthModule } from './modules/admin/admin-auth/admin-auth.module';
 import { PromotionCodeModule } from './modules/admin/promotion-code/promotion-code.module';
 import { IdentityVerificationModule } from './modules/admin/identity-verification/identity-verification.module';
 import { FeedbackModule } from './modules/admin/feedback/feedback.module';
+import { ServiceRequestModule } from './modules/admin/service-request/service-request.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { FeedbackModule } from './modules/admin/feedback/feedback.module';
     PromotionCodeModule,
     IdentityVerificationModule,
     FeedbackModule,
+    ServiceRequestModule,
   ],
   controllers: [AppController],
   providers: [AppService],
