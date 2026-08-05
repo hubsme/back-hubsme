@@ -1,28 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import {
-  and,
-  count,
-  desc,
-  eq,
-  gte,
-  ilike,
-  isNull,
-  lt,
-  lte,
-  or,
-  sql,
-} from 'drizzle-orm';
+import { and, count, desc, eq, gte, ilike, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import { database } from '@db/connection.db';
-import {
-  promotionCode,
-  PromotionCodeDTO,
-  promotionCodeRedemption,
-} from '@db/tables/promotion-code.table';
+import { promotionCode, PromotionCodeDTO, promotionCodeRedemption } from '@db/tables/promotion-code.table';
 import { consultant } from '@db/tables/consultant.table';
-import {
-  mercadoPagoPayment,
-  MercadoPagoPaymentRaw,
-} from '@db/tables/mercado-pago-payment.table';
+import { checkout, CheckoutRaw } from '@db/tables/checkout.table';
 import { pyme } from '@db/tables/pyme.table';
 
 @Injectable()
@@ -31,12 +12,7 @@ export class PromotionCodeRepository {
     const conditions = [isNull(promotionCode.deletedAt)];
     const term = search?.trim();
     if (term) {
-      conditions.push(
-        or(
-          ilike(promotionCode.code, `%${term}%`),
-          ilike(promotionCode.description, `%${term}%`),
-        )!,
-      );
+      conditions.push(or(ilike(promotionCode.code, `%${term}%`), ilike(promotionCode.description, `%${term}%`))!);
     }
 
     const whereClause = and(...conditions);
@@ -75,12 +51,7 @@ export class PromotionCodeRepository {
       .from(promotionCodeRedemption)
       .leftJoin(pyme, eq(promotionCodeRedemption.pymeId, pyme.id))
       .leftJoin(consultant, eq(promotionCodeRedemption.consultantId, consultant.id))
-      .where(
-        and(
-          eq(promotionCodeRedemption.promotionCodeId, id),
-          isNull(promotionCodeRedemption.deletedAt),
-        ),
-      )
+      .where(and(eq(promotionCodeRedemption.promotionCodeId, id), isNull(promotionCodeRedemption.deletedAt)))
       .orderBy(desc(promotionCodeRedemption.redeemedAt));
   }
 
@@ -102,12 +73,7 @@ export class PromotionCodeRepository {
     const result = await database
       .select()
       .from(promotionCodeRedemption)
-      .where(
-        and(
-          eq(promotionCodeRedemption.checkoutId, checkoutId),
-          isNull(promotionCodeRedemption.deletedAt),
-        ),
-      );
+      .where(and(eq(promotionCodeRedemption.checkoutId, checkoutId), isNull(promotionCodeRedemption.deletedAt)));
     return result[0];
   }
 
@@ -117,20 +83,13 @@ export class PromotionCodeRepository {
         const existing = await tx
           .select()
           .from(promotionCodeRedemption)
-          .where(
-            and(
-              eq(promotionCodeRedemption.checkoutId, checkoutId),
-              isNull(promotionCodeRedemption.deletedAt),
-            ),
-          );
+          .where(and(eq(promotionCodeRedemption.checkoutId, checkoutId), isNull(promotionCodeRedemption.deletedAt)));
         if (existing[0]) {
           const codeResult = await tx
             .select()
             .from(promotionCode)
             .where(eq(promotionCode.id, existing[0].promotionCodeId));
-          return codeResult[0]
-            ? { promotion: codeResult[0], redemption: existing[0] }
-            : undefined;
+          return codeResult[0] ? { promotion: codeResult[0], redemption: existing[0] } : undefined;
         }
 
         const now = new Date();
@@ -148,10 +107,7 @@ export class PromotionCodeRepository {
               lt(promotionCode.redemptionCount, promotionCode.maxRedemptions),
               or(isNull(promotionCode.startsAt), lte(promotionCode.startsAt, now)),
               or(isNull(promotionCode.expiresAt), gte(promotionCode.expiresAt, now)),
-              or(
-                isNull(promotionCode.allowedPymeIds),
-                sql`${pymeId} = ANY(${promotionCode.allowedPymeIds})`,
-              ),
+              or(isNull(promotionCode.allowedPymeIds), sql`${pymeId} = ANY(${promotionCode.allowedPymeIds})`),
               or(
                 isNull(promotionCode.allowedConsultantIds),
                 sql`${consultantId} = ANY(${promotionCode.allowedConsultantIds})`,
@@ -180,21 +136,14 @@ export class PromotionCodeRepository {
       const existing = await this.findRedemptionByCheckout(checkoutId);
       if (!existing) return undefined;
       const existingCode = await this.findOne(existing.promotionCodeId);
-      return existingCode
-        ? { promotion: existingCode, redemption: existing }
-        : undefined;
+      return existingCode ? { promotion: existingCode, redemption: existing } : undefined;
     }
   }
 
-  async finalizeClaim(
-    redemptionId: number,
-    checkoutId: number,
-    meetingId: number,
-    rawPayment: MercadoPagoPaymentRaw,
-  ) {
+  async finalizeClaim(redemptionId: number, checkoutId: number, meetingId: number, rawPayment: CheckoutRaw) {
     return database.transaction(async (tx) => {
       await tx
-        .update(mercadoPagoPayment)
+        .update(checkout)
         .set({
           meetingId,
           status: 'approved',
@@ -202,22 +151,12 @@ export class PromotionCodeRepository {
           rawPayment,
           updatedAt: new Date(),
         })
-        .where(
-          and(
-            eq(mercadoPagoPayment.id, checkoutId),
-            isNull(mercadoPagoPayment.deletedAt),
-          ),
-        );
+        .where(and(eq(checkout.id, checkoutId), isNull(checkout.deletedAt)));
 
       const result = await tx
         .update(promotionCodeRedemption)
         .set({ meetingId, updatedAt: new Date() })
-        .where(
-          and(
-            eq(promotionCodeRedemption.id, redemptionId),
-            isNull(promotionCodeRedemption.deletedAt),
-          ),
-        )
+        .where(and(eq(promotionCodeRedemption.id, redemptionId), isNull(promotionCodeRedemption.deletedAt)))
         .returning();
       return result[0];
     });
@@ -250,11 +189,6 @@ export class PromotionCodeRepository {
   }
 
   private isUniqueViolation(error: unknown) {
-    return (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      error.code === '23505'
-    );
+    return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505';
   }
 }

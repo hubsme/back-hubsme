@@ -86,8 +86,12 @@ export class MeetingController {
   @ApiParam({ name: 'id', type: 'number' })
   @ApiResponse({ status: 200, type: MeetingResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  confirmOption(@Param('id') id: string, @Body() confirmOptionDto: MeetingConfirmOptionDto) {
-    return this.meetingService.confirmProposedOption(+id, confirmOptionDto);
+  confirmOption(
+    @Request() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() confirmOptionDto: MeetingConfirmOptionDto,
+  ) {
+    return this.meetingService.confirmProposedOption(+id, confirmOptionDto, request.user);
   }
 
   @Get('recordings/:id')

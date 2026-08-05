@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { eq, ilike, and, isNull, count, desc, sql, asc, gte, inArray, lt } from 'drizzle-orm';
+import { eq, ilike, and, isNull, count, desc, sql, asc, inArray } from 'drizzle-orm';
 import { database } from '@db/connection.db';
 import { meeting, MeetingDTO, meetingStatusEnum } from '@db/tables/meeting.table';
 import { task } from '@db/tables/task.table';
@@ -24,10 +24,20 @@ export class MeetingRepository {
         ${meeting.createdAt}
       )
     `;
+    const hasCalendarOptionInRange = sql<boolean>`
+      (
+        (${calendarStart} >= ${range.startDate} AND ${calendarStart} < ${range.endDate})
+        OR EXISTS (
+          SELECT 1
+          FROM unnest(${meeting.proposedStartTimes}) AS proposed_start(value)
+          WHERE NULLIF(proposed_start.value, '')::timestamp >= ${range.startDate}
+            AND NULLIF(proposed_start.value, '')::timestamp < ${range.endDate}
+        )
+      )
+    `;
     const conditions = [
       isNull(meeting.deletedAt),
-      gte(calendarStart, range.startDate),
-      lt(calendarStart, range.endDate),
+      hasCalendarOptionInRange,
     ];
 
     if (requester.role === 'pyme') {

@@ -40,6 +40,7 @@ type MeetingPendingEmail = {
   duration: string;
   sessionNotes?: string | null;
   recipientType: 'pyme' | 'consultor';
+  meetingDetailsUrl?: string;
 };
 
 type MeetingCancellationEmail = {
@@ -64,6 +65,13 @@ type SupportFeedbackNotificationEmail = {
   userRole: 'pyme' | 'consultor';
   attachmentCount: number;
   adminUrl: string;
+};
+
+type AvailabilityPendingReminderEmail = {
+  to: string;
+  consultantName: string;
+  period: string;
+  calendarUrl: string;
 };
 
 @Injectable()
@@ -240,7 +248,11 @@ export class EmailService {
       : `${data.counterpartName} completó la reserva de una reunión contigo. Elige uno de los horarios propuestos para confirmar la cita.`;
     const note = isPyme
       ? 'Te avisaremos apenas el consultor confirme el horario final.'
-      : 'Puedes confirmar desde WhatsApp tocando una de las opciones o desde tu calendario en HUBSME.';
+      : 'Revisa los horarios disponibles y confirma desde el detalle de la reunión en HUBSME.';
+    const cta =
+      !isPyme && data.meetingDetailsUrl
+        ? `<a href="${this.escapeAttribute(data.meetingDetailsUrl)}" style="${this.buttonStyle()}">Revisar y confirmar horario</a>`
+        : undefined;
 
     return this.sendEmail({
       to: data.to,
@@ -259,6 +271,7 @@ export class EmailService {
         ...data.proposedStartTimes.map((value, index) => `${index + 1}. ${value}`),
         '',
         note,
+        !isPyme && data.meetingDetailsUrl ? `Revisar reunión: ${data.meetingDetailsUrl}` : undefined,
         '',
         'El equipo de HUBSME',
       ].join('\n'),
@@ -275,6 +288,7 @@ export class EmailService {
         options: data.proposedStartTimes,
         sessionNotes,
         note,
+        cta,
       }),
     });
   }
@@ -377,6 +391,65 @@ export class EmailService {
                       <div style="margin-top:28px;text-align:center;">
                         <a href="${this.escapeAttribute(data.adminUrl)}" style="${this.buttonStyle()}">Revisar comentario</a>
                       </div>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </div>`,
+    });
+  }
+
+  sendAvailabilityPendingReminderEmail(data: AvailabilityPendingReminderEmail) {
+    const subject = 'Configura tu disponibilidad de esta semana - HUBSME';
+    const greeting = `Hola ${data.consultantName},`;
+    const intro =
+      'Aún no has registrado horas disponibles para esta semana. Configura tu agenda para que las PYMES puedan proponerte reuniones.';
+
+    return this.sendEmail({
+      to: data.to,
+      subject,
+      text: [
+        greeting,
+        '',
+        intro,
+        '',
+        `Periodo: ${data.period}`,
+        '',
+        'Registra los días y horarios en los que estarás disponible.',
+        `Configurar disponibilidad: ${data.calendarUrl}`,
+        '',
+        'El equipo de HUBSME',
+      ].join('\n'),
+      html: `
+        <div style="margin:0;padding:0;background:#edf5ff;font-family:Arial,Helvetica,sans-serif;color:#0b1328;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#edf5ff;padding:24px 12px;">
+            <tr>
+              <td align="center">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:680px;background:#ffffff;border:1px solid #dce6f2;border-radius:22px;box-shadow:0 18px 48px rgba(16,35,70,0.09);">
+                  <tr>
+                    <td align="center" style="padding:42px 46px 18px;">
+                      <img src="https://www.hubsme.net/avif/logo_completo.png" width="205" alt="HUBSME" style="display:block;border:0;max-width:205px;height:auto;margin:0 auto 26px;" />
+                      <div style="display:inline-block;padding:7px 13px;border-radius:999px;background:#fff4df;color:#b86b00;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;">Disponibilidad pendiente</div>
+                      <h1 style="margin:22px 0 12px;font-size:32px;line-height:1.18;color:#0b1328;">Completa tu agenda semanal</h1>
+                      <p style="margin:0;color:#435775;font-size:17px;line-height:1.6;">${this.escapeHtml(intro)}</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:12px 46px 42px;">
+                      <div style="height:1px;background:#dbe3ef;margin:0 0 28px;"></div>
+                      <p style="margin:0 0 20px;color:#0b1328;font-size:20px;font-weight:800;">${this.escapeHtml(greeting)}</p>
+                      <div style="padding:18px 20px;border:1px solid #dbe3ef;border-radius:14px;background:#f8fbff;">
+                        <p style="margin:0 0 6px;color:#667792;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;">Semana a configurar</p>
+                        <p style="margin:0;color:#0b1328;font-size:17px;font-weight:800;">${this.escapeHtml(data.period)}</p>
+                      </div>
+                      <p style="margin:24px 0 0;color:#253a5b;font-size:16px;line-height:1.6;">Selecciona los días y horarios en los que atenderás reuniones. Sin horas registradas, tu disponibilidad no podrá mostrarse al agendar.</p>
+                      <div style="margin-top:28px;text-align:center;">
+                        <a href="${this.escapeAttribute(data.calendarUrl)}" style="${this.buttonStyle()}">Configurar disponibilidad</a>
+                      </div>
+                      <div style="height:1px;background:#dbe3ef;margin:34px 0 22px;"></div>
+                      <p style="margin:0;text-align:center;color:#667792;font-size:14px;line-height:1.5;">Este recordatorio se envía únicamente cuando tu semana no tiene horas configuradas.</p>
                     </td>
                   </tr>
                 </table>

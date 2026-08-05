@@ -1,16 +1,7 @@
-import {
-  boolean,
-  index,
-  integer,
-  pgTable,
-  serial,
-  timestamp,
-  uniqueIndex,
-  varchar,
-} from 'drizzle-orm/pg-core';
+import { boolean, index, integer, pgTable, serial, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { meeting } from './meeting.table';
-import { mercadoPagoPayment } from './mercado-pago-payment.table';
+import { checkout } from './checkout.table';
 import { user } from './user.table';
 
 export const promotionCode = pgTable(
@@ -51,7 +42,7 @@ export const promotionCodeRedemption = pgTable(
       .references(() => promotionCode.id),
     checkoutId: integer('checkout_id')
       .notNull()
-      .references(() => mercadoPagoPayment.id),
+      .references(() => checkout.id),
     pymeId: integer('pyme_id')
       .notNull()
       .references(() => user.id),

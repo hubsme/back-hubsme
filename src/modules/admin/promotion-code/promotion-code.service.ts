@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { randomBytes } from 'crypto';
-import { MercadoPagoPaymentRepository } from '@repositories/mercado-pago-payment.repository';
+import { CheckoutRepository } from '@repositories/checkout.repository';
 import { PromotionCodeRepository } from '@repositories/promotion-code.repository';
 import { MeetingService } from '../meeting/meeting.service';
 import { ConsultantService } from '../consultant/consultant.service';
@@ -18,7 +18,7 @@ export class PromotionCodeService {
 
   constructor(
     private readonly promotionCodeRepository: PromotionCodeRepository,
-    private readonly paymentRepository: MercadoPagoPaymentRepository,
+    private readonly checkoutRepository: CheckoutRepository,
     private readonly meetingService: MeetingService,
     private readonly consultantService: ConsultantService,
     private readonly pymeService: PymeService,
@@ -111,7 +111,7 @@ export class PromotionCodeService {
   }
 
   async redeem(currentUserId: number, data: PromotionCodeRedeemDto) {
-    const checkout = await this.paymentRepository.findOne(data.checkoutId);
+    const checkout = await this.checkoutRepository.findOne(data.checkoutId);
     if (!checkout) {
       throw new NotFoundException(`Mercado Pago checkout with ID ${data.checkoutId} not found`);
     }

@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { MercadoPagoPaymentRepository } from '@repositories/mercado-pago-payment.repository';
+import { CheckoutRepository } from '@repositories/checkout.repository';
 import { PromotionCodeRepository } from '@repositories/promotion-code.repository';
 import { MeetingModule } from '../meeting/meeting.module';
 import { AdminAuthModule } from '../admin-auth/admin-auth.module';
@@ -12,6 +12,6 @@ import { PromotionCodeService } from './promotion-code.service';
 @Module({
   imports: [AdminAuthModule, MeetingModule, ConsultantModule, PymeModule],
   controllers: [PromotionCodeAdminController, PromotionCodeController],
-  providers: [PromotionCodeService, PromotionCodeRepository, MercadoPagoPaymentRepository],
+  providers: [PromotionCodeService, PromotionCodeRepository, CheckoutRepository],
 })
 export class PromotionCodeModule {}

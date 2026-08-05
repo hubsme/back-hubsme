@@ -32,10 +32,6 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
   ) {}
 
   async onApplicationBootstrap() {
-    if (process.env.SKIP_SCHEDULED_NOTIFICATIONS_BOOTSTRAP === 'true') {
-      this.logger.warn('Cola de notificaciones omitida por configuracion de entorno');
-      return;
-    }
     await this.recoverStaleJobs();
     await this.expirePastJobs();
     await this.backfillConfirmedMeetings();

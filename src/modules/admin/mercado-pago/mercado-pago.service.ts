@@ -2,12 +2,12 @@ import { BadRequestException, Injectable, Logger, NotFoundException, Unauthorize
 import { JwtService } from '@nestjs/jwt';
 import { Consultant } from '@db/tables/consultant.table';
 import { ConsultantMercadoPagoAccount } from '@db/tables/consultant-mercado-pago-account.table';
-import { MercadoPagoPaymentRaw } from '@db/tables/mercado-pago-payment.table';
+import { CheckoutRaw } from '@db/tables/checkout.table';
 import { User } from '@db/tables/user.table';
 import { ConsultantMercadoPagoAccountRepository } from '@repositories/consultant-mercado-pago-account.repository';
 import { ConsultantRepository } from '@repositories/consultant.repository';
 import { PymeRepository } from '@repositories/pyme.repository';
-import { MercadoPagoPaymentRepository } from '@repositories/mercado-pago-payment.repository';
+import { CheckoutRepository } from '@repositories/checkout.repository';
 import { MeetingService } from '../meeting/meeting.service';
 import { ConsultantAvailabilityService } from '../consultant-availability/consultant-availability.service';
 import { ConsultantService } from '../consultant/consultant.service';
@@ -58,7 +58,7 @@ type MercadoPagoPreferenceResponse = {
   error?: string;
 };
 
-type MercadoPagoPaymentResponse = MercadoPagoPaymentRaw & {
+type MercadoPagoPaymentResponse = CheckoutRaw & {
   id?: number | string;
   status?: string;
   external_reference?: string;
@@ -74,7 +74,7 @@ export class MercadoPagoService {
     private readonly accountRepository: ConsultantMercadoPagoAccountRepository,
     private readonly consultantRepository: ConsultantRepository,
     private readonly pymeRepository: PymeRepository,
-    private readonly paymentRepository: MercadoPagoPaymentRepository,
+    private readonly checkoutRepository: CheckoutRepository,
     private readonly meetingService: MeetingService,
     private readonly jwtService: JwtService,
     private readonly consultantAvailabilityService: ConsultantAvailabilityService,
@@ -195,7 +195,7 @@ export class MercadoPagoService {
 
     const tempRef = `pending:${pymeId}:${data.consultantId}:${Date.now()}`;
 
-    return this.paymentRepository.create({
+    return this.checkoutRepository.create({
       meetingId: null,
       pymeId,
       consultantId: data.consultantId,
@@ -218,7 +218,7 @@ export class MercadoPagoService {
   }
 
   async findCheckout(currentUserId: number, id: number) {
-    const checkout = await this.paymentRepository.findOne(id);
+    const checkout = await this.checkoutRepository.findOne(id);
     if (!checkout) {
       throw new NotFoundException(`Mercado Pago checkout with ID ${id} not found`);
     }
@@ -238,7 +238,7 @@ export class MercadoPagoService {
     const month = filters.month ?? new Date().getMonth() + 1;
     const from = new Date(Date.UTC(year, month - 1, 1));
     const to = new Date(Date.UTC(year, month, 1));
-    const result = await this.paymentRepository.findAllForUser({
+    const result = await this.checkoutRepository.findAllForUser({
       userId: currentUser.id,
       role,
       page,
@@ -263,7 +263,7 @@ export class MercadoPagoService {
 
   async findPayment(currentUser: User, id: number) {
     const role = this.getPaymentHistoryRole(currentUser);
-    const payment = await this.paymentRepository.findOneForUser(id, currentUser.id, role);
+    const payment = await this.checkoutRepository.findOneForUser(id, currentUser.id, role);
     if (!payment) {
       throw new NotFoundException(`Mercado Pago payment with ID ${id} not found`);
     }
@@ -300,7 +300,7 @@ export class MercadoPagoService {
       externalReference: checkout.externalReference,
     });
 
-    return this.paymentRepository.update(checkout.id, {
+    return this.checkoutRepository.update(checkout.id, {
       preferenceId: preference.id,
       initPoint: preference.init_point ?? null,
       sandboxInitPoint: preference.sandbox_init_point ?? null,
@@ -311,7 +311,7 @@ export class MercadoPagoService {
     const serviceRequest = await this.serviceRequestService.findPayableForPyme(serviceRequestId, currentUserId);
     const amount = Number(serviceRequest.proposedPrice);
 
-    let checkout = await this.paymentRepository.findByServiceRequestId(serviceRequestId);
+    let checkout = await this.checkoutRepository.findByServiceRequestId(serviceRequestId);
     if (checkout?.status === 'approved') {
       await this.serviceRequestService.markPaid(serviceRequestId);
       return checkout;
@@ -328,7 +328,7 @@ export class MercadoPagoService {
 
     const externalReference = this.buildHubsmeServicePaymentReference(serviceRequestId);
     if (!checkout) {
-      checkout = await this.paymentRepository.create({
+      checkout = await this.checkoutRepository.create({
         meetingId: null,
         serviceRequestId,
         pymeId: serviceRequest.pymeId,
@@ -343,7 +343,7 @@ export class MercadoPagoService {
         currency: serviceRequest.currency,
       });
     } else {
-      checkout = await this.paymentRepository.update(checkout.id, {
+      checkout = await this.checkoutRepository.update(checkout.id, {
         preferenceId: null,
         initPoint: null,
         sandboxInitPoint: null,
@@ -362,7 +362,7 @@ export class MercadoPagoService {
       amount,
       externalReference: checkout.externalReference,
     });
-    const updatedCheckout = await this.paymentRepository.update(checkout.id, {
+    const updatedCheckout = await this.checkoutRepository.update(checkout.id, {
       preferenceId: preference.id,
       initPoint: preference.init_point ?? null,
       sandboxInitPoint: preference.sandbox_init_point ?? null,
@@ -404,7 +404,7 @@ export class MercadoPagoService {
     }
 
     const checkoutFromQuery = queryExternalReference
-      ? await this.paymentRepository.findByExternalReference(queryExternalReference)
+      ? await this.checkoutRepository.findByExternalReference(queryExternalReference)
       : undefined;
     const consultantToken =
       checkoutFromQuery && !this.isHubsmeServicePayment(checkoutFromQuery)
@@ -416,7 +416,7 @@ export class MercadoPagoService {
       return { received: true };
     }
 
-    const checkout = checkoutFromQuery ?? (await this.paymentRepository.findByExternalReference(externalReference));
+    const checkout = checkoutFromQuery ?? (await this.checkoutRepository.findByExternalReference(externalReference));
     if (!checkout) {
       return { received: true };
     }
@@ -424,7 +424,7 @@ export class MercadoPagoService {
     const status = this.mapPaymentStatus(payment.status);
 
     if (status !== 'approved') {
-      await this.paymentRepository.update(checkout.id, {
+      await this.checkoutRepository.update(checkout.id, {
         mercadoPagoPaymentId: this.stringifyId(payment.id),
         status,
         rawPayment: payment,
@@ -432,7 +432,7 @@ export class MercadoPagoService {
       return { received: true };
     }
 
-    const approvedCheckout = await this.paymentRepository.approveIfUnprocessed(checkout.id, {
+    const approvedCheckout = await this.checkoutRepository.approveIfUnprocessed(checkout.id, {
       mercadoPagoPaymentId: this.stringifyId(payment.id),
       rawPayment: payment,
     });
@@ -467,7 +467,7 @@ export class MercadoPagoService {
 
         await this.meetingService.markPaidPendingConfirmation(newMeeting.id);
 
-        await this.paymentRepository.update(approvedCheckout.id, {
+        await this.checkoutRepository.update(approvedCheckout.id, {
           meetingId: newMeeting.id,
         });
         meetingId = newMeeting.id;

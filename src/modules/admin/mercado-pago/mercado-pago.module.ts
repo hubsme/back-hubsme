@@ -4,7 +4,7 @@ import { ConsultantRepository } from '@repositories/consultant.repository';
 import { PymeRepository } from '@repositories/pyme.repository';
 import { ConsultantMercadoPagoAccountRepository } from '@repositories/consultant-mercado-pago-account.repository';
 import { MeetingRepository } from '@repositories/meeting.repository';
-import { MercadoPagoPaymentRepository } from '@repositories/mercado-pago-payment.repository';
+import { CheckoutRepository } from '@repositories/checkout.repository';
 
 import { ConsultantAvailabilityModule } from '../consultant-availability/consultant-availability.module';
 import { MeetingModule } from '../meeting/meeting.module';
@@ -31,7 +31,7 @@ import { MercadoPagoService } from './mercado-pago.service';
     ConsultantRepository,
     PymeRepository,
     ConsultantMercadoPagoAccountRepository,
-    MercadoPagoPaymentRepository,
+    CheckoutRepository,
     MeetingRepository,
   ],
   exports: [MercadoPagoService],

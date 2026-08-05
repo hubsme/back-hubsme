@@ -5,7 +5,6 @@ import { dashboardAlert } from '@db/tables/dashboard-alert.table';
 import { diagnostic } from '@db/tables/diagnostic.table';
 import { meeting } from '@db/tables/meeting.table';
 import { pyme } from '@db/tables/pyme.table';
-import { pymeConsultantMatch } from '@db/tables/pyme-consultant-match.table';
 import { task } from '@db/tables/task.table';
 import { user } from '@db/tables/user.table';
 import { DashboardRepository } from '@repositories/dashboard.repository';
@@ -21,16 +20,11 @@ export class DashboardService {
     const meetingConditions = [isNull(meeting.deletedAt)];
     const taskConditions = [isNull(task.deletedAt)];
     const diagnosticConditions = [isNull(diagnostic.deletedAt)];
-    const matchConditions = [
-      isNull(pymeConsultantMatch.deletedAt),
-      eq(pymeConsultantMatch.status, 'aceptado' as const),
-    ];
     const alertConditions = [isNull(dashboardAlert.deletedAt), eq(dashboardAlert.status, 'active' as const)];
 
     if (userId && role === 'consultor') {
       meetingConditions.push(eq(meeting.consultantId, userId));
       taskConditions.push(eq(task.consultantId, userId));
-      matchConditions.push(eq(pymeConsultantMatch.consultantId, userId));
       alertConditions.push(eq(dashboardAlert.consultantId, userId));
     }
 
@@ -38,7 +32,6 @@ export class DashboardService {
       meetingConditions.push(eq(meeting.pymeId, userId));
       taskConditions.push(eq(task.pymeId, userId));
       diagnosticConditions.push(eq(diagnostic.pymeId, userId));
-      matchConditions.push(eq(pymeConsultantMatch.pymeId, userId));
       alertConditions.push(eq(dashboardAlert.pymeId, userId));
     }
 
@@ -59,7 +52,7 @@ export class DashboardService {
       taskRows,
       upcomingRows,
       billableMeetingRows,
-      matchRows,
+      activeCounterpartCount,
       alertRows,
       meetingStats,
       latestDiagnostic,
@@ -85,10 +78,7 @@ export class DashboardService {
         .select({ durationMinutes: meeting.durationMinutes })
         .from(meeting)
         .where(and(...billableMeetingConditions)),
-      database
-        .select({ pymeId: pymeConsultantMatch.pymeId, consultantId: pymeConsultantMatch.consultantId })
-        .from(pymeConsultantMatch)
-        .where(and(...matchConditions)),
+      this.dashboardRepository.countActiveCounterparts({ userId, role }),
       database
         .select({
           id: dashboardAlert.id,
@@ -113,12 +103,6 @@ export class DashboardService {
       { pendiente: 0, enProgreso: 0, completada: 0, bloqueada: 0 },
     );
 
-    const clientCount =
-      role === 'consultor'
-        ? new Set(matchRows.map((item) => item.pymeId)).size
-        : role === 'pyme'
-          ? new Set(matchRows.map((item) => item.consultantId)).size
-          : 0;
     const billableHours = billableMeetingRows.reduce((acc, row) => acc + row.durationMinutes / 60, 0);
     const pymeIds = [...new Set(taskRows.map((row) => row.pymeId))];
     const pymeRows =
@@ -151,7 +135,7 @@ export class DashboardService {
 
     return {
       stats: {
-        clients: clientCount,
+        clients: activeCounterpartCount,
         meetings: Number(meetingCount[0].total),
         tasks: Number(taskCount[0].total),
         diagnostics: Number(diagnosticCount[0].total),

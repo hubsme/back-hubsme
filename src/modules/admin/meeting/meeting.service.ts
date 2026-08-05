@@ -248,8 +248,19 @@ export class MeetingService {
     });
   }
 
-  async confirmProposedOption(id: number, data: MeetingConfirmOptionDto) {
+  async confirmProposedOption(
+    id: number,
+    data: MeetingConfirmOptionDto,
+    requester?: Pick<User, 'id' | 'role'>,
+  ) {
     const meeting = await this.findOne(id);
+
+    if (requester) {
+      if (requester.role !== 'consultor') {
+        throw new ForbiddenException('Solo el consultor puede confirmar el horario de la reunión');
+      }
+      this.assertMeetingParticipant(meeting, requester);
+    }
 
     if (meeting.status !== 'por_confirmar') {
       throw new BadRequestException(['Solo se pueden confirmar reuniones por confirmacion']);
