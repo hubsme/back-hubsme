@@ -16,7 +16,7 @@ import { meeting } from './meeting.table';
 import { serviceRequest } from './service-request.table';
 import { user } from './user.table';
 
-export const mercadoPagoPaymentStatusEnum = pgEnum('mercado_pago_payment_status', [
+export const checkoutStatusEnum = pgEnum('checkout_status', [
   'created',
   'pending',
   'approved',
@@ -25,10 +25,10 @@ export const mercadoPagoPaymentStatusEnum = pgEnum('mercado_pago_payment_status'
   'expired',
 ]);
 
-export type MercadoPagoPaymentRaw = Record<string, unknown>;
+export type CheckoutRaw = Record<string, unknown>;
 
-export const mercadoPagoPayment = pgTable(
-  'mercado_pago_payment',
+export const checkout = pgTable(
+  'checkout',
   {
     id: serial('id').primaryKey(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -47,11 +47,11 @@ export const mercadoPagoPayment = pgTable(
     sandboxInitPoint: text('sandbox_init_point'),
     externalReference: varchar('external_reference', { length: 180 }).notNull(),
     mercadoPagoPaymentId: varchar('mercado_pago_payment_id', { length: 180 }),
-    status: mercadoPagoPaymentStatusEnum('status').default('created').notNull(),
+    status: checkoutStatusEnum('status').default('created').notNull(),
     amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
     marketplaceFee: decimal('marketplace_fee', { precision: 10, scale: 2 }).default('0.00').notNull(),
     currency: varchar('currency', { length: 10 }).default('PEN').notNull(),
-    rawPayment: jsonb('raw_payment').$type<MercadoPagoPaymentRaw>(),
+    rawPayment: jsonb('raw_payment').$type<CheckoutRaw>(),
     meetingDetails: jsonb('meeting_details').$type<{
       startTime: string;
       proposedStartTimes?: string[];
@@ -61,19 +61,19 @@ export const mercadoPagoPayment = pgTable(
     }>(),
   },
   (t) => [
-    index('mercado_pago_payment_meeting_id_idx').on(t.meetingId),
-    index('mercado_pago_payment_service_request_id_idx').on(t.serviceRequestId),
-    index('mercado_pago_payment_preference_id_idx').on(t.preferenceId),
-    index('mercado_pago_payment_external_reference_idx').on(t.externalReference),
-    index('mercado_pago_payment_status_idx').on(t.status),
-    uniqueIndex('mercado_pago_payment_meeting_unique_active_idx')
+    index('checkout_meeting_id_idx').on(t.meetingId),
+    index('checkout_service_request_id_idx').on(t.serviceRequestId),
+    index('checkout_preference_id_idx').on(t.preferenceId),
+    index('checkout_external_reference_idx').on(t.externalReference),
+    index('checkout_status_idx').on(t.status),
+    uniqueIndex('checkout_meeting_unique_active_idx')
       .on(t.meetingId)
       .where(sql`${t.deletedAt} IS NULL AND ${t.meetingId} IS NOT NULL`),
-    uniqueIndex('mercado_pago_payment_service_request_unique_active_idx')
+    uniqueIndex('checkout_service_request_unique_active_idx')
       .on(t.serviceRequestId)
       .where(sql`${t.deletedAt} IS NULL AND ${t.serviceRequestId} IS NOT NULL`),
   ],
 );
 
-export type MercadoPagoPayment = typeof mercadoPagoPayment.$inferSelect;
-export type MercadoPagoPaymentDTO = typeof mercadoPagoPayment.$inferInsert;
+export type Checkout = typeof checkout.$inferSelect;
+export type CheckoutDTO = typeof checkout.$inferInsert;

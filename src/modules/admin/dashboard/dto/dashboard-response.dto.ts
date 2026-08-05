@@ -70,6 +70,9 @@ export class DashboardMeetingDto {
   startTime: Date;
 
   @ApiProperty()
+  durationMinutes: number;
+
+  @ApiProperty()
   status: string;
 }
 

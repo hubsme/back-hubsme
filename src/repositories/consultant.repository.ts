@@ -8,6 +8,20 @@ import { task } from '@db/tables/task.table';
 
 @Injectable()
 export class ConsultantRepository {
+  async findActiveNotificationRecipients() {
+    return database
+      .select({
+        id: consultant.id,
+        fullName: consultant.fullName,
+        ownerPhone: consultant.ownerPhone,
+        userEmail: user.email,
+      })
+      .from(consultant)
+      .innerJoin(user, and(eq(user.id, consultant.id), isNull(user.deletedAt)))
+      .where(and(eq(consultant.active, 'true'), eq(user.isActive, 'true'), isNull(consultant.deletedAt)))
+      .orderBy(consultant.id);
+  }
+
   async findAllPaginated(
     page: number = 1,
     limit: number = 10,

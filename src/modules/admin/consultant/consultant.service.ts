@@ -14,6 +14,7 @@ import { UserService } from '../user/user.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { EmailService } from '../email/email.service';
 import { ConsultantMercadoPagoAccountRepository } from '@repositories/consultant-mercado-pago-account.repository';
+import { buildMeetingDetailUrl } from '@functions/meeting-access-url.function';
 
 @Injectable()
 export class ConsultantService {
@@ -311,6 +312,7 @@ export class ConsultantService {
         duration: `${durationMinutes} minutos`,
         sessionNotes,
         recipientType: 'consultor',
+        meetingDetailsUrl: buildMeetingDetailUrl(meetingId, 'consultor'),
       });
     } catch {
       // General silent catch to ensure fire-and-forget safety

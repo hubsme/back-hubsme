@@ -27,6 +27,12 @@ type ProposedOption = {
   optionIndex: number;
 };
 
+type AvailabilityPendingReminder = {
+  consultantName: string;
+  period: string;
+  calendarPath: string;
+};
+
 @Injectable()
 export class WhatsappService {
   private readonly logger = new Logger(WhatsappService.name);
@@ -218,6 +224,44 @@ export class WhatsappService {
 
     return {
       message: 'Plantilla de notificación consultor enviada exitosamente',
+      phone,
+      providerStatus: result.status,
+      providerResponse: result.body,
+    };
+  }
+
+  async sendAvailabilityPendingReminder(to: string, data: AvailabilityPendingReminder): Promise<WhatsappSendResultDto> {
+    const phone = normalizeWhatsappPhone(to);
+    const payload = {
+      messaging_product: 'whatsapp',
+      to: phone,
+      type: 'template',
+      template: {
+        name: 'recordatorio_disponibilidad_pendiente',
+        language: { code: 'es_PE' },
+        components: [
+          {
+            type: 'body',
+            parameters: [
+              { type: 'text', parameter_name: 'nombre_consultor', text: data.consultantName },
+              { type: 'text', parameter_name: 'periodo', text: data.period },
+            ],
+          },
+          {
+            type: 'button',
+            sub_type: 'url',
+            index: '0',
+            parameters: [{ type: 'text', text: data.calendarPath }],
+          },
+        ],
+      },
+    };
+
+    const result = await this.sendToMeta(payload);
+    this.logger.log(`WhatsApp template recordatorio_disponibilidad_pendiente sent to ${phone}`);
+
+    return {
+      message: 'Recordatorio de disponibilidad enviado al consultor',
       phone,
       providerStatus: result.status,
       providerResponse: result.body,

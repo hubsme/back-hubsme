@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, count, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
 import { database } from '@db/connection.db';
 import {
   consultantAvailability,
@@ -10,6 +10,21 @@ import { meeting } from '@db/tables/meeting.table';
 
 @Injectable()
 export class ConsultantAvailabilityRepository {
+  async findByConsultantsAndMonths(consultantIds: number[], months: Date[]) {
+    if (!consultantIds.length || !months.length) return [];
+
+    return database
+      .select()
+      .from(consultantAvailability)
+      .where(
+        and(
+          inArray(consultantAvailability.consultantId, consultantIds),
+          inArray(consultantAvailability.month, months),
+          isNull(consultantAvailability.deletedAt),
+        ),
+      );
+  }
+
   async findAllPaginated(
     page: number = 1,
     limit: number = 10,

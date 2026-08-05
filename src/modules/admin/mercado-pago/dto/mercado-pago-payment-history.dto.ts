@@ -83,6 +83,24 @@ export class MercadoPagoPaymentHistoryItemDto {
 
   @ApiProperty({ nullable: true })
   consultantName: string | null;
+
+  @ApiProperty({ enum: ['payment', 'promotion_code'] })
+  paymentMethod: 'payment' | 'promotion_code';
+
+  @ApiProperty({
+    description: 'Payment method identifier reported by the payment provider, such as yape, visa or account_money',
+    nullable: true,
+  })
+  paymentMethodId: string | null;
+
+  @ApiProperty({
+    description: 'Payment type reported by the payment provider, such as credit_card, debit_card or account_money',
+    nullable: true,
+  })
+  paymentTypeId: string | null;
+
+  @ApiProperty({ nullable: true })
+  promotionCode: string | null;
 }
 
 export class MercadoPagoPaymentHistoryResponseDto {
