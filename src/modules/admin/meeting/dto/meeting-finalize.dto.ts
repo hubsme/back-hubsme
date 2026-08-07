@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsArray, IsIn, IsNotEmpty, IsOptional, IsString, ValidateNested } from 'class-validator';
 
@@ -20,6 +20,14 @@ export class MeetingFinalizeTaskDto {
   @ApiProperty({ enum: ['alta', 'media', 'baja'], example: 'media' })
   @IsIn(['alta', 'media', 'baja'])
   priority: 'alta' | 'media' | 'baja';
+
+  @ApiPropertyOptional({
+    enum: ['pendiente', 'en_progreso', 'completada', 'bloqueada'],
+    default: 'pendiente',
+  })
+  @IsOptional()
+  @IsIn(['pendiente', 'en_progreso', 'completada', 'bloqueada'])
+  status?: 'pendiente' | 'en_progreso' | 'completada' | 'bloqueada';
 
   @ApiProperty({ required: false, example: '2026-05-23T00:00:00.000Z' })
   @IsOptional()

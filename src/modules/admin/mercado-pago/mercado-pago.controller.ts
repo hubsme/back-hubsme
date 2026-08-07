@@ -142,6 +142,17 @@ export class MercadoPagoController {
     return this.mercadoPagoService.prepareServicePayment(req.user.id, +id);
   }
 
+  @Post('service/:id/payment/sync')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Synchronize an accepted service payment with Mercado Pago' })
+  @ApiParam({ name: 'id', type: 'number' })
+  @ApiResponse({ status: 200, type: MercadoPagoCheckoutDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  syncServicePayment(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.mercadoPagoService.syncServicePayment(req.user, +id);
+  }
+
   @Post('webhook')
   @HttpCode(200)
   @ApiOperation({ summary: 'Mercado Pago payment webhook' })

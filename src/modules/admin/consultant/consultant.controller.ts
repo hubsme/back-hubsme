@@ -10,6 +10,11 @@ import { ConsultantMeetingPymesFiltersDto } from './dto/consultant-meeting-pymes
 import { ConsultantResultDto } from './dto/consultant-result.dto';
 import { ConsultantUpdateDto } from './dto/consultant-update.dto';
 import { ConsultantActiveDto } from './dto/consultant-active.dto';
+import {
+  ConsultantDiagnosticDocumentsDto,
+  ConsultantDocumentListFiltersDto,
+  ConsultantMeetingDocumentsDto,
+} from './dto/consultant-document.dto';
 import { ConsultantService } from './consultant.service';
 
 type AuthenticatedRequest = { user: User };
@@ -35,6 +40,22 @@ export class ConsultantController {
   @ApiResponse({ status: 400, type: HttpErrorDto })
   meetingPymes(@Request() req: AuthenticatedRequest, @Query() filters: ConsultantMeetingPymesFiltersDto) {
     return this.consultantService.findMeetingPymes(req.user.id, filters);
+  }
+
+  @Get('documents/meetings')
+  @ApiOperation({ summary: 'Get the current consultant meeting acts with PYME data' })
+  @ApiResponse({ status: 200, type: ConsultantMeetingDocumentsDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  meetingDocuments(@Request() req: AuthenticatedRequest, @Query() filters: ConsultantDocumentListFiltersDto) {
+    return this.consultantService.findMeetingDocuments(req.user.id, filters);
+  }
+
+  @Get('documents/diagnostics')
+  @ApiOperation({ summary: 'Get the current consultant diagnostics with PYME data' })
+  @ApiResponse({ status: 200, type: ConsultantDiagnosticDocumentsDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  diagnosticDocuments(@Request() req: AuthenticatedRequest, @Query() filters: ConsultantDocumentListFiltersDto) {
+    return this.consultantService.findDiagnosticDocuments(req.user.id, filters);
   }
 
   @Get('find-one/:id')

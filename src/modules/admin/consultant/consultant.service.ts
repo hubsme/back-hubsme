@@ -15,6 +15,9 @@ import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { EmailService } from '../email/email.service';
 import { ConsultantMercadoPagoAccountRepository } from '@repositories/consultant-mercado-pago-account.repository';
 import { buildMeetingDetailUrl } from '@functions/meeting-access-url.function';
+import { MeetingRepository } from '@repositories/meeting.repository';
+import { DiagnosticRepository } from '@repositories/diagnostic.repository';
+import { ConsultantDocumentListFiltersDto } from './dto/consultant-document.dto';
 
 @Injectable()
 export class ConsultantService {
@@ -25,6 +28,8 @@ export class ConsultantService {
     private readonly whatsappService: WhatsappService,
     private readonly emailService: EmailService,
     private readonly mercadoPagoAccountRepository: ConsultantMercadoPagoAccountRepository,
+    private readonly meetingRepository: MeetingRepository,
+    private readonly diagnosticRepository: DiagnosticRepository,
   ) {}
 
   async findAllPaginated(filters: ConsultantListFiltersDto, onlyAvailable = false) {
@@ -73,6 +78,42 @@ export class ConsultantService {
     const page = filters.page ?? 1;
     const limit = filters.limit ?? 10;
     const { data, total } = await this.pymeRepository.findByConsultantMeetingsPaginated(userId, page, limit, filters);
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      data,
+      meta: { total, page, limit, totalPages, hasNextPage: page < totalPages, hasPreviousPage: page > 1 },
+    };
+  }
+
+  async findMeetingDocuments(userId: number, filters: ConsultantDocumentListFiltersDto) {
+    await this.findByUserId(userId);
+    const page = filters.page ?? 1;
+    const limit = filters.limit ?? 10;
+    const { data, total } = await this.meetingRepository.findConsultantDocumentsPaginated(
+      userId,
+      page,
+      limit,
+      filters.search,
+    );
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      data,
+      meta: { total, page, limit, totalPages, hasNextPage: page < totalPages, hasPreviousPage: page > 1 },
+    };
+  }
+
+  async findDiagnosticDocuments(userId: number, filters: ConsultantDocumentListFiltersDto) {
+    await this.findByUserId(userId);
+    const page = filters.page ?? 1;
+    const limit = filters.limit ?? 10;
+    const { data, total } = await this.diagnosticRepository.findConsultantDocumentsPaginated(
+      userId,
+      page,
+      limit,
+      filters.search,
+    );
     const totalPages = Math.ceil(total / limit);
 
     return {

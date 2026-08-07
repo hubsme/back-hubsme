@@ -34,6 +34,12 @@ export class MeetingCalendarItemDto {
   @ApiProperty()
   consultantId: number;
 
+  @ApiProperty({ nullable: true })
+  serviceRequestId: number | null;
+
+  @ApiProperty({ nullable: true })
+  serviceMilestoneIndex: number | null;
+
   @ApiProperty()
   consultantName: string;
 
@@ -65,6 +71,9 @@ export class MeetingCalendarItemDto {
 
   @ApiProperty({ enum: ['pyme', 'consultor'] })
   requestedBy: 'pyme' | 'consultor';
+
+  @ApiProperty({ enum: ['consultoria', 'servicio'] })
+  meetingType: 'consultoria' | 'servicio';
 
   @ApiProperty({ nullable: true, type: String })
   description: string | null;

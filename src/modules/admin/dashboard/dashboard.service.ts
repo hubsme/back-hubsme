@@ -73,7 +73,7 @@ export class DashboardService {
         .select({ pymeId: task.pymeId, status: task.status })
         .from(task)
         .where(and(...taskConditions)),
-      this.dashboardRepository.findUpcomingConfirmed({ userId, role }, now),
+      this.dashboardRepository.findUpcoming({ userId, role }, now),
       database
         .select({ durationMinutes: meeting.durationMinutes })
         .from(meeting)

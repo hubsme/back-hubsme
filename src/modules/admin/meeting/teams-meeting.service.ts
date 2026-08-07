@@ -365,6 +365,21 @@ export class TeamsMeetingService {
 
     const organizerUserId = process.env.MS_GRAPH_TEAMS_ORGANIZER_USER_ID;
 
+    let firstRecordingDateTime: string | undefined;
+    try {
+      const recordingsResponse = (await this.appGraphClient!
+        .api(`/users/${organizerUserId}/onlineMeetings/${onlineMeetingId}/recordings`)
+        .query({ $select: 'createdDateTime', $top: '999' })
+        .get()) as GraphListResponse<GraphCallRecording>;
+
+      firstRecordingDateTime = recordingsResponse.value
+        ?.map((recording) => recording.createdDateTime)
+        .filter((value): value is string => Boolean(value))
+        .sort((left, right) => new Date(left).getTime() - new Date(right).getTime())[0];
+    } catch (error: unknown) {
+      this.logger.warn(`No se pudo obtener la fecha de la primera grabación: ${this.getErrorMessage(error)}`);
+    }
+
     let transcripts: GraphCallTranscript[] = [];
     try {
       let transcriptRequestUrl = `/users/${organizerUserId}/onlineMeetings/${onlineMeetingId}/transcripts`;
@@ -415,8 +430,31 @@ export class TeamsMeetingService {
       ]);
     }
 
+    const recordingPeruDateTime = firstRecordingDateTime
+      ? new Date(firstRecordingDateTime).toLocaleString('es-PE', {
+          timeZone: 'America/Lima',
+          day: '2-digit',
+          month: 'long',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        })
+      : null;
+
+    const recordingContext = firstRecordingDateTime
+      ? `Fecha y hora verificada de la primera grabación (referencia UTC): ${new Date(firstRecordingDateTime).toISOString()}.\n` +
+        `Fecha y hora verificada en Perú: ${recordingPeruDateTime}.\n` +
+        'Lugar verificado: reunión virtual de Microsoft Teams.\n'
+      : 'Fecha y hora de la primera grabación: no disponible.\nLugar: reunión virtual de Microsoft Teams.\n';
+
     // Fusionar todas las transcripciones disponibles antes de invocar el flujo de IA.
-    return this.aiService.runHubsmeAiPrompt(cleanedText);
+    return this.aiService.runHubsmeAiPrompt(
+      `DATOS VERIFICADOS DE LA REUNIÓN\n${recordingContext}\n` +
+        'Usa estos datos para completar la sección "Datos de la sesión" del acta. ' +
+        'No escribas "No especificado" para fecha, hora o lugar cuando exista un dato verificado.\n\n' +
+        `TRANSCRIPCIÓN\n${cleanedText}`,
+    );
   }
 
   private cleanTranscript(vttText: string): string {

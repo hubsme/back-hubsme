@@ -1,5 +1,6 @@
 import { pgTable, serial, text, timestamp, integer, pgEnum, index } from 'drizzle-orm/pg-core';
 import { user } from './user.table';
+import { serviceRequest } from './service-request.table';
 
 export const meetingStatusEnum = pgEnum('meeting_status', [
   'solicitada',
@@ -10,6 +11,7 @@ export const meetingStatusEnum = pgEnum('meeting_status', [
   'cancelada',
 ]);
 export const meetingRequestedByEnum = pgEnum('meeting_requested_by', ['pyme', 'consultor']);
+export const meetingTypeEnum = pgEnum('meeting_type', ['consultoria', 'servicio']);
 
 export const meeting = pgTable(
   'meeting',
@@ -24,6 +26,8 @@ export const meeting = pgTable(
     consultantId: integer('consultant_id')
       .notNull()
       .references(() => user.id),
+    serviceRequestId: integer('service_request_id').references(() => serviceRequest.id, { onDelete: 'set null' }),
+    serviceMilestoneIndex: integer('service_milestone_index'),
     title: text('title').notNull(),
     startTime: timestamp('start_time'),
     proposedStartTimes: text('proposed_start_times').array().default([]).notNull(),
@@ -32,6 +36,7 @@ export const meeting = pgTable(
     teamsOnlineMeetingId: text('teams_online_meeting_id'),
     status: meetingStatusEnum('status').default('solicitada').notNull(),
     requestedBy: meetingRequestedByEnum('requested_by').default('pyme').notNull(),
+    meetingType: meetingTypeEnum('meeting_type').default('consultoria').notNull(),
     description: text('description'),
     cancellationReason: text('cancellation_reason'),
     completedAt: timestamp('completed_at'),
@@ -39,6 +44,8 @@ export const meeting = pgTable(
   (t) => [
     index('meeting_pyme_id_idx').on(t.pymeId),
     index('meeting_consultant_id_idx').on(t.consultantId),
+    index('meeting_service_request_id_idx').on(t.serviceRequestId),
+    index('meeting_service_milestone_idx').on(t.serviceRequestId, t.serviceMilestoneIndex),
     index('meeting_status_idx').on(t.status),
     index('meeting_start_time_idx').on(t.startTime),
   ],

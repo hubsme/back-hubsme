@@ -21,6 +21,6 @@ export class HubsmeAiResultDto {
   @ApiProperty({ description: 'Acta de reunion estructurada en Markdown' })
   summary: string;
 
-  @ApiProperty({ type: [TaskSuggestionDto], description: 'Listado de compromisos sugeridos para la PYME' })
+  @ApiProperty({ type: [TaskSuggestionDto], description: 'Listado de compromisos sugeridos para la PYME y el consultor' })
   tasks: TaskSuggestionDto[];
 }
