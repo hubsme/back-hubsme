@@ -24,8 +24,25 @@ const serviceRequestSelection = {
   consultantHeadline: consultant.headline,
   consultantPhotoUrl: consultant.photoUrl,
   title: serviceRequest.title,
+  category: serviceRequest.category,
+  subcategory: serviceRequest.subcategory,
   description: serviceRequest.description,
+  expectedOutcome: serviceRequest.expectedOutcome,
   requirements: serviceRequest.requirements,
+  deliverables: serviceRequest.deliverables,
+  exclusions: serviceRequest.exclusions,
+  referenceUrls: serviceRequest.referenceUrls,
+  referenceAttachments: serviceRequest.referenceAttachments,
+  budgetType: serviceRequest.budgetType,
+  budgetMin: serviceRequest.budgetMin,
+  budgetMax: serviceRequest.budgetMax,
+  deadline: serviceRequest.deadline,
+  estimatedDuration: serviceRequest.estimatedDuration,
+  workModality: serviceRequest.workModality,
+  workMethod: serviceRequest.workMethod,
+  milestones: serviceRequest.milestones,
+  initialMeetingProposedStartTimes: serviceRequest.initialMeetingProposedStartTimes,
+  initialMeetingStartTime: serviceRequest.initialMeetingStartTime,
   details: serviceRequest.details,
   status: serviceRequest.status,
   proposedPrice: serviceRequest.proposedPrice,
@@ -62,6 +79,8 @@ export class ServiceRequestRepository {
           ilike(serviceRequest.title, `%${search}%`),
           ilike(serviceRequest.description, `%${search}%`),
           ilike(serviceRequest.requirements, `%${search}%`),
+          ilike(serviceRequest.subcategory, `%${search}%`),
+          ilike(serviceRequest.expectedOutcome, `%${search}%`),
         )!,
       );
     }
@@ -93,10 +112,18 @@ export class ServiceRequestRepository {
 
   async createMany(data: ServiceRequestDTO[]) {
     if (!data.length) return [];
-    const inserted = await database.transaction((transaction) =>
-      transaction.insert(serviceRequest).values(data).returning({ id: serviceRequest.id }),
-    );
-    return Promise.all(inserted.map((item) => this.findOne(item.id))).then((items) => items.filter(Boolean));
+    return database.transaction(async (transaction) => {
+      const inserted = await transaction.insert(serviceRequest).values(data).returning({ id: serviceRequest.id });
+      const ids = inserted.map((item) => item.id);
+      const created = await transaction
+        .select(serviceRequestSelection)
+        .from(serviceRequest)
+        .leftJoin(pyme, eq(serviceRequest.pymeId, pyme.id))
+        .leftJoin(consultant, eq(serviceRequest.consultantId, consultant.id))
+        .where(and(inArray(serviceRequest.id, ids), isNull(serviceRequest.deletedAt)));
+      const createdById = new Map(created.map((item) => [item.id, item]));
+      return ids.map((id) => createdById.get(id)).filter((item) => item !== undefined);
+    });
   }
 
   async update(

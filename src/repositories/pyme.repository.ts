@@ -101,6 +101,7 @@ export class PymeRepository {
         ownerEmail: pyme.ownerEmail,
         sector: pyme.sector,
         numEmployees: pyme.numEmployees,
+        logoUrl: pyme.logoUrl,
         createdAt: pyme.createdAt,
       })
       .from(pyme)

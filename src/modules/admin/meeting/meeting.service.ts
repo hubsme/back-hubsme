@@ -438,16 +438,15 @@ export class MeetingService {
     await this.taskRepository.deleteByMeetingId(id);
 
     const tasksPayload: TaskDTO[] = (data.tasks ?? [])
-      .filter((task) => task.assignedTo === 'pyme')
       .map((task) => ({
         meetingId: currentMeeting.id,
         pymeId: currentMeeting.pymeId,
         consultantId: currentMeeting.consultantId,
-        title: task.title.trim(),
-        description: task.description.trim(),
-        assignedTo: 'pyme',
+        title: task.title.trim() || 'Pendiente de la reunión',
+        description: task.description.trim() || '.',
+        assignedTo: task.assignedTo,
         priority: task.priority,
-        status: 'pendiente',
+        status: task.status ?? 'pendiente',
         dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
       }));
 

@@ -62,4 +62,23 @@ export class MeetingCreateDto {
   @IsIn(['pyme', 'consultor'])
   @IsOptional()
   requestedBy?: 'pyme' | 'consultor';
+
+  @ApiPropertyOptional({ enum: ['consultoria', 'servicio'], default: 'consultoria' })
+  @IsIn(['consultoria', 'servicio'])
+  @IsOptional()
+  meetingType?: 'consultoria' | 'servicio';
+
+  @ApiPropertyOptional({ example: 42 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  serviceRequestId?: number;
+
+  @ApiPropertyOptional({ example: 0, minimum: 0 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  serviceMilestoneIndex?: number;
 }

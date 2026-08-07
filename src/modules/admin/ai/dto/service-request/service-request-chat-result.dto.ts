@@ -32,9 +32,9 @@ export class ServiceRequestChatResultDto {
   @Type(() => ServiceRequestDraftDto)
   draft: ServiceRequestDraftDto;
 
-  @ApiProperty({ type: [String], maxItems: 6 })
+  @ApiProperty({ type: [String], maxItems: 12 })
   @IsArray()
-  @ArrayMaxSize(6)
+  @ArrayMaxSize(12)
   @IsString({ each: true })
   missingInformation: string[];
 }

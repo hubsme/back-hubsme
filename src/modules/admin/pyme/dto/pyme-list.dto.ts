@@ -42,6 +42,9 @@ export class PymeListItemDto {
   @ApiProperty({ nullable: true })
   numEmployees: number | null;
 
+  @ApiProperty({ nullable: true })
+  logoUrl: string | null;
+
   @ApiProperty()
   createdAt: Date;
 }

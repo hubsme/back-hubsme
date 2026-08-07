@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { eq, ilike, and, isNull, count, desc, sql, asc, inArray } from 'drizzle-orm';
+import { eq, ilike, and, isNull, count, desc, sql, asc, inArray, or } from 'drizzle-orm';
 import { database } from '@db/connection.db';
 import { meeting, MeetingDTO, meetingStatusEnum } from '@db/tables/meeting.table';
 import { task } from '@db/tables/task.table';
@@ -10,6 +10,134 @@ import { promotionCode, PromotionCodeDTO } from '@db/tables/promotion-code.table
 
 @Injectable()
 export class MeetingRepository {
+  async findByServiceRequestId(serviceRequestId: number) {
+    return database
+      .select()
+      .from(meeting)
+      .where(and(eq(meeting.serviceRequestId, serviceRequestId), isNull(meeting.deletedAt)))
+      .orderBy(asc(meeting.serviceMilestoneIndex), asc(meeting.startTime), asc(meeting.id));
+  }
+
+  async findByServiceRequestMilestone(serviceRequestId: number, milestoneIndex: number) {
+    const result = await database
+      .select()
+      .from(meeting)
+      .where(
+        and(
+          eq(meeting.serviceRequestId, serviceRequestId),
+          eq(meeting.serviceMilestoneIndex, milestoneIndex),
+          isNull(meeting.deletedAt),
+        ),
+      )
+      .limit(1);
+    return result[0];
+  }
+
+  async findPymeDocumentsPaginated(
+    pymeId: number,
+    page: number = 1,
+    limit: number = 10,
+    search?: string,
+  ) {
+    const offset = (page - 1) * limit;
+    const conditions = [
+      eq(meeting.pymeId, pymeId),
+      isNull(meeting.deletedAt),
+      or(eq(meeting.status, 'finalizada'), sql`${meeting.description} IS NOT NULL`),
+    ];
+    const normalizedSearch = search?.trim();
+
+    if (normalizedSearch) {
+      const searchTerm = `%${normalizedSearch}%`;
+      conditions.push(
+        or(
+          ilike(meeting.title, searchTerm),
+          ilike(meeting.description, searchTerm),
+          ilike(consultant.fullName, searchTerm),
+        ),
+      );
+    }
+
+    const whereClause = and(...conditions);
+    const [{ total }] = await database
+      .select({ total: count() })
+      .from(meeting)
+      .leftJoin(pyme, eq(pyme.id, meeting.pymeId))
+      .leftJoin(consultant, eq(consultant.id, meeting.consultantId))
+      .where(whereClause);
+    const data = await database
+      .select({
+        id: meeting.id,
+        pymeId: meeting.pymeId,
+        pymeName: sql<string>`COALESCE(${pyme.name}, 'PYME')`,
+        pymeLogoUrl: pyme.logoUrl,
+        consultantId: meeting.consultantId,
+        consultantName: sql<string>`COALESCE(${consultant.fullName}, 'Consultor')`,
+        consultantPhotoUrl: consultant.photoUrl,
+        title: meeting.title,
+        description: meeting.description,
+        status: meeting.status,
+        startTime: meeting.startTime,
+        completedAt: meeting.completedAt,
+      })
+      .from(meeting)
+      .leftJoin(pyme, eq(pyme.id, meeting.pymeId))
+      .leftJoin(consultant, eq(consultant.id, meeting.consultantId))
+      .where(whereClause)
+      .orderBy(desc(sql`COALESCE(${meeting.completedAt}, ${meeting.startTime}, ${meeting.createdAt})`), desc(meeting.id))
+      .limit(limit)
+      .offset(offset);
+
+    return { data, total: Number(total) };
+  }
+
+  async findConsultantDocumentsPaginated(
+    consultantId: number,
+    page: number = 1,
+    limit: number = 10,
+    search?: string,
+  ) {
+    const offset = (page - 1) * limit;
+    const conditions = [
+      eq(meeting.consultantId, consultantId),
+      isNull(meeting.deletedAt),
+      or(eq(meeting.status, 'finalizada'), sql`${meeting.description} IS NOT NULL`),
+    ];
+    const normalizedSearch = search?.trim();
+
+    if (normalizedSearch) {
+      const searchTerm = `%${normalizedSearch}%`;
+      conditions.push(or(ilike(meeting.title, searchTerm), ilike(meeting.description, searchTerm), ilike(pyme.name, searchTerm)));
+    }
+
+    const whereClause = and(...conditions);
+    const [{ total }] = await database
+      .select({ total: count() })
+      .from(meeting)
+      .leftJoin(pyme, eq(pyme.id, meeting.pymeId))
+      .where(whereClause);
+    const data = await database
+      .select({
+        id: meeting.id,
+        pymeId: meeting.pymeId,
+        pymeName: sql<string>`COALESCE(${pyme.name}, 'PYME')`,
+        pymeLogoUrl: pyme.logoUrl,
+        title: meeting.title,
+        description: meeting.description,
+        status: meeting.status,
+        startTime: meeting.startTime,
+        completedAt: meeting.completedAt,
+      })
+      .from(meeting)
+      .leftJoin(pyme, eq(pyme.id, meeting.pymeId))
+      .where(whereClause)
+      .orderBy(desc(sql`COALESCE(${meeting.completedAt}, ${meeting.startTime}, ${meeting.createdAt})`), desc(meeting.id))
+      .limit(limit)
+      .offset(offset);
+
+    return { data, total: Number(total) };
+  }
+
   async findCalendarPaginated(
     page: number,
     limit: number,
@@ -56,6 +184,9 @@ export class MeetingRepository {
         consultantId: meeting.consultantId,
         consultantName: sql<string>`COALESCE(${consultant.fullName}, 'Consultor')`,
         consultantPhotoUrl: consultant.photoUrl,
+        serviceRequestId: meeting.serviceRequestId,
+        serviceMilestoneIndex: meeting.serviceMilestoneIndex,
+        meetingType: meeting.meetingType,
         consultantPricePerHour: sql<string>`COALESCE(${consultant.pricePerHour}, '0.00')`,
         title: meeting.title,
         startTime: meeting.startTime,

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, count, desc, eq, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import { database } from '@db/connection.db';
 import { consultant } from '@db/tables/consultant.table';
 import { diagnostic } from '@db/tables/diagnostic.table';
@@ -115,14 +115,51 @@ export class DashboardRepository {
     return stats;
   }
 
-  async findUpcomingConfirmed(scope: DashboardMeetingScope, now = new Date()) {
-    const weekEnd = this.getNextBusinessWeekStart(now);
+  async findUpcoming(scope: DashboardMeetingScope, now = new Date()) {
+    const horizonEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const displayStartTime = sql<Date>`
+      COALESCE(
+        ${meeting.startTime},
+        NULLIF(${meeting.proposedStartTimes}[1], '')::timestamp
+      )
+    `;
+    const proposedTimeInWindow = sql<boolean>`
+      EXISTS (
+        SELECT 1
+        FROM unnest(${meeting.proposedStartTimes}) AS proposed_start(value)
+        WHERE NULLIF(proposed_start.value, '')::timestamp < ${horizonEnd}
+          AND NULLIF(proposed_start.value, '')::timestamp
+            + (${meeting.durationMinutes} * interval '1 minute')
+            + interval '15 minutes' >= ${now}
+      )
+    `;
+    const scheduledTimeInWindow = and(
+      isNotNull(meeting.startTime),
+      lt(meeting.startTime, horizonEnd),
+      sql`
+        ${meeting.startTime}
+          + (${meeting.durationMinutes} * interval '1 minute')
+          + interval '15 minutes' >= ${now}
+      `,
+    );
+    const canSeePendingMeetings = scope.role === 'pyme' || scope.role === 'consultor';
+    const upcomingTimeCondition =
+      canSeePendingMeetings
+        ? or(
+            scheduledTimeInWindow,
+            and(eq(meeting.status, 'por_confirmar'), proposedTimeInWindow),
+          )
+        : scheduledTimeInWindow;
+    const statusCondition =
+      canSeePendingMeetings
+        ? inArray(meeting.status, ['por_confirmar', 'confirmada'])
+        : eq(meeting.status, 'confirmada');
 
     return database
       .select({
         id: meeting.id,
         title: meeting.title,
-        startTime: meeting.startTime,
+        startTime: displayStartTime,
         durationMinutes: meeting.durationMinutes,
         status: meeting.status,
       })
@@ -130,12 +167,11 @@ export class DashboardRepository {
       .where(
         and(
           ...this.getMeetingScopeConditions(scope),
-          eq(meeting.status, 'confirmada'),
-          sql`${meeting.startTime} + (${meeting.durationMinutes} * interval '1 minute') + interval '15 minutes' >= ${now}`,
-          lt(meeting.startTime, weekEnd),
+          statusCondition,
+          upcomingTimeCondition,
         ),
       )
-      .orderBy(meeting.startTime)
+      .orderBy(displayStartTime, meeting.id)
       .limit(5);
   }
 
@@ -151,18 +187,5 @@ export class DashboardRepository {
     }
 
     return conditions;
-  }
-
-  private getNextBusinessWeekStart(now: Date): Date {
-    const businessTimezoneOffsetMinutes = -5 * 60;
-    const businessNow = new Date(now.getTime() + businessTimezoneOffsetMinutes * 60_000);
-    const businessDate = new Date(
-      Date.UTC(businessNow.getUTCFullYear(), businessNow.getUTCMonth(), businessNow.getUTCDate()),
-    );
-    const daysSinceMonday = (businessDate.getUTCDay() + 6) % 7;
-    const daysUntilNextMonday = 7 - daysSinceMonday;
-
-    businessDate.setUTCDate(businessDate.getUTCDate() + daysUntilNextMonday);
-    return new Date(businessDate.getTime() - businessTimezoneOffsetMinutes * 60_000);
   }
 }

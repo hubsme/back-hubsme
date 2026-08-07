@@ -8,6 +8,9 @@ import { PymeMeetingConsultantsFiltersDto } from './dto/pyme-meeting-consultants
 import { PymeUpdateDto } from './dto/pyme-update.dto';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { EmailService } from '../email/email.service';
+import { MeetingRepository } from '@repositories/meeting.repository';
+import { DiagnosticRepository } from '@repositories/diagnostic.repository';
+import { PymeDocumentListFiltersDto } from './dto/pyme-document.dto';
 
 @Injectable()
 export class PymeService {
@@ -16,6 +19,8 @@ export class PymeService {
     private readonly consultantRepository: ConsultantRepository,
     private readonly whatsappService: WhatsappService,
     private readonly emailService: EmailService,
+    private readonly meetingRepository: MeetingRepository,
+    private readonly diagnosticRepository: DiagnosticRepository,
   ) {}
 
   async findAllPaginated(filters: PymeListFiltersDto) {
@@ -47,6 +52,42 @@ export class PymeService {
     const page = filters.page ?? 1;
     const limit = filters.limit ?? 10;
     const { data, total } = await this.consultantRepository.findByPymeMeetingsPaginated(userId, page, limit, filters);
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      data,
+      meta: { total, page, limit, totalPages, hasNextPage: page < totalPages, hasPreviousPage: page > 1 },
+    };
+  }
+
+  async findMeetingDocuments(userId: number, filters: PymeDocumentListFiltersDto) {
+    const pyme = await this.findByUserId(userId);
+    const page = filters.page ?? 1;
+    const limit = filters.limit ?? 10;
+    const { data, total } = await this.meetingRepository.findPymeDocumentsPaginated(
+      pyme.id,
+      page,
+      limit,
+      filters.search,
+    );
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      data,
+      meta: { total, page, limit, totalPages, hasNextPage: page < totalPages, hasPreviousPage: page > 1 },
+    };
+  }
+
+  async findDiagnosticDocuments(userId: number, filters: PymeDocumentListFiltersDto) {
+    const pyme = await this.findByUserId(userId);
+    const page = filters.page ?? 1;
+    const limit = filters.limit ?? 10;
+    const { data, total } = await this.diagnosticRepository.findPymeDocumentsPaginated(
+      pyme.id,
+      page,
+      limit,
+      filters.search,
+    );
     const totalPages = Math.ceil(total / limit);
 
     return {

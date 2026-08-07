@@ -269,6 +269,7 @@ export class ConsultantRepository {
         companyTypes: consultant.companyTypes,
         services: consultant.services,
         yearsExperience: consultant.yearsExperience,
+        pricePerHour: consultant.pricePerHour,
         rating: consultant.rating,
         totalReviews: consultant.totalReviews,
       })

@@ -62,6 +62,13 @@ type MercadoPagoPaymentResponse = CheckoutRaw & {
   id?: number | string;
   status?: string;
   external_reference?: string;
+  message?: string;
+};
+
+type MercadoPagoPaymentSearchResponse = {
+  results?: MercadoPagoPaymentResponse[];
+  message?: string;
+  error?: string;
 };
 
 const HUBSME_SERVICE_PAYMENT_REFERENCE_PREFIX = 'service-hubsme:';
@@ -370,6 +377,42 @@ export class MercadoPagoService {
     });
     await this.serviceRequestService.markPaymentPending(serviceRequestId);
     return updatedCheckout;
+  }
+
+  async syncServicePayment(currentUser: User, serviceRequestId: number) {
+    if (currentUser.role !== 'pyme') {
+      throw new UnauthorizedException('Solo la PYME puede verificar el pago de un servicio');
+    }
+
+    await this.serviceRequestService.findOneForUser(serviceRequestId, currentUser);
+    const checkout = await this.checkoutRepository.findByServiceRequestId(serviceRequestId);
+    if (!checkout || !this.isHubsmeServicePayment(checkout)) {
+      throw new NotFoundException(`No existe un pago de Mercado Pago para el servicio ${serviceRequestId}`);
+    }
+
+    if (checkout.status === 'approved') {
+      await this.serviceRequestService.markPaid(serviceRequestId);
+      return checkout;
+    }
+
+    const payment = await this.findPaymentByExternalReference(checkout.externalReference);
+    if (!payment) return checkout;
+
+    const status = this.mapPaymentStatus(payment.status);
+    if (status !== 'approved') {
+      return this.checkoutRepository.update(checkout.id, {
+        mercadoPagoPaymentId: this.stringifyId(payment.id),
+        status,
+        rawPayment: payment,
+      });
+    }
+
+    const approvedCheckout = await this.checkoutRepository.approveIfUnprocessed(checkout.id, {
+      mercadoPagoPaymentId: this.stringifyId(payment.id),
+      rawPayment: payment,
+    });
+    await this.serviceRequestService.markPaid(serviceRequestId);
+    return approvedCheckout ?? (await this.checkoutRepository.findOne(checkout.id)) ?? checkout;
   }
 
   private getPaymentHistoryRole(currentUser: User): 'pyme' | 'consultor' {
@@ -695,6 +738,26 @@ export class MercadoPagoService {
     }
 
     throw new BadRequestException([lastMessage]);
+  }
+
+  private async findPaymentByExternalReference(externalReference: string) {
+    const params = new URLSearchParams({
+      sort: 'date_created',
+      criteria: 'desc',
+      external_reference: externalReference,
+    });
+    const response = await fetch(`https://api.mercadopago.com/v1/payments/search?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${this.getPlatformAccessToken()}` },
+    });
+    const result = (await response.json()) as MercadoPagoPaymentSearchResponse;
+    if (!response.ok) {
+      throw new BadRequestException([result.message ?? result.error ?? 'No se pudo verificar el pago en Mercado Pago']);
+    }
+
+    const matchingPayments = (result.results ?? []).filter(
+      (payment) => payment.external_reference === externalReference,
+    );
+    return matchingPayments.find((payment) => payment.status === 'approved') ?? matchingPayments[0];
   }
 
   private calculateAmount(consultant: Consultant, durationMinutes: number) {

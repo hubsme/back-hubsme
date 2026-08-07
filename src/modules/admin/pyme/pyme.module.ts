@@ -7,11 +7,13 @@ import { AdminAuthModule } from '../admin-auth/admin-auth.module';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { EmailModule } from '../email/email.module';
 import { PymeAdminController } from './pyme-admin.controller';
+import { MeetingRepository } from '@repositories/meeting.repository';
+import { DiagnosticRepository } from '@repositories/diagnostic.repository';
 
 @Module({
   imports: [AdminAuthModule, WhatsappModule, EmailModule],
   controllers: [PymeAdminController, PymeController],
-  providers: [PymeService, PymeRepository, ConsultantRepository],
+  providers: [PymeService, PymeRepository, ConsultantRepository, MeetingRepository, DiagnosticRepository],
   exports: [PymeService],
 })
 export class PymeModule {}
