@@ -43,4 +43,4 @@ RUN ls -la dist/
 EXPOSE 6001
 
 # Comando para iniciar la aplicación
-CMD ["node", "dist/main.js"]
+CMD ["node", "dist/src/main.js"]

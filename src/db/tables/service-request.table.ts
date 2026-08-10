@@ -96,12 +96,22 @@ export type ServiceRequestReferenceAttachment = {
   sizeBytes: number;
 };
 
+export type ServiceRequestEvidenceAttachment = ServiceRequestReferenceAttachment & {
+  id: string;
+  note: string | null;
+  milestoneIndex: number | null;
+  uploadedAt: string;
+  uploadedBy: number;
+  uploadedByRole: 'pyme' | 'consultor';
+};
+
 export const serviceRequestStatusEnum = pgEnum('service_request_status', [
   'requested',
   'proposal_sent',
   'consultant_declined',
   'payment_pending',
   'paid',
+  'completed',
   'pyme_declined',
   'cancelled',
 ]);
@@ -136,6 +146,10 @@ export const serviceRequest = pgTable(
       .$type<ServiceRequestReferenceAttachment[]>()
       .default([])
       .notNull(),
+    evidenceAttachments: jsonb('evidence_attachments')
+      .$type<ServiceRequestEvidenceAttachment[]>()
+      .default([])
+      .notNull(),
     budgetType: serviceRequestBudgetTypeEnum('budget_type'),
     budgetMin: decimal('budget_min', { precision: 12, scale: 2 }),
     budgetMax: decimal('budget_max', { precision: 12, scale: 2 }),
@@ -155,6 +169,7 @@ export const serviceRequest = pgTable(
     respondedAt: timestamp('responded_at'),
     decidedAt: timestamp('decided_at'),
     paidAt: timestamp('paid_at'),
+    completedAt: timestamp('completed_at'),
   },
   (t) => [
     index('service_request_pyme_id_idx').on(t.pymeId),
@@ -175,7 +190,7 @@ export const serviceRequest = pgTable(
     ),
     check(
       'service_request_proposal_price_check',
-      sql`${t.status} NOT IN ('proposal_sent', 'payment_pending', 'paid') OR ${t.proposedPrice} IS NOT NULL`,
+      sql`${t.status} NOT IN ('proposal_sent', 'payment_pending', 'paid', 'completed') OR ${t.proposedPrice} IS NOT NULL`,
     ),
   ],
 );
