@@ -10,7 +10,7 @@
     "start": "node dist/src/main",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main",
+    "start:prod": "node dist/src/main",
     "db:create": "ts-node -r tsconfig-paths/register src/db/create.db.ts",
     "db:seed": "ts-node -r tsconfig-paths/register src/db/seed.db.ts",
     "db:reset": "ts-node -r tsconfig-paths/register src/db/reset.db.ts",

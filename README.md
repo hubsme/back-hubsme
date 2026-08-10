@@ -21,6 +21,11 @@ Sistema backend que proporciona una API para gestionar:
 - **Drizzle ORM** (v0.44.x) - ORM para base de datos
 - **PostgreSQL** - Base de datos relacional
 - **dotenv** - Gestión de variables de entorno
+- **Microsoft Graph** - Reuniones de Teams, grabaciones, transcripciones y correo
+- **Azure Blob Storage** - Almacenamiento de archivos
+- **Google Gemini** - Diagnósticos y asistencia de IA
+- **Mercado Pago** - Pagos y suscripciones
+- **WhatsApp Cloud API** - Notificaciones y webhooks
 
 ## 📦 Requisitos Previos
 
@@ -53,6 +58,7 @@ DB_PORT=5432
 DB_USER=postgres
 DB_PASSWORD=tu_contraseña
 DB_NAME=hubsme
+PORT=6001
 ```
 
 ## 🚀 Comandos de Compilación y Ejecución
@@ -66,6 +72,8 @@ npm run start:dev
 
 ### Base de Datos (Drizzle)
 
+Estos comandos quedan documentados para mantenimiento humano. La IA no debe ejecutarlos porque la base de datos está en producción. Las migraciones se preparan manualmente y las aplica una persona autorizada.
+
 ```bash
 # Crear las tablas y estructuras en la base de datos
 npm run db:create
@@ -77,7 +85,7 @@ npm run db:seed
 npm run db:reset
 
 # Abrir Drizzle Studio (GUI para ver y editar datos)
-npx run db:studio
+npm run db:studio
 ```
 
 ## 🎨 Linting y Formato
@@ -92,11 +100,17 @@ npm run format
 
 ## 🌐 API
 
-El servidor se ejecuta por defecto en `http://localhost:6001`
+El servidor se ejecuta en el puerto definido por `PORT` y usa `6001` por defecto: `http://localhost:6001`.
+
+La documentación interactiva de Swagger está disponible en `http://localhost:6001/api`.
 
 ### Endpoints principales
 
-_(Por definir según implementación de controladores)_
+- `POST /auth/login` y `POST /auth/register`: autenticación de usuarios.
+- `/admin/*`: API protegida con JWT para PYMES y consultores.
+- `/admin/backoffice/*`: API protegida con autenticación administrativa.
+- `/public/consultant/*`: consultas públicas de consultores.
+- `/storage/*`: subida, descarga y eliminación de archivos.
 
 ## 🔧 Scripts Disponibles
 
@@ -107,6 +121,8 @@ _(Por definir según implementación de controladores)_
 | `npm run start:dev`   | Inicia en modo desarrollo con hot-reload    |
 | `npm run start:debug` | Inicia en modo debug                        |
 | `npm run start:prod`  | Inicia la aplicación compilada              |
+| `npm run db:studio`   | Abre Drizzle Studio                         |
+| `npm run generate:types` | Genera el cliente tipado para el frontend |
 | `npm run lint`        | Ejecuta ESLint para encontrar problemas     |
 | `npm run format`      | Formatea el código con Prettier             |
 

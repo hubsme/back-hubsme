@@ -204,7 +204,7 @@ confirmar reunión
   -> programar notificaciones y enviar correos/WhatsApp
 ```
 
-El frontend usa el `joinWebUrl` para la experiencia de llamada mediante ACS. ACS no almacena las grabaciones ni genera la transcripción; esos artefactos pertenecen a Microsoft Teams.
+El frontend usa el `joinWebUrl` para redirigir al usuario autenticado a la reunión de Microsoft Teams. Las grabaciones y transcripciones pertenecen a Microsoft Teams y se consultan desde el backend mediante Microsoft Graph.
 
 ## 7. Grabaciones y transcripciones
 
@@ -261,13 +261,14 @@ Las reuniones nuevas se configuran con `meetingSpokenLanguageTag: 'es-ES'`. Este
 | Transcripción en inglés | Idioma hablado no configurado | Usar una reunión nueva con `meetingSpokenLanguageTag: 'es-ES'`. |
 | Error `403` al leer artefactos | Permiso Graph o Application Access Policy incompleta | Revisar consentimiento y asignación al organizador. |
 
-## Frontend: sala embebida mediante ACS
+## Frontend: acceso a la reunión de Teams
 
-El frontend usa Azure Communication Services para permitir que los usuarios entren a la reunión desde Hubsme:
+El frontend no embebe una sala de videollamada; abre directamente Microsoft Teams. El flujo actual es:
 
-- `@azure/communication-identity` genera una identidad ACS temporal y un token `voip`.
-- `@azure/communication-react` renderiza el `CallComposite`.
-- El adaptador usa el `joinWebUrl` generado por Microsoft Graph.
-- Al cerrar la sala se libera el adaptador y se desmonta el componente React para apagar cámara y micrófono.
+1. El usuario entra a `/reuniones/:id` con una sesión válida.
+2. El frontend llama a `GET /admin/meeting/access/:id`.
+3. El backend valida que el usuario participe en la reunión y que el horario esté dentro de la ventana de acceso.
+4. Cuando el acceso está disponible, el backend devuelve el `joinWebUrl` de Microsoft Teams.
+5. El frontend redirige el navegador directamente a ese enlace.
 
-La conexión de ACS no reemplaza la cuenta organizadora de Teams ni la configuración de Exchange/OneDrive.
+La implementación está en `frontend-hubsme/src/modules/meeting-access/meeting-access.ts` y `frontend-hubsme/src/services/admin/meeting.service.ts`. Microsoft Teams sigue siendo responsable de la llamada, grabación y transcripción; Hubsme solo controla el acceso y consulta los artefactos mediante Graph.

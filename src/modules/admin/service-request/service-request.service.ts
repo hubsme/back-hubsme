@@ -7,7 +7,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { SERVICE_REQUEST_CATEGORY_OPTIONS, ServiceRequestReferenceAttachment } from '@db/tables/service-request.table';
+import {
+  SERVICE_REQUEST_CATEGORY_OPTIONS,
+  ServiceRequestEvidenceAttachment,
+  ServiceRequestReferenceAttachment,
+} from '@db/tables/service-request.table';
 import { User } from '@db/tables/user.table';
 import { ConsultantRepository } from '@repositories/consultant.repository';
 import { MeetingRepository } from '@repositories/meeting.repository';
@@ -15,6 +19,11 @@ import { ServiceRequestRepository } from '@repositories/service-request.reposito
 import { ServiceRequestCreateDto } from './dto/service-request-create.dto';
 import { ServiceRequestListFiltersDto } from './dto/service-request-list.dto';
 import { ServiceRequestMilestoneMeetingDto } from './dto/service-request-milestone-meeting.dto';
+import {
+  ServiceRequestEvidenceMultipartDto,
+  ServiceRequestExtraMilestoneMeetingDto,
+  ServiceRequestMilestoneUpdateDto,
+} from './dto/service-request-progress.dto';
 import { ServiceRequestDeclineDto, ServiceRequestProposalDto } from './dto/service-request-response.dto';
 import { StorageService } from '../../storage/storage.service';
 import { ConsultantAvailabilityService } from '../consultant-availability/consultant-availability.service';
@@ -29,6 +38,7 @@ import {
 @Injectable()
 export class ServiceRequestService {
   private readonly logger = new Logger(ServiceRequestService.name);
+  private readonly maximumEvidenceAttachments = 30;
 
   constructor(
     private readonly serviceRequestRepository: ServiceRequestRepository,
@@ -69,6 +79,10 @@ export class ServiceRequestService {
     const role = this.getParticipantRole(currentUser);
     const request = await this.findOne(id);
     this.assertParticipant(request, currentUser.id, role);
+    if (request.status === 'paid' || request.status === 'completed') {
+      await this.ensureInitialMeeting(request);
+      return this.findOne(id);
+    }
     return request;
   }
 
@@ -263,7 +277,7 @@ export class ServiceRequestService {
 
   async markPaid(id: number) {
     const request = await this.findOne(id);
-    if (request.status === 'paid') {
+    if (request.status === 'paid' || request.status === 'completed') {
       await this.ensureInitialMeeting(request);
       return this.findOne(id);
     }
@@ -275,6 +289,25 @@ export class ServiceRequestService {
     );
     if (!updated) throw new ConflictException('No se pudo confirmar el pago del servicio');
     await this.ensureInitialMeeting(updated);
+    return this.findOne(id);
+  }
+
+  async completeService(id: number, currentUser: User) {
+    if (currentUser.role !== 'pyme') {
+      throw new ForbiddenException('Solo la PYME puede dar por completado el servicio');
+    }
+
+    const request = await this.findOne(id);
+    this.assertParticipant(request, currentUser.id, 'pyme');
+    if (request.status === 'completed') return request;
+    if (request.status !== 'paid') {
+      throw new BadRequestException(['Solo puedes completar un servicio aprobado y pagado']);
+    }
+
+    const updated = await this.serviceRequestRepository.update(id, { status: 'completed', completedAt: new Date() }, [
+      'paid',
+    ]);
+    if (!updated) throw new ConflictException('El estado del servicio cambió antes de completarlo');
     return this.findOne(id);
   }
 
@@ -316,6 +349,270 @@ export class ServiceRequestService {
       serviceMilestoneIndex: data.milestoneIndex,
     });
     await this.meetingService.markPaidPendingConfirmation(createdMeeting.id);
+    return this.findOne(id);
+  }
+
+  async updateMilestone(
+    id: number,
+    milestoneIndex: number,
+    data: ServiceRequestMilestoneUpdateDto,
+    currentUser: User,
+  ) {
+    if (currentUser.role !== 'pyme') {
+      throw new ForbiddenException('Solo la PYME puede editar los hitos del servicio');
+    }
+
+    const request = await this.findOne(id);
+    this.assertParticipant(request, currentUser.id, 'pyme');
+    if (request.status !== 'paid') {
+      throw new BadRequestException(['Solo puedes editar hitos de un servicio pagado']);
+    }
+    if (milestoneIndex < 1 || milestoneIndex >= request.milestones.length - 1) {
+      throw new BadRequestException(['El hito inicial y el hito final no son editables']);
+    }
+
+    const currentMilestone = request.milestones[milestoneIndex];
+    if (!currentMilestone) throw new NotFoundException('El hito indicado no existe');
+    if (request.meetings.some((meeting) => meeting.serviceMilestoneIndex === milestoneIndex)) {
+      throw new ConflictException('No puedes editar un hito que ya tiene una reunión registrada');
+    }
+
+    const title = data.title.trim();
+    if (title.length < 3) {
+      throw new BadRequestException(['El nombre del hito debe tener al menos 3 caracteres']);
+    }
+    const today = this.dateStringInTimeZone(new Date(), 'America/Lima');
+    if (!this.isValidDateOnly(data.dueDate) || data.dueDate < today) {
+      throw new BadRequestException(['La fecha del hito no puede estar en el pasado']);
+    }
+    const previousMilestone = request.milestones[milestoneIndex - 1];
+    const nextMilestone = request.milestones[milestoneIndex + 1];
+    if (previousMilestone && data.dueDate < previousMilestone.dueDate) {
+      throw new BadRequestException([
+        `La fecha debe ser igual o posterior a ${previousMilestone.dueDate}`,
+      ]);
+    }
+    if (nextMilestone && data.dueDate > nextMilestone.dueDate) {
+      throw new BadRequestException([`La fecha debe ser igual o anterior a ${nextMilestone.dueDate}`]);
+    }
+    if (request.deadline && data.dueDate > request.deadline) {
+      throw new BadRequestException(['La fecha del hito no puede superar la fecha límite del servicio']);
+    }
+
+    const updated = await this.serviceRequestRepository.updateMilestone(
+      id,
+      milestoneIndex,
+      { title, dueDate: data.dueDate },
+      request.milestones.length,
+    );
+    if (!updated) {
+      throw new ConflictException('El hito ya fue actualizado o recibió una reunión');
+    }
+    return this.findOne(id);
+  }
+
+  async removeMilestone(id: number, milestoneIndex: number, currentUser: User) {
+    if (currentUser.role !== 'pyme') {
+      throw new ForbiddenException('Solo la PYME puede eliminar hitos del servicio');
+    }
+
+    const request = await this.findOne(id);
+    this.assertParticipant(request, currentUser.id, 'pyme');
+    if (request.status !== 'paid') {
+      throw new BadRequestException(['Solo puedes eliminar hitos de un servicio pagado']);
+    }
+    if (milestoneIndex < 1 || milestoneIndex >= request.milestones.length - 1) {
+      throw new BadRequestException(['El hito inicial y el hito final no se pueden eliminar']);
+    }
+    if (!request.milestones[milestoneIndex]) {
+      throw new NotFoundException('El hito indicado no existe');
+    }
+    if (request.meetings.some((meeting) => meeting.serviceMilestoneIndex === milestoneIndex)) {
+      throw new ConflictException('No puedes eliminar un hito que ya tiene una reunión registrada');
+    }
+    if (request.evidenceAttachments.some((attachment) => attachment.milestoneIndex === milestoneIndex)) {
+      throw new BadRequestException(['Elimina primero las evidencias vinculadas a este hito']);
+    }
+
+    const removed = await this.serviceRequestRepository.removeMilestoneAt(
+      id,
+      milestoneIndex,
+      request.milestones.length,
+    );
+    if (!removed) {
+      throw new ConflictException('El hito ya fue actualizado o recibió una reunión');
+    }
+    return this.findOne(id);
+  }
+
+  async addExtraMilestoneMeeting(id: number, data: ServiceRequestExtraMilestoneMeetingDto, currentUser: User) {
+    if (currentUser.role !== 'pyme') {
+      throw new ForbiddenException('Solo la PYME puede agregar hitos al servicio');
+    }
+
+    const request = await this.findOne(id);
+    this.assertParticipant(request, currentUser.id, 'pyme');
+    if (request.status !== 'paid') {
+      throw new BadRequestException(['El servicio debe estar pagado antes de agregar un hito']);
+    }
+    if (request.milestones.length >= 20) {
+      throw new BadRequestException(['El servicio alcanzó el máximo de 20 hitos']);
+    }
+    if (request.milestones.length < 2) {
+      throw new BadRequestException([
+        'El servicio necesita un hito inicial y uno final antes de agregar etapas intermedias',
+      ]);
+    }
+
+    const milestoneIndex = data.insertAtIndex;
+    if (milestoneIndex < 1 || milestoneIndex >= request.milestones.length) {
+      throw new BadRequestException(['El nuevo hito debe ubicarse entre el hito inicial y el final']);
+    }
+
+    const title = data.title.trim();
+    const today = this.dateStringInTimeZone(new Date(), 'America/Lima');
+    if (!this.isValidDateOnly(data.dueDate) || data.dueDate < today) {
+      throw new BadRequestException(['La fecha del hito no puede estar en el pasado']);
+    }
+    if (request.deadline && data.dueDate > request.deadline) {
+      throw new BadRequestException(['La fecha del hito no puede superar la fecha límite del servicio']);
+    }
+    const previousMilestone = request.milestones[milestoneIndex - 1];
+    const nextMilestone = request.milestones[milestoneIndex];
+    if (data.dueDate < previousMilestone.dueDate || data.dueDate > nextMilestone.dueDate) {
+      throw new BadRequestException([
+        `La fecha debe estar entre ${previousMilestone.dueDate} y ${nextMilestone.dueDate}`,
+      ]);
+    }
+
+    const proposedStartTimes = this.cleanProposedStartTimes(data.proposedStartTimes);
+    const meetingAfterMilestone = proposedStartTimes.some(
+      (value) => this.dateStringInTimeZone(new Date(value), 'America/Lima') > data.dueDate,
+    );
+    if (meetingAfterMilestone) {
+      throw new BadRequestException(['Los horarios propuestos deben ser anteriores o iguales a la fecha del hito']);
+    }
+    for (const proposedStartTime of proposedStartTimes) {
+      await this.consultantAvailabilityService.assertAvailableForMeeting(
+        request.consultantId,
+        new Date(proposedStartTime),
+        60,
+      );
+    }
+
+    const milestone = { title, dueDate: data.dueDate };
+    const inserted = await this.serviceRequestRepository.insertMilestoneAt(
+      id,
+      milestoneIndex,
+      milestone,
+      request.milestones.length,
+    );
+    if (!inserted) {
+      throw new ConflictException('El plan de hitos cambió mientras agregabas la nueva etapa');
+    }
+
+    try {
+      const meeting = await this.meetingService.create({
+        pymeId: request.pymeId,
+        consultantId: request.consultantId,
+        title: `${request.title} · ${title}`,
+        proposedStartTimes,
+        durationMinutes: 60,
+        description: `Reunión de seguimiento del hito adicional: ${title}`,
+        requestedBy: 'pyme',
+        meetingType: 'servicio',
+        serviceRequestId: id,
+        serviceMilestoneIndex: milestoneIndex,
+      });
+      await this.meetingService.markPaidPendingConfirmation(meeting.id);
+    } catch (error) {
+      await this.serviceRequestRepository.rollbackInsertedMilestone(id, milestoneIndex, milestone);
+      throw error;
+    }
+
+    return this.findOne(id);
+  }
+
+  async uploadEvidence(
+    id: number,
+    data: ServiceRequestEvidenceMultipartDto,
+    files: Express.Multer.File[],
+    currentUser: User,
+  ) {
+    const role = this.getParticipantRole(currentUser);
+    const request = await this.findOne(id);
+    this.assertParticipant(request, currentUser.id, role);
+    if (request.status !== 'paid') {
+      throw new BadRequestException(['El servicio debe estar pagado para adjuntar evidencias']);
+    }
+    if (!files.length) {
+      throw new BadRequestException(['Selecciona al menos un archivo']);
+    }
+    this.validateFiles(files);
+    if (request.evidenceAttachments.length + files.length > this.maximumEvidenceAttachments) {
+      throw new BadRequestException([
+        `El servicio admite hasta ${this.maximumEvidenceAttachments} evidencias o entregables`,
+      ]);
+    }
+    if (data.milestoneIndex !== undefined && !request.milestones[data.milestoneIndex]) {
+      throw new NotFoundException('El hito seleccionado no existe');
+    }
+
+    const uploadedAttachments: ServiceRequestEvidenceAttachment[] = [];
+    try {
+      for (const file of files) {
+        const uploaded = await this.storageService.upload(file, `service-requests/${id}/evidence/${randomUUID()}`);
+        uploadedAttachments.push({
+          id: randomUUID(),
+          storagePath: uploaded.publicId,
+          fileUrl: uploaded.secureUrl,
+          originalName: file.originalname.slice(0, 255),
+          mimeType: file.mimetype,
+          sizeBytes: file.size,
+          note: this.cleanOptionalText(data.note),
+          milestoneIndex: data.milestoneIndex ?? null,
+          uploadedAt: new Date().toISOString(),
+          uploadedBy: currentUser.id,
+          uploadedByRole: role,
+        });
+      }
+
+      const updated = await this.serviceRequestRepository.update(
+        id,
+        { evidenceAttachments: [...request.evidenceAttachments, ...uploadedAttachments] },
+        ['paid'],
+      );
+      if (!updated) throw new ConflictException('No se pudieron registrar los archivos del servicio');
+    } catch (error) {
+      await this.deleteUploadedFiles(uploadedAttachments.map((attachment) => attachment.storagePath));
+      throw error;
+    }
+
+    return this.findOne(id);
+  }
+
+  async deleteEvidence(id: number, attachmentId: string, currentUser: User) {
+    if (currentUser.role !== 'pyme') {
+      throw new ForbiddenException('Solo la PYME puede eliminar evidencias del servicio');
+    }
+
+    const request = await this.findOne(id);
+    this.assertParticipant(request, currentUser.id, 'pyme');
+    if (request.status !== 'paid') {
+      throw new BadRequestException(['Solo puedes eliminar evidencias de un servicio pagado']);
+    }
+    const attachment = request.evidenceAttachments.find((item) => item.id === attachmentId);
+    if (!attachment) throw new NotFoundException('La evidencia indicada no existe');
+    if (
+      attachment.milestoneIndex !== null &&
+      request.meetings.some((meeting) => meeting.serviceMilestoneIndex === attachment.milestoneIndex)
+    ) {
+      throw new ConflictException('No puedes eliminar evidencias de un hito que ya tiene una reunión registrada');
+    }
+
+    const removed = await this.serviceRequestRepository.removeEvidenceAttachment(id, attachmentId);
+    if (!removed) throw new ConflictException('La evidencia ya fue eliminada o el servicio cambió');
+    await this.deleteUploadedFiles([removed.storagePath]);
     return this.findOne(id);
   }
 
@@ -407,6 +704,27 @@ export class ServiceRequestService {
   private async ensureInitialMeeting(request: NonNullable<Awaited<ReturnType<ServiceRequestRepository['findOne']>>>) {
     if (!request || !request.initialMeetingStartTime) return;
     const meetings = await this.meetingRepository.findByServiceRequestId(request.id);
+    const initialMeetingTitle = `${request.title} · Reunión inicial`;
+    const initialMeeting = meetings.find(
+      (meeting) =>
+        meeting.meetingType === 'servicio' &&
+        meeting.serviceRequestId === request.id &&
+        meeting.title === initialMeetingTitle,
+    );
+    if (initialMeeting) {
+      if (initialMeeting.serviceMilestoneIndex === null) {
+        try {
+          await this.meetingRepository.update(initialMeeting.id, { serviceMilestoneIndex: 0 });
+        } catch (error: unknown) {
+          this.logger.error(
+            `No se pudo vincular la reunión inicial ${initialMeeting.id} con el hito 0 del servicio ${request.id}`,
+            error instanceof Error ? error.stack : String(error),
+          );
+        }
+      }
+      return;
+    }
+
     const hasInitialMeeting = meetings.some(
       (meeting) =>
         meeting.meetingType === 'servicio' &&
@@ -419,13 +737,14 @@ export class ServiceRequestService {
       const meeting = await this.meetingService.create({
         pymeId: request.pymeId,
         consultantId: request.consultantId,
-        title: `${request.title} · Reunión inicial`,
+        title: initialMeetingTitle,
         startTime: new Date(request.initialMeetingStartTime),
         durationMinutes: 60,
         description: `Reunión inicial del servicio: ${request.title}`,
         requestedBy: 'consultor',
         meetingType: 'servicio',
         serviceRequestId: request.id,
+        serviceMilestoneIndex: 0,
       });
       await this.meetingService.confirm(meeting.id);
       this.logger.log(`Reunión inicial de servicio ${request.id} creada como reunión ${meeting.id}`);

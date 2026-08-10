@@ -8,6 +8,7 @@ import {
 import type {
   ServiceRequestBudgetType,
   ServiceRequestCategory,
+  ServiceRequestEvidenceAttachment,
   ServiceRequestReferenceAttachment,
   ServiceRequestWorkModality,
 } from '@db/tables/service-request.table';
@@ -36,6 +37,29 @@ export class ServiceRequestReferenceAttachmentResultDto implements ServiceReques
 
   @ApiProperty()
   sizeBytes: number;
+}
+
+export class ServiceRequestEvidenceAttachmentResultDto
+  extends ServiceRequestReferenceAttachmentResultDto
+  implements ServiceRequestEvidenceAttachment
+{
+  @ApiProperty()
+  id: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  note: string | null;
+
+  @ApiPropertyOptional({ nullable: true, minimum: 0 })
+  milestoneIndex: number | null;
+
+  @ApiProperty()
+  uploadedAt: string;
+
+  @ApiProperty()
+  uploadedBy: number;
+
+  @ApiProperty({ enum: ['pyme', 'consultor'] })
+  uploadedByRole: 'pyme' | 'consultor';
 }
 
 export class ServiceRequestResultDto {
@@ -102,6 +126,9 @@ export class ServiceRequestResultDto {
   @ApiProperty({ type: [ServiceRequestReferenceAttachmentResultDto] })
   referenceAttachments: ServiceRequestReferenceAttachmentResultDto[];
 
+  @ApiProperty({ type: [ServiceRequestEvidenceAttachmentResultDto] })
+  evidenceAttachments: ServiceRequestEvidenceAttachmentResultDto[];
+
   @ApiPropertyOptional({ enum: SERVICE_REQUEST_BUDGET_TYPES, nullable: true })
   budgetType: ServiceRequestBudgetType | null;
 
@@ -155,4 +182,7 @@ export class ServiceRequestResultDto {
 
   @ApiPropertyOptional({ nullable: true })
   paidAt: Date | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  completedAt: Date | null;
 }

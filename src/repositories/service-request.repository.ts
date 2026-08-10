@@ -1,9 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import { and, count, desc, eq, ilike, inArray, isNull, or } from 'drizzle-orm';
+import { and, count, desc, eq, gte, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { database } from '@db/connection.db';
 import { consultant } from '@db/tables/consultant.table';
+import { meeting } from '@db/tables/meeting.table';
 import { pyme } from '@db/tables/pyme.table';
-import { serviceRequest, ServiceRequestDTO, serviceRequestStatusEnum } from '@db/tables/service-request.table';
+import {
+  serviceRequest,
+  ServiceRequestDTO,
+  ServiceRequestEvidenceAttachment,
+  ServiceRequestMilestone,
+  serviceRequestStatusEnum,
+} from '@db/tables/service-request.table';
 
 export type ServiceRequestListFilters = {
   userId: number;
@@ -33,6 +40,7 @@ const serviceRequestSelection = {
   exclusions: serviceRequest.exclusions,
   referenceUrls: serviceRequest.referenceUrls,
   referenceAttachments: serviceRequest.referenceAttachments,
+  evidenceAttachments: serviceRequest.evidenceAttachments,
   budgetType: serviceRequest.budgetType,
   budgetMin: serviceRequest.budgetMin,
   budgetMax: serviceRequest.budgetMax,
@@ -52,10 +60,11 @@ const serviceRequestSelection = {
   respondedAt: serviceRequest.respondedAt,
   decidedAt: serviceRequest.decidedAt,
   paidAt: serviceRequest.paidAt,
+  completedAt: serviceRequest.completedAt,
 };
 
 const requestStatuses = ['requested', 'consultant_declined', 'cancelled'] as const;
-const proposalStatuses = ['proposal_sent', 'payment_pending', 'paid', 'pyme_declined'] as const;
+const proposalStatuses = ['proposal_sent', 'payment_pending', 'paid', 'completed', 'pyme_declined'] as const;
 
 @Injectable()
 export class ServiceRequestRepository {
@@ -123,6 +132,283 @@ export class ServiceRequestRepository {
         .where(and(inArray(serviceRequest.id, ids), isNull(serviceRequest.deletedAt)));
       const createdById = new Map(created.map((item) => [item.id, item]));
       return ids.map((id) => createdById.get(id)).filter((item) => item !== undefined);
+    });
+  }
+
+  async insertMilestoneAt(
+    id: number,
+    insertAtIndex: number,
+    milestoneToInsert: ServiceRequestMilestone,
+    expectedMilestoneCount: number,
+  ) {
+    return database.transaction(async (transaction) => {
+      const [current] = await transaction
+        .select({
+          status: serviceRequest.status,
+          milestones: serviceRequest.milestones,
+          evidenceAttachments: serviceRequest.evidenceAttachments,
+        })
+        .from(serviceRequest)
+        .where(and(eq(serviceRequest.id, id), isNull(serviceRequest.deletedAt)))
+        .for('update');
+
+      if (
+        !current ||
+        current.status !== 'paid' ||
+        current.milestones.length !== expectedMilestoneCount ||
+        insertAtIndex < 1 ||
+        insertAtIndex >= current.milestones.length
+      ) {
+        return false;
+      }
+
+      const milestones = [...current.milestones];
+      milestones.splice(insertAtIndex, 0, milestoneToInsert);
+      const evidenceAttachments = current.evidenceAttachments.map((attachment) =>
+        attachment.milestoneIndex !== null && attachment.milestoneIndex >= insertAtIndex
+          ? { ...attachment, milestoneIndex: attachment.milestoneIndex + 1 }
+          : attachment,
+      );
+      const temporaryOffset = 1000;
+      const activeServiceMeetings = and(
+        eq(meeting.serviceRequestId, id),
+        eq(meeting.meetingType, 'servicio'),
+        isNull(meeting.deletedAt),
+      );
+
+      await transaction
+        .update(meeting)
+        .set({
+          serviceMilestoneIndex: sql<number>`${meeting.serviceMilestoneIndex} + ${temporaryOffset}`,
+          updatedAt: new Date(),
+        })
+        .where(and(activeServiceMeetings, gte(meeting.serviceMilestoneIndex, insertAtIndex)));
+      await transaction
+        .update(meeting)
+        .set({
+          serviceMilestoneIndex: sql<number>`${meeting.serviceMilestoneIndex} - ${temporaryOffset - 1}`,
+          updatedAt: new Date(),
+        })
+        .where(and(activeServiceMeetings, gte(meeting.serviceMilestoneIndex, insertAtIndex + temporaryOffset)));
+
+      await transaction
+        .update(serviceRequest)
+        .set({ milestones, evidenceAttachments, updatedAt: new Date() })
+        .where(eq(serviceRequest.id, id));
+      return true;
+    });
+  }
+
+  async rollbackInsertedMilestone(id: number, insertedIndex: number, insertedMilestone: ServiceRequestMilestone) {
+    return database.transaction(async (transaction) => {
+      const [current] = await transaction
+        .select({
+          status: serviceRequest.status,
+          milestones: serviceRequest.milestones,
+          evidenceAttachments: serviceRequest.evidenceAttachments,
+        })
+        .from(serviceRequest)
+        .where(and(eq(serviceRequest.id, id), isNull(serviceRequest.deletedAt)))
+        .for('update');
+      const milestone = current?.milestones[insertedIndex];
+      if (
+        !current ||
+        current.status !== 'paid' ||
+        !milestone ||
+        milestone.title !== insertedMilestone.title ||
+        milestone.dueDate !== insertedMilestone.dueDate
+      ) {
+        return false;
+      }
+
+      const now = new Date();
+      const activeServiceMeetings = and(
+        eq(meeting.serviceRequestId, id),
+        eq(meeting.meetingType, 'servicio'),
+        isNull(meeting.deletedAt),
+      );
+      await transaction
+        .update(meeting)
+        .set({ deletedAt: now, updatedAt: now })
+        .where(and(activeServiceMeetings, eq(meeting.serviceMilestoneIndex, insertedIndex)));
+
+      const temporaryOffset = 1000;
+      await transaction
+        .update(meeting)
+        .set({
+          serviceMilestoneIndex: sql<number>`${meeting.serviceMilestoneIndex} + ${temporaryOffset}`,
+          updatedAt: now,
+        })
+        .where(and(activeServiceMeetings, gte(meeting.serviceMilestoneIndex, insertedIndex + 1)));
+      await transaction
+        .update(meeting)
+        .set({
+          serviceMilestoneIndex: sql<number>`${meeting.serviceMilestoneIndex} - ${temporaryOffset + 1}`,
+          updatedAt: now,
+        })
+        .where(and(activeServiceMeetings, gte(meeting.serviceMilestoneIndex, insertedIndex + 1 + temporaryOffset)));
+
+      const milestones = [...current.milestones];
+      milestones.splice(insertedIndex, 1);
+      const evidenceAttachments: ServiceRequestEvidenceAttachment[] = current.evidenceAttachments.map((attachment) => {
+        if (attachment.milestoneIndex === insertedIndex) {
+          return { ...attachment, milestoneIndex: null };
+        }
+        if (attachment.milestoneIndex !== null && attachment.milestoneIndex > insertedIndex) {
+          return { ...attachment, milestoneIndex: attachment.milestoneIndex - 1 };
+        }
+        return attachment;
+      });
+      await transaction
+        .update(serviceRequest)
+        .set({ milestones, evidenceAttachments, updatedAt: now })
+        .where(eq(serviceRequest.id, id));
+      return true;
+    });
+  }
+
+  async updateMilestone(
+    id: number,
+    milestoneIndex: number,
+    milestoneToUpdate: ServiceRequestMilestone,
+    expectedMilestoneCount: number,
+  ) {
+    return database.transaction(async (transaction) => {
+      const [current] = await transaction
+        .select({ status: serviceRequest.status, milestones: serviceRequest.milestones })
+        .from(serviceRequest)
+        .where(and(eq(serviceRequest.id, id), isNull(serviceRequest.deletedAt)))
+        .for('update');
+
+      if (
+        !current ||
+        current.status !== 'paid' ||
+        current.milestones.length !== expectedMilestoneCount ||
+        milestoneIndex < 1 ||
+        milestoneIndex >= current.milestones.length - 1
+      ) {
+        return false;
+      }
+
+      const [existingMeeting] = await transaction
+        .select({ id: meeting.id })
+        .from(meeting)
+        .where(
+          and(
+            eq(meeting.serviceRequestId, id),
+            eq(meeting.meetingType, 'servicio'),
+            eq(meeting.serviceMilestoneIndex, milestoneIndex),
+            isNull(meeting.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (existingMeeting) return false;
+
+      const milestones = [...current.milestones];
+      milestones[milestoneIndex] = milestoneToUpdate;
+      await transaction
+        .update(serviceRequest)
+        .set({ milestones, updatedAt: new Date() })
+        .where(eq(serviceRequest.id, id));
+      return true;
+    });
+  }
+
+  async removeMilestoneAt(id: number, milestoneIndex: number, expectedMilestoneCount: number) {
+    return database.transaction(async (transaction) => {
+      const [current] = await transaction
+        .select({
+          status: serviceRequest.status,
+          milestones: serviceRequest.milestones,
+          evidenceAttachments: serviceRequest.evidenceAttachments,
+        })
+        .from(serviceRequest)
+        .where(and(eq(serviceRequest.id, id), isNull(serviceRequest.deletedAt)))
+        .for('update');
+
+      if (
+        !current ||
+        current.status !== 'paid' ||
+        current.milestones.length !== expectedMilestoneCount ||
+        milestoneIndex < 1 ||
+        milestoneIndex >= current.milestones.length - 1 ||
+        current.evidenceAttachments.some((attachment) => attachment.milestoneIndex === milestoneIndex)
+      ) {
+        return false;
+      }
+
+      const [existingMeeting] = await transaction
+        .select({ id: meeting.id })
+        .from(meeting)
+        .where(
+          and(
+            eq(meeting.serviceRequestId, id),
+            eq(meeting.meetingType, 'servicio'),
+            eq(meeting.serviceMilestoneIndex, milestoneIndex),
+            isNull(meeting.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (existingMeeting) return false;
+
+      const temporaryOffset = 1000;
+      const activeServiceMeetings = and(
+        eq(meeting.serviceRequestId, id),
+        eq(meeting.meetingType, 'servicio'),
+        isNull(meeting.deletedAt),
+      );
+      await transaction
+        .update(meeting)
+        .set({
+          serviceMilestoneIndex: sql<number>`${meeting.serviceMilestoneIndex} + ${temporaryOffset}`,
+          updatedAt: new Date(),
+        })
+        .where(and(activeServiceMeetings, gte(meeting.serviceMilestoneIndex, milestoneIndex + 1)));
+      await transaction
+        .update(meeting)
+        .set({
+          serviceMilestoneIndex: sql<number>`${meeting.serviceMilestoneIndex} - ${temporaryOffset + 1}`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            activeServiceMeetings,
+            gte(meeting.serviceMilestoneIndex, milestoneIndex + 1 + temporaryOffset),
+          ),
+        );
+
+      const milestones = [...current.milestones];
+      milestones.splice(milestoneIndex, 1);
+      const evidenceAttachments = current.evidenceAttachments.map((attachment) =>
+        attachment.milestoneIndex !== null && attachment.milestoneIndex > milestoneIndex
+          ? { ...attachment, milestoneIndex: attachment.milestoneIndex - 1 }
+          : attachment,
+      );
+      await transaction
+        .update(serviceRequest)
+        .set({ milestones, evidenceAttachments, updatedAt: new Date() })
+        .where(eq(serviceRequest.id, id));
+      return true;
+    });
+  }
+
+  async removeEvidenceAttachment(id: number, attachmentId: string) {
+    return database.transaction(async (transaction) => {
+      const [current] = await transaction
+        .select({ status: serviceRequest.status, evidenceAttachments: serviceRequest.evidenceAttachments })
+        .from(serviceRequest)
+        .where(and(eq(serviceRequest.id, id), isNull(serviceRequest.deletedAt)))
+        .for('update');
+      if (!current || current.status !== 'paid') return undefined;
+
+      const attachment = current.evidenceAttachments.find((item) => item.id === attachmentId);
+      if (!attachment) return undefined;
+      const evidenceAttachments = current.evidenceAttachments.filter((item) => item.id !== attachmentId);
+      await transaction
+        .update(serviceRequest)
+        .set({ evidenceAttachments, updatedAt: new Date() })
+        .where(eq(serviceRequest.id, id));
+      return attachment;
     });
   }
 
