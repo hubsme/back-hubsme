@@ -150,7 +150,9 @@ export class ServiceRequestController {
 
   @Post(':id/evidence')
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Attach evidence or a deliverable to a paid service' })
+  @ApiOperation({
+    summary: 'Attach evidence or a deliverable to a paid service as its consultant',
+  })
   @ApiResponse({ status: 201, type: ServiceRequestResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
   @UseInterceptors(FilesInterceptor('files', SERVICE_REQUEST_MAX_FILES, serviceRequestFileUploadOptions))
@@ -164,7 +166,9 @@ export class ServiceRequestController {
   }
 
   @Delete(':id/evidence/:attachmentId')
-  @ApiOperation({ summary: 'Delete a service evidence before its milestone has a meeting' })
+  @ApiOperation({
+    summary: 'Delete a service evidence as its consultant before its milestone has a meeting',
+  })
   @ApiResponse({ status: 200, type: ServiceRequestResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
   deleteEvidence(
