@@ -24,6 +24,7 @@ import {
   MercadoPagoCheckoutDto,
   MercadoPagoCreateCheckoutDto,
   MercadoPagoPaymentWebhookQueryDto,
+  MercadoPagoServicePaymentDto,
 } from './dto/mercado-pago-checkout.dto';
 import {
   MercadoPagoPaymentHistoryFiltersDto,
@@ -134,23 +135,31 @@ export class MercadoPagoController {
   @Post('service/:id/payment')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Create the Mercado Pago preference for an accepted service proposal' })
+  @ApiOperation({ summary: 'Create the Mercado Pago preference for a service installment' })
   @ApiParam({ name: 'id', type: 'number' })
   @ApiResponse({ status: 200, type: MercadoPagoCheckoutDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  prepareServicePayment(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
-    return this.mercadoPagoService.prepareServicePayment(req.user.id, +id);
+  prepareServicePayment(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body?: MercadoPagoServicePaymentDto,
+  ) {
+    return this.mercadoPagoService.prepareServicePayment(req.user.id, +id, body?.installmentIndex);
   }
 
   @Post('service/:id/payment/sync')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Synchronize an accepted service payment with Mercado Pago' })
+  @ApiOperation({ summary: 'Synchronize a service installment payment with Mercado Pago' })
   @ApiParam({ name: 'id', type: 'number' })
   @ApiResponse({ status: 200, type: MercadoPagoCheckoutDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  syncServicePayment(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
-    return this.mercadoPagoService.syncServicePayment(req.user, +id);
+  syncServicePayment(
+    @Request() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body?: MercadoPagoServicePaymentDto,
+  ) {
+    return this.mercadoPagoService.syncServicePayment(req.user, +id, body?.installmentIndex);
   }
 
   @Post('webhook')

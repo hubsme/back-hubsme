@@ -5,6 +5,7 @@ import {
   IsArray,
   IsBoolean,
   IsDate,
+  IsEnum,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -12,6 +13,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+import { promotionCodeTypeEnum } from '@db/tables/promotion-code.table';
 import { PaginationFiltersDto, PaginationMetaDto } from '@modules/admin/common/pagination.dto';
 
 export class PromotionCodeCreateDto {
@@ -20,6 +22,15 @@ export class PromotionCodeCreateDto {
   @IsOptional()
   @MaxLength(40)
   code?: string;
+
+  @ApiPropertyOptional({
+    enum: promotionCodeTypeEnum.enumValues,
+    default: 'consultation',
+    description: 'Contexto en el que puede canjearse el cupón',
+  })
+  @IsEnum(promotionCodeTypeEnum.enumValues)
+  @IsOptional()
+  type?: (typeof promotionCodeTypeEnum.enumValues)[number] = 'consultation';
 
   @ApiPropertyOptional({ example: 'Campaña para primeras consultorias' })
   @IsString()
@@ -99,6 +110,9 @@ export class PromotionCodeResultDto {
   @ApiProperty()
   code: string;
 
+  @ApiProperty({ enum: promotionCodeTypeEnum.enumValues })
+  type: (typeof promotionCodeTypeEnum.enumValues)[number];
+
   @ApiPropertyOptional({ nullable: true })
   description: string | null;
 
@@ -138,6 +152,12 @@ export class PromotionCodeRedemptionDetailDto {
 
   @ApiProperty()
   checkoutId: number;
+
+  @ApiProperty({ nullable: true })
+  serviceRequestId: number | null;
+
+  @ApiProperty({ nullable: true })
+  serviceInstallmentIndex: number | null;
 
   @ApiProperty()
   pymeId: number;
@@ -187,5 +207,35 @@ export class PromotionCodeRedeemResultDto {
   code: string;
 
   @ApiProperty({ example: 'Consultoria gratuita confirmada' })
+  message: string;
+}
+
+export class PromotionCodeRedeemServiceDto {
+  @ApiProperty({ example: 12 })
+  @Type(() => Number)
+  @IsInt()
+  serviceRequestId: number;
+
+  @ApiProperty({ example: 'SERVICIO-GRATIS' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(40)
+  code: string;
+}
+
+export class PromotionCodeRedeemServiceResultDto {
+  @ApiProperty()
+  serviceRequestId: number;
+
+  @ApiProperty()
+  installmentIndex: number;
+
+  @ApiProperty()
+  checkoutId: number;
+
+  @ApiProperty()
+  code: string;
+
+  @ApiProperty({ example: 'Cuota de servicio confirmada con cupón' })
   message: string;
 }

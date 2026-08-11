@@ -1,7 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { and, count, desc, eq, gte, ilike, isNull, lt, lte, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gte, ilike, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
 import { database } from '@db/connection.db';
-import { promotionCode, PromotionCodeDTO, promotionCodeRedemption } from '@db/tables/promotion-code.table';
+import {
+  promotionCode,
+  PromotionCode,
+  PromotionCodeDTO,
+  promotionCodeRedemption,
+} from '@db/tables/promotion-code.table';
 import { consultant } from '@db/tables/consultant.table';
 import { checkout, CheckoutRaw } from '@db/tables/checkout.table';
 import { pyme } from '@db/tables/pyme.table';
@@ -41,6 +46,8 @@ export class PromotionCodeRepository {
       .select({
         id: promotionCodeRedemption.id,
         checkoutId: promotionCodeRedemption.checkoutId,
+        serviceRequestId: checkout.serviceRequestId,
+        serviceInstallmentIndex: checkout.serviceInstallmentIndex,
         pymeId: promotionCodeRedemption.pymeId,
         pymeName: pyme.name,
         consultantId: promotionCodeRedemption.consultantId,
@@ -49,6 +56,7 @@ export class PromotionCodeRepository {
         redeemedAt: promotionCodeRedemption.redeemedAt,
       })
       .from(promotionCodeRedemption)
+      .leftJoin(checkout, eq(promotionCodeRedemption.checkoutId, checkout.id))
       .leftJoin(pyme, eq(promotionCodeRedemption.pymeId, pyme.id))
       .leftJoin(consultant, eq(promotionCodeRedemption.consultantId, consultant.id))
       .where(and(eq(promotionCodeRedemption.promotionCodeId, id), isNull(promotionCodeRedemption.deletedAt)))
@@ -77,7 +85,13 @@ export class PromotionCodeRepository {
     return result[0];
   }
 
-  async claim(code: string, checkoutId: number, pymeId: number, consultantId: number) {
+  async claim(
+    code: string,
+    type: PromotionCode['type'],
+    checkoutId: number,
+    pymeId: number,
+    consultantId: number,
+  ) {
     try {
       return await database.transaction(async (tx) => {
         const existing = await tx
@@ -88,7 +102,13 @@ export class PromotionCodeRepository {
           const codeResult = await tx
             .select()
             .from(promotionCode)
-            .where(eq(promotionCode.id, existing[0].promotionCodeId));
+            .where(
+              and(
+                eq(promotionCode.id, existing[0].promotionCodeId),
+                eq(promotionCode.code, code),
+                eq(promotionCode.type, type),
+              ),
+            );
           return codeResult[0] ? { promotion: codeResult[0], redemption: existing[0] } : undefined;
         }
 
@@ -102,6 +122,7 @@ export class PromotionCodeRepository {
           .where(
             and(
               eq(promotionCode.code, code),
+              eq(promotionCode.type, type),
               eq(promotionCode.isActive, true),
               isNull(promotionCode.deletedAt),
               lt(promotionCode.redemptionCount, promotionCode.maxRedemptions),
@@ -136,7 +157,9 @@ export class PromotionCodeRepository {
       const existing = await this.findRedemptionByCheckout(checkoutId);
       if (!existing) return undefined;
       const existingCode = await this.findOne(existing.promotionCodeId);
-      return existingCode ? { promotion: existingCode, redemption: existing } : undefined;
+      return existingCode?.code === code && existingCode.type === type
+        ? { promotion: existingCode, redemption: existing }
+        : undefined;
     }
   }
 
@@ -156,6 +179,30 @@ export class PromotionCodeRepository {
       const result = await tx
         .update(promotionCodeRedemption)
         .set({ meetingId, updatedAt: new Date() })
+        .where(and(eq(promotionCodeRedemption.id, redemptionId), isNull(promotionCodeRedemption.deletedAt)))
+        .returning();
+      return result[0];
+    });
+  }
+
+  async finalizeServiceClaim(redemptionId: number, checkoutId: number, rawPayment: CheckoutRaw) {
+    return database.transaction(async (tx) => {
+      const approvedCheckouts = await tx
+        .update(checkout)
+        .set({
+          status: 'approved',
+          marketplaceFee: '0.00',
+          rawPayment,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(checkout.id, checkoutId), ne(checkout.status, 'approved'), isNull(checkout.deletedAt)))
+        .returning();
+
+      if (!approvedCheckouts[0]) return undefined;
+
+      const result = await tx
+        .update(promotionCodeRedemption)
+        .set({ updatedAt: new Date() })
         .where(and(eq(promotionCodeRedemption.id, redemptionId), isNull(promotionCodeRedemption.deletedAt)))
         .returning();
       return result[0];

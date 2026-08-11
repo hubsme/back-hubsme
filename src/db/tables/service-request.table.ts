@@ -78,14 +78,50 @@ export const SERVICE_REQUEST_CATEGORIES = [
 
 export const SERVICE_REQUEST_BUDGET_TYPES = ['fixed', 'range'] as const;
 export const SERVICE_REQUEST_WORK_MODALITIES = ['remote'] as const;
+export const SERVICE_REQUEST_PAYMENT_PLAN_STRATEGIES = ['single', 'initial_final', 'milestone_installments'] as const;
+export const SERVICE_REQUEST_PAYMENT_TRIGGERS = [
+  'service_approval',
+  'milestone_completion',
+  'service_completion',
+] as const;
 
 export type ServiceRequestCategory = (typeof SERVICE_REQUEST_CATEGORIES)[number];
 export type ServiceRequestBudgetType = (typeof SERVICE_REQUEST_BUDGET_TYPES)[number];
 export type ServiceRequestWorkModality = (typeof SERVICE_REQUEST_WORK_MODALITIES)[number];
+export type ServiceRequestPaymentPlanStrategy = (typeof SERVICE_REQUEST_PAYMENT_PLAN_STRATEGIES)[number];
+export type ServiceRequestPaymentTrigger = (typeof SERVICE_REQUEST_PAYMENT_TRIGGERS)[number];
 
 export type ServiceRequestMilestone = {
   title: string;
   dueDate: string;
+};
+
+export type ServiceRequestPaymentInstallment = {
+  label: string;
+  percentage: number;
+  trigger: ServiceRequestPaymentTrigger;
+  milestoneIndex: number;
+};
+
+export type ServiceRequestPaymentPlan = {
+  strategy: ServiceRequestPaymentPlanStrategy;
+  summary: string;
+  rationale: string;
+  installments: ServiceRequestPaymentInstallment[];
+};
+
+export const DEFAULT_SERVICE_REQUEST_PAYMENT_PLAN: ServiceRequestPaymentPlan = {
+  strategy: 'single',
+  summary: 'Pago único al aprobar la propuesta',
+  rationale: 'El servicio se paga en una sola operación antes de iniciar.',
+  installments: [
+    {
+      label: 'Pago único del servicio',
+      percentage: 100,
+      trigger: 'service_approval',
+      milestoneIndex: 0,
+    },
+  ],
 };
 
 export type ServiceRequestReferenceAttachment = {
@@ -158,6 +194,10 @@ export const serviceRequest = pgTable(
     workModality: serviceRequestWorkModalityEnum('work_modality').default('remote').notNull(),
     workMethod: text('work_method'),
     milestones: jsonb('milestones').$type<ServiceRequestMilestone[]>().default([]).notNull(),
+    paymentPlan: jsonb('payment_plan')
+      .$type<ServiceRequestPaymentPlan>()
+      .default(DEFAULT_SERVICE_REQUEST_PAYMENT_PLAN)
+      .notNull(),
     initialMeetingProposedStartTimes: text('initial_meeting_proposed_start_times').array().default([]).notNull(),
     initialMeetingStartTime: timestamp('initial_meeting_start_time'),
     details: text('details'),

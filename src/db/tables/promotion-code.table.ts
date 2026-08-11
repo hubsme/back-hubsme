@@ -1,8 +1,10 @@
-import { boolean, index, integer, pgTable, serial, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, pgEnum, pgTable, serial, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { meeting } from './meeting.table';
 import { checkout } from './checkout.table';
 import { user } from './user.table';
+
+export const promotionCodeTypeEnum = pgEnum('promotion_code_type', ['consultation', 'service']);
 
 export const promotionCode = pgTable(
   'promotion_code',
@@ -12,6 +14,7 @@ export const promotionCode = pgTable(
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
     deletedAt: timestamp('deleted_at'),
     code: varchar('code', { length: 40 }).notNull(),
+    type: promotionCodeTypeEnum('type').default('consultation').notNull(),
     description: varchar('description', { length: 255 }),
     maxRedemptions: integer('max_redemptions').default(1).notNull(),
     redemptionCount: integer('redemption_count').default(0).notNull(),
@@ -26,6 +29,7 @@ export const promotionCode = pgTable(
       .on(t.code)
       .where(sql`${t.deletedAt} IS NULL`),
     index('promotion_code_active_idx').on(t.isActive),
+    index('promotion_code_type_idx').on(t.type),
     index('promotion_code_expires_at_idx').on(t.expiresAt),
   ],
 );

@@ -45,6 +45,9 @@ export class MercadoPagoPaymentHistoryItemDto {
   @ApiProperty({ nullable: true })
   serviceRequestId: number | null;
 
+  @ApiProperty({ nullable: true })
+  serviceInstallmentIndex: number | null;
+
   @ApiProperty()
   pymeId: number;
 
