@@ -43,7 +43,7 @@ export class MeetingRepository {
     const conditions = [
       eq(meeting.pymeId, pymeId),
       isNull(meeting.deletedAt),
-      or(eq(meeting.status, 'finalizada'), sql`${meeting.description} IS NOT NULL`),
+      eq(meeting.status, 'finalizada'),
     ];
     const normalizedSearch = search?.trim();
 
@@ -101,7 +101,7 @@ export class MeetingRepository {
     const conditions = [
       eq(meeting.consultantId, consultantId),
       isNull(meeting.deletedAt),
-      or(eq(meeting.status, 'finalizada'), sql`${meeting.description} IS NOT NULL`),
+      eq(meeting.status, 'finalizada'),
     ];
     const normalizedSearch = search?.trim();
 

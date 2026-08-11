@@ -11,6 +11,8 @@ import { JwtAuthGuard } from '@modules/auth/jwt-auth.guard';
 import {
   PromotionCodeRedeemDto,
   PromotionCodeRedeemResultDto,
+  PromotionCodeRedeemServiceDto,
+  PromotionCodeRedeemServiceResultDto,
 } from './dto/promotion-code.dto';
 import { PromotionCodeService } from './promotion-code.service';
 
@@ -32,5 +34,16 @@ export class PromotionCodeController {
     @Body() body: PromotionCodeRedeemDto,
   ) {
     return this.promotionCodeService.redeem(req.user.id, body);
+  }
+
+  @Post('redeem-service')
+  @ApiOperation({ summary: 'Redeem a service code for the next available installment' })
+  @ApiResponse({ status: 201, type: PromotionCodeRedeemServiceResultDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  redeemService(
+    @Request() req: AuthenticatedRequest,
+    @Body() body: PromotionCodeRedeemServiceDto,
+  ) {
+    return this.promotionCodeService.redeemService(req.user.id, body);
   }
 }

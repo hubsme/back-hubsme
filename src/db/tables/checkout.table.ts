@@ -1,4 +1,5 @@
 import {
+  check,
   decimal,
   index,
   integer,
@@ -36,6 +37,7 @@ export const checkout = pgTable(
     deletedAt: timestamp('deleted_at'),
     meetingId: integer('meeting_id').references(() => meeting.id, { onDelete: 'cascade' }),
     serviceRequestId: integer('service_request_id').references(() => serviceRequest.id, { onDelete: 'cascade' }),
+    serviceInstallmentIndex: integer('service_installment_index'),
     pymeId: integer('pyme_id')
       .notNull()
       .references(() => user.id),
@@ -69,9 +71,14 @@ export const checkout = pgTable(
     uniqueIndex('checkout_meeting_unique_active_idx')
       .on(t.meetingId)
       .where(sql`${t.deletedAt} IS NULL AND ${t.meetingId} IS NOT NULL`),
-    uniqueIndex('checkout_service_request_unique_active_idx')
-      .on(t.serviceRequestId)
+    uniqueIndex('checkout_service_request_installment_unique_active_idx')
+      .on(t.serviceRequestId, t.serviceInstallmentIndex)
       .where(sql`${t.deletedAt} IS NULL AND ${t.serviceRequestId} IS NOT NULL`),
+    check(
+      'checkout_service_installment_presence_check',
+      sql`(${t.serviceRequestId} IS NULL AND ${t.serviceInstallmentIndex} IS NULL)
+        OR (${t.serviceRequestId} IS NOT NULL AND ${t.serviceInstallmentIndex} IS NOT NULL)`,
+    ),
   ],
 );
 

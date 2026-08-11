@@ -24,6 +24,7 @@ const paymentHistorySelection = {
   updatedAt: checkout.updatedAt,
   meetingId: checkout.meetingId,
   serviceRequestId: checkout.serviceRequestId,
+  serviceInstallmentIndex: checkout.serviceInstallmentIndex,
   pymeId: checkout.pymeId,
   consultantId: checkout.consultantId,
   mercadoPagoPaymentId: checkout.mercadoPagoPaymentId,
@@ -80,8 +81,31 @@ export class CheckoutRepository {
     const result = await database
       .select()
       .from(checkout)
-      .where(and(eq(checkout.serviceRequestId, serviceRequestId), isNull(checkout.deletedAt)));
+      .where(and(eq(checkout.serviceRequestId, serviceRequestId), isNull(checkout.deletedAt)))
+      .orderBy(desc(checkout.serviceInstallmentIndex), desc(checkout.id));
     return result[0];
+  }
+
+  async findByServiceRequestInstallment(serviceRequestId: number, serviceInstallmentIndex: number) {
+    const result = await database
+      .select()
+      .from(checkout)
+      .where(
+        and(
+          eq(checkout.serviceRequestId, serviceRequestId),
+          eq(checkout.serviceInstallmentIndex, serviceInstallmentIndex),
+          isNull(checkout.deletedAt),
+        ),
+      );
+    return result[0];
+  }
+
+  async findAllByServiceRequestId(serviceRequestId: number) {
+    return database
+      .select()
+      .from(checkout)
+      .where(and(eq(checkout.serviceRequestId, serviceRequestId), isNull(checkout.deletedAt)))
+      .orderBy(checkout.serviceInstallmentIndex, checkout.id);
   }
 
   async findByExternalReference(externalReference: string) {

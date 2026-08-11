@@ -28,6 +28,7 @@ import type {
   ServiceRequestCategory,
   ServiceRequestWorkModality,
 } from '@db/tables/service-request.table';
+import { ServiceRequestPaymentPlanDto } from './service-request-payment-plan.dto';
 
 function parseJsonArrayValue(value: unknown): unknown {
   if (Array.isArray(value)) return value;
@@ -57,6 +58,16 @@ function parseMilestoneArray({ value }: TransformFnParams): unknown {
 function parseInitialMeetingOptionArray({ value }: TransformFnParams): unknown {
   const parsed = parseJsonArrayValue(value);
   return Array.isArray(parsed) ? plainToInstance(ServiceRequestInitialMeetingOptionDto, parsed) : parsed;
+}
+
+function parsePaymentPlan({ value }: TransformFnParams): unknown {
+  if (typeof value !== 'string') return value;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return plainToInstance(ServiceRequestPaymentPlanDto, parsed);
+  } catch {
+    return value;
+  }
 }
 
 export class ServiceRequestMilestoneCreateDto {
@@ -218,6 +229,12 @@ export class ServiceRequestCreateDto {
   @Type(() => ServiceRequestMilestoneCreateDto)
   @IsOptional()
   milestones?: ServiceRequestMilestoneCreateDto[];
+
+  @ApiProperty({ type: ServiceRequestPaymentPlanDto })
+  @ValidateNested()
+  @Type(() => ServiceRequestPaymentPlanDto)
+  @Transform(parsePaymentPlan)
+  paymentPlan: ServiceRequestPaymentPlanDto;
 
   @ApiPropertyOptional({ example: 'Disponibilidad durante la segunda semana del mes.', maxLength: 5000 })
   @IsString()

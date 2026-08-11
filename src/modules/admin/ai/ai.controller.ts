@@ -12,6 +12,8 @@ import { ServiceConsultantMatchRunDto } from './dto/service-request/service-cons
 import { ServiceConsultantMatchesResultDto } from './dto/service-request/service-consultant-match-result.dto';
 import { ServiceRequestChatRunDto } from './dto/service-request/service-request-chat-run.dto';
 import { ServiceRequestChatResultDto } from './dto/service-request/service-request-chat-result.dto';
+import { ServicePaymentPlanRunDto } from './dto/service-request/service-payment-plan-run.dto';
+import { ServicePaymentPlanResultDto } from './dto/service-request/service-payment-plan-result.dto';
 
 type AuthenticatedRequest = { user: User };
 
@@ -48,6 +50,19 @@ export class IaController {
     @Request() request: AuthenticatedRequest,
   ): Promise<ServiceRequestChatResultDto> {
     return this.aiService.runServiceRequestChat(runDto, request.user);
+  }
+
+  @Post('service-payment-plan')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Recomendar con IA la estructura de pagos de una solicitud de servicio' })
+  @ApiResponse({ status: 201, type: ServicePaymentPlanResultDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  @ApiResponse({ status: 403, type: HttpErrorDto })
+  async runServicePaymentPlan(
+    @Body() runDto: ServicePaymentPlanRunDto,
+    @Request() request: AuthenticatedRequest,
+  ): Promise<ServicePaymentPlanResultDto> {
+    return this.aiService.runServicePaymentPlan(runDto, request.user);
   }
 
   @Post('service-consultant-matches')

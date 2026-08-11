@@ -9,6 +9,7 @@ import {
   ServiceRequestDTO,
   ServiceRequestEvidenceAttachment,
   ServiceRequestMilestone,
+  ServiceRequestPaymentPlan,
   serviceRequestStatusEnum,
 } from '@db/tables/service-request.table';
 
@@ -49,6 +50,7 @@ const serviceRequestSelection = {
   workModality: serviceRequest.workModality,
   workMethod: serviceRequest.workMethod,
   milestones: serviceRequest.milestones,
+  paymentPlan: serviceRequest.paymentPlan,
   initialMeetingProposedStartTimes: serviceRequest.initialMeetingProposedStartTimes,
   initialMeetingStartTime: serviceRequest.initialMeetingStartTime,
   details: serviceRequest.details,
@@ -147,6 +149,7 @@ export class ServiceRequestRepository {
           status: serviceRequest.status,
           milestones: serviceRequest.milestones,
           evidenceAttachments: serviceRequest.evidenceAttachments,
+          paymentPlan: serviceRequest.paymentPlan,
         })
         .from(serviceRequest)
         .where(and(eq(serviceRequest.id, id), isNull(serviceRequest.deletedAt)))
@@ -169,6 +172,14 @@ export class ServiceRequestRepository {
           ? { ...attachment, milestoneIndex: attachment.milestoneIndex + 1 }
           : attachment,
       );
+      const paymentPlan: ServiceRequestPaymentPlan = {
+        ...current.paymentPlan,
+        installments: current.paymentPlan.installments.map((installment) =>
+          installment.milestoneIndex >= insertAtIndex
+            ? { ...installment, milestoneIndex: installment.milestoneIndex + 1 }
+            : installment,
+        ),
+      };
       const temporaryOffset = 1000;
       const activeServiceMeetings = and(
         eq(meeting.serviceRequestId, id),
@@ -193,7 +204,7 @@ export class ServiceRequestRepository {
 
       await transaction
         .update(serviceRequest)
-        .set({ milestones, evidenceAttachments, updatedAt: new Date() })
+        .set({ milestones, evidenceAttachments, paymentPlan, updatedAt: new Date() })
         .where(eq(serviceRequest.id, id));
       return true;
     });
@@ -206,6 +217,7 @@ export class ServiceRequestRepository {
           status: serviceRequest.status,
           milestones: serviceRequest.milestones,
           evidenceAttachments: serviceRequest.evidenceAttachments,
+          paymentPlan: serviceRequest.paymentPlan,
         })
         .from(serviceRequest)
         .where(and(eq(serviceRequest.id, id), isNull(serviceRequest.deletedAt)))
@@ -259,9 +271,17 @@ export class ServiceRequestRepository {
         }
         return attachment;
       });
+      const paymentPlan: ServiceRequestPaymentPlan = {
+        ...current.paymentPlan,
+        installments: current.paymentPlan.installments.map((installment) =>
+          installment.milestoneIndex > insertedIndex
+            ? { ...installment, milestoneIndex: installment.milestoneIndex - 1 }
+            : installment,
+        ),
+      };
       await transaction
         .update(serviceRequest)
-        .set({ milestones, evidenceAttachments, updatedAt: now })
+        .set({ milestones, evidenceAttachments, paymentPlan, updatedAt: now })
         .where(eq(serviceRequest.id, id));
       return true;
     });
@@ -321,6 +341,7 @@ export class ServiceRequestRepository {
           status: serviceRequest.status,
           milestones: serviceRequest.milestones,
           evidenceAttachments: serviceRequest.evidenceAttachments,
+          paymentPlan: serviceRequest.paymentPlan,
         })
         .from(serviceRequest)
         .where(and(eq(serviceRequest.id, id), isNull(serviceRequest.deletedAt)))
@@ -332,6 +353,7 @@ export class ServiceRequestRepository {
         current.milestones.length !== expectedMilestoneCount ||
         milestoneIndex < 1 ||
         milestoneIndex >= current.milestones.length - 1 ||
+        current.paymentPlan.installments.some((installment) => installment.milestoneIndex === milestoneIndex) ||
         current.evidenceAttachments.some((attachment) => attachment.milestoneIndex === milestoneIndex)
       ) {
         return false;
@@ -370,12 +392,7 @@ export class ServiceRequestRepository {
           serviceMilestoneIndex: sql<number>`${meeting.serviceMilestoneIndex} - ${temporaryOffset + 1}`,
           updatedAt: new Date(),
         })
-        .where(
-          and(
-            activeServiceMeetings,
-            gte(meeting.serviceMilestoneIndex, milestoneIndex + 1 + temporaryOffset),
-          ),
-        );
+        .where(and(activeServiceMeetings, gte(meeting.serviceMilestoneIndex, milestoneIndex + 1 + temporaryOffset)));
 
       const milestones = [...current.milestones];
       milestones.splice(milestoneIndex, 1);
@@ -384,9 +401,17 @@ export class ServiceRequestRepository {
           ? { ...attachment, milestoneIndex: attachment.milestoneIndex - 1 }
           : attachment,
       );
+      const paymentPlan: ServiceRequestPaymentPlan = {
+        ...current.paymentPlan,
+        installments: current.paymentPlan.installments.map((installment) =>
+          installment.milestoneIndex > milestoneIndex
+            ? { ...installment, milestoneIndex: installment.milestoneIndex - 1 }
+            : installment,
+        ),
+      };
       await transaction
         .update(serviceRequest)
-        .set({ milestones, evidenceAttachments, updatedAt: new Date() })
+        .set({ milestones, evidenceAttachments, paymentPlan, updatedAt: new Date() })
         .where(eq(serviceRequest.id, id));
       return true;
     });

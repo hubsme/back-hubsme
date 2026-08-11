@@ -314,13 +314,34 @@ export class MercadoPagoService {
     });
   }
 
-  async prepareServicePayment(currentUserId: number, serviceRequestId: number) {
+  async prepareServicePayment(currentUserId: number, serviceRequestId: number, installmentIndex?: number) {
     const serviceRequest = await this.serviceRequestService.findPayableForPyme(serviceRequestId, currentUserId);
-    const amount = Number(serviceRequest.proposedPrice);
+    const installment =
+      installmentIndex === undefined
+        ? serviceRequest.paymentSchedule.find((item) => item.status !== 'approved')
+        : serviceRequest.paymentSchedule.find((item) => item.installmentIndex === installmentIndex);
+    if (!installment) {
+      throw new BadRequestException(['La cuota seleccionada no existe o ya fue pagada']);
+    }
+    if (installment.status === 'approved') {
+      throw new BadRequestException(['La cuota seleccionada ya fue pagada']);
+    }
+    if (!installment.available) {
+      throw new BadRequestException([
+        installment.availabilityMessage ?? 'La siguiente cuota todavía no está disponible',
+      ]);
+    }
+    const amount = Number(installment.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new BadRequestException(['No se pudo calcular el monto de la siguiente cuota']);
+    }
 
-    let checkout = await this.checkoutRepository.findByServiceRequestId(serviceRequestId);
+    let checkout = await this.checkoutRepository.findByServiceRequestInstallment(
+      serviceRequestId,
+      installment.installmentIndex,
+    );
     if (checkout?.status === 'approved') {
-      await this.serviceRequestService.markPaid(serviceRequestId);
+      await this.markServicePaidAfterInitialInstallment(checkout);
       return checkout;
     }
     if (
@@ -329,15 +350,18 @@ export class MercadoPagoService {
       checkout.preferenceId &&
       (checkout.initPoint || checkout.sandboxInitPoint)
     ) {
-      await this.serviceRequestService.markPaymentPending(serviceRequestId);
+      if (serviceRequest.status !== 'paid') {
+        await this.serviceRequestService.markPaymentPending(serviceRequestId);
+      }
       return checkout;
     }
 
-    const externalReference = this.buildHubsmeServicePaymentReference(serviceRequestId);
+    const externalReference = this.buildHubsmeServicePaymentReference(serviceRequestId, installment.installmentIndex);
     if (!checkout) {
       checkout = await this.checkoutRepository.create({
         meetingId: null,
         serviceRequestId,
+        serviceInstallmentIndex: installment.installmentIndex,
         pymeId: serviceRequest.pymeId,
         consultantId: serviceRequest.consultantId,
         preferenceId: null,
@@ -365,7 +389,7 @@ export class MercadoPagoService {
     const accessToken = this.getPlatformAccessToken();
     const preference = await this.createPreference(accessToken, {
       serviceRequestId,
-      title: serviceRequest.title,
+      title: `${serviceRequest.title} · ${installment.label}`,
       amount,
       externalReference: checkout.externalReference,
     });
@@ -375,23 +399,28 @@ export class MercadoPagoService {
       sandboxInitPoint: preference.sandbox_init_point ?? null,
       marketplaceFee: '0.00',
     });
-    await this.serviceRequestService.markPaymentPending(serviceRequestId);
+    if (serviceRequest.status !== 'paid') {
+      await this.serviceRequestService.markPaymentPending(serviceRequestId);
+    }
     return updatedCheckout;
   }
 
-  async syncServicePayment(currentUser: User, serviceRequestId: number) {
+  async syncServicePayment(currentUser: User, serviceRequestId: number, installmentIndex?: number) {
     if (currentUser.role !== 'pyme') {
       throw new UnauthorizedException('Solo la PYME puede verificar el pago de un servicio');
     }
 
     await this.serviceRequestService.findOneForUser(serviceRequestId, currentUser);
-    const checkout = await this.checkoutRepository.findByServiceRequestId(serviceRequestId);
+    const checkout =
+      installmentIndex === undefined
+        ? await this.checkoutRepository.findByServiceRequestId(serviceRequestId)
+        : await this.checkoutRepository.findByServiceRequestInstallment(serviceRequestId, installmentIndex);
     if (!checkout || !this.isHubsmeServicePayment(checkout)) {
       throw new NotFoundException(`No existe un pago de Mercado Pago para el servicio ${serviceRequestId}`);
     }
 
     if (checkout.status === 'approved') {
-      await this.serviceRequestService.markPaid(serviceRequestId);
+      await this.markServicePaidAfterInitialInstallment(checkout);
       return checkout;
     }
 
@@ -411,7 +440,7 @@ export class MercadoPagoService {
       mercadoPagoPaymentId: this.stringifyId(payment.id),
       rawPayment: payment,
     });
-    await this.serviceRequestService.markPaid(serviceRequestId);
+    await this.markServicePaidAfterInitialInstallment(approvedCheckout ?? checkout);
     return approvedCheckout ?? (await this.checkoutRepository.findOne(checkout.id)) ?? checkout;
   }
 
@@ -481,15 +510,15 @@ export class MercadoPagoService {
     });
 
     if (!approvedCheckout) {
-      if (checkout.status === 'approved' && checkout.serviceRequestId) {
-        await this.serviceRequestService.markPaid(checkout.serviceRequestId);
+      if (checkout.status === 'approved') {
+        await this.markServicePaidAfterInitialInstallment(checkout);
       }
       return { received: true };
     }
 
     try {
       if (approvedCheckout.serviceRequestId) {
-        await this.serviceRequestService.markPaid(approvedCheckout.serviceRequestId);
+        await this.markServicePaidAfterInitialInstallment(approvedCheckout);
         return { received: true };
       }
 
@@ -845,8 +874,17 @@ export class MercadoPagoService {
     return accessToken;
   }
 
-  private buildHubsmeServicePaymentReference(serviceRequestId: number) {
-    return `${HUBSME_SERVICE_PAYMENT_REFERENCE_PREFIX}${serviceRequestId}:${Date.now()}`;
+  private buildHubsmeServicePaymentReference(serviceRequestId: number, installmentIndex: number) {
+    return `${HUBSME_SERVICE_PAYMENT_REFERENCE_PREFIX}${serviceRequestId}:${installmentIndex}:${Date.now()}`;
+  }
+
+  private async markServicePaidAfterInitialInstallment(checkout: {
+    serviceRequestId: number | null;
+    serviceInstallmentIndex: number | null;
+  }) {
+    if (checkout.serviceRequestId && checkout.serviceInstallmentIndex === 0) {
+      await this.serviceRequestService.markPaid(checkout.serviceRequestId);
+    }
   }
 
   private isHubsmeServicePayment(checkout: { serviceRequestId?: number | null; externalReference: string }) {

@@ -7,13 +7,17 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import type { Checkout } from '@db/tables/checkout.table';
 import {
   SERVICE_REQUEST_CATEGORY_OPTIONS,
   ServiceRequestEvidenceAttachment,
+  ServiceRequestMilestone,
+  ServiceRequestPaymentPlan,
   ServiceRequestReferenceAttachment,
 } from '@db/tables/service-request.table';
 import { User } from '@db/tables/user.table';
 import { ConsultantRepository } from '@repositories/consultant.repository';
+import { CheckoutRepository } from '@repositories/checkout.repository';
 import { MeetingRepository } from '@repositories/meeting.repository';
 import { ServiceRequestRepository } from '@repositories/service-request.repository';
 import { ServiceRequestCreateDto } from './dto/service-request-create.dto';
@@ -28,12 +32,16 @@ import { ServiceRequestDeclineDto, ServiceRequestProposalDto } from './dto/servi
 import { StorageService } from '../../storage/storage.service';
 import { ConsultantAvailabilityService } from '../consultant-availability/consultant-availability.service';
 import { MeetingService } from '../meeting/meeting.service';
+import { calculateServiceInstallmentAmounts } from './service-request-payment.util';
 import {
   SERVICE_REQUEST_MAX_FILES,
   SERVICE_REQUEST_MAX_FILE_BYTES,
   hasValidServiceRequestFileSignature,
   isAllowedServiceRequestFile,
 } from './service-request-upload.config';
+
+const KICKOFF_MILESTONE_TITLE = 'Kickoff y alineamiento inicial';
+const COMPLETION_MILESTONE_TITLE = 'Cierre y finalización del servicio';
 
 @Injectable()
 export class ServiceRequestService {
@@ -43,6 +51,7 @@ export class ServiceRequestService {
   constructor(
     private readonly serviceRequestRepository: ServiceRequestRepository,
     private readonly consultantRepository: ConsultantRepository,
+    private readonly checkoutRepository: CheckoutRepository,
     private readonly meetingRepository: MeetingRepository,
     private readonly consultantAvailabilityService: ConsultantAvailabilityService,
     private readonly meetingService: MeetingService,
@@ -63,7 +72,7 @@ export class ServiceRequestService {
     const totalPages = total > 0 ? Math.ceil(total / limit) : 0;
 
     return {
-      data: data.map((item) => ({ ...item, meetings: [] })),
+      data: data.map((item) => ({ ...item, meetings: [], paymentSchedule: [] })),
       meta: {
         total,
         page,
@@ -123,38 +132,43 @@ export class ServiceRequestService {
       }
 
       const created = await this.serviceRequestRepository.createMany(
-        consultantIds.map((consultantId) => ({
-          pymeId: currentUser.id,
-          consultantId,
-          title,
-          category: data.category,
-          subcategory: data.subcategory.trim(),
-          description,
-          expectedOutcome,
-          requirements,
-          deliverables: this.cleanStringList(data.deliverables),
-          exclusions: this.cleanOptionalText(data.exclusions),
-          referenceUrls: this.cleanStringList(data.referenceUrls ?? []),
-          referenceAttachments: attachments,
-          budgetType: data.budgetType,
-          budgetMin: data.budgetMin.toFixed(2),
-          budgetMax: data.budgetType === 'range' ? data.budgetMax?.toFixed(2) : null,
-          deadline: data.deadline,
-          estimatedDuration: data.estimatedDuration.trim(),
-          workModality: data.workModality,
-          workMethod: data.workMethod.trim(),
-          milestones: (data.milestones ?? []).map((milestone) => ({
-            title: milestone.title.trim(),
-            dueDate: milestone.dueDate,
-          })),
-          initialMeetingProposedStartTimes: initialMeetingOptions.get(consultantId) ?? [],
-          initialMeetingStartTime: null,
-          details: this.cleanOptionalText(data.details),
-          status: 'requested' as const,
-          currency: process.env.MERCADO_PAGO_CURRENCY ?? 'PEN',
-        })),
+        consultantIds.map((consultantId) => {
+          const milestones = this.buildServiceMilestones(
+            data.milestones,
+            data.deadline,
+            initialMeetingOptions.get(consultantId) ?? [],
+          );
+          return {
+            pymeId: currentUser.id,
+            consultantId,
+            title,
+            category: data.category,
+            subcategory: data.subcategory.trim(),
+            description,
+            expectedOutcome,
+            requirements,
+            deliverables: this.cleanStringList(data.deliverables),
+            exclusions: this.cleanOptionalText(data.exclusions),
+            referenceUrls: this.cleanStringList(data.referenceUrls ?? []),
+            referenceAttachments: attachments,
+            budgetType: data.budgetType,
+            budgetMin: data.budgetMin.toFixed(2),
+            budgetMax: data.budgetType === 'range' ? data.budgetMax?.toFixed(2) : null,
+            deadline: data.deadline,
+            estimatedDuration: data.estimatedDuration.trim(),
+            workModality: data.workModality,
+            workMethod: data.workMethod.trim(),
+            milestones,
+            paymentPlan: this.normalizePaymentPlan(data.paymentPlan, milestones),
+            initialMeetingProposedStartTimes: initialMeetingOptions.get(consultantId) ?? [],
+            initialMeetingStartTime: null,
+            details: this.cleanOptionalText(data.details),
+            status: 'requested' as const,
+            currency: process.env.MERCADO_PAGO_CURRENCY ?? 'PEN',
+          };
+        }),
       );
-      return created.map((item) => ({ ...item, meetings: [] }));
+      return created.map((item) => ({ ...item, meetings: [], paymentSchedule: [] }));
     } catch (error) {
       await this.deleteUploadedFiles(attachments.map((attachment) => attachment.storagePath));
       throw error;
@@ -206,7 +220,7 @@ export class ServiceRequestService {
       ['requested'],
     );
     if (!updated) throw new ConflictException('La solicitud fue actualizada por otro proceso');
-    return updated;
+    return this.findOne(id);
   }
 
   async decline(id: number, data: ServiceRequestDeclineDto, currentUser: User) {
@@ -229,7 +243,7 @@ export class ServiceRequestService {
         ['requested'],
       );
       if (!updated) throw new ConflictException('La solicitud fue actualizada por otro proceso');
-      return updated;
+      return this.findOne(id);
     }
 
     if (request.status !== 'proposal_sent') {
@@ -245,7 +259,7 @@ export class ServiceRequestService {
       ['proposal_sent'],
     );
     if (!updated) throw new ConflictException('La solicitud fue actualizada por otro proceso');
-    return updated;
+    return this.findOne(id);
   }
 
   async findPayableForPyme(id: number, pymeId: number) {
@@ -253,7 +267,7 @@ export class ServiceRequestService {
     if (request.pymeId !== pymeId) {
       throw new ForbiddenException('No tienes acceso a esta solicitud de servicio');
     }
-    if (!['proposal_sent', 'payment_pending'].includes(request.status)) {
+    if (!['proposal_sent', 'payment_pending', 'paid'].includes(request.status)) {
       throw new BadRequestException(['Esta cotización no está disponible para pago']);
     }
     const amount = Number(request.proposedPrice);
@@ -302,6 +316,9 @@ export class ServiceRequestService {
     if (request.status === 'completed') return request;
     if (request.status !== 'paid') {
       throw new BadRequestException(['Solo puedes completar un servicio aprobado y pagado']);
+    }
+    if (request.paymentSchedule.some((installment) => installment.status !== 'approved')) {
+      throw new BadRequestException(['Completa todas las cuotas antes de cerrar el servicio']);
     }
 
     const updated = await this.serviceRequestRepository.update(id, { status: 'completed', completedAt: new Date() }, [
@@ -352,12 +369,7 @@ export class ServiceRequestService {
     return this.findOne(id);
   }
 
-  async updateMilestone(
-    id: number,
-    milestoneIndex: number,
-    data: ServiceRequestMilestoneUpdateDto,
-    currentUser: User,
-  ) {
+  async updateMilestone(id: number, milestoneIndex: number, data: ServiceRequestMilestoneUpdateDto, currentUser: User) {
     if (currentUser.role !== 'pyme') {
       throw new ForbiddenException('Solo la PYME puede editar los hitos del servicio');
     }
@@ -388,9 +400,7 @@ export class ServiceRequestService {
     const previousMilestone = request.milestones[milestoneIndex - 1];
     const nextMilestone = request.milestones[milestoneIndex + 1];
     if (previousMilestone && data.dueDate < previousMilestone.dueDate) {
-      throw new BadRequestException([
-        `La fecha debe ser igual o posterior a ${previousMilestone.dueDate}`,
-      ]);
+      throw new BadRequestException([`La fecha debe ser igual o posterior a ${previousMilestone.dueDate}`]);
     }
     if (nextMilestone && data.dueDate > nextMilestone.dueDate) {
       throw new BadRequestException([`La fecha debe ser igual o anterior a ${nextMilestone.dueDate}`]);
@@ -432,6 +442,9 @@ export class ServiceRequestService {
     }
     if (request.evidenceAttachments.some((attachment) => attachment.milestoneIndex === milestoneIndex)) {
       throw new BadRequestException(['Elimina primero las evidencias vinculadas a este hito']);
+    }
+    if (request.paymentPlan.installments.some((installment) => installment.milestoneIndex === milestoneIndex)) {
+      throw new BadRequestException(['No puedes eliminar un hito vinculado al plan de pagos']);
     }
 
     const removed = await this.serviceRequestRepository.removeMilestoneAt(
@@ -619,8 +632,48 @@ export class ServiceRequestService {
   private async findOne(id: number) {
     const request = await this.serviceRequestRepository.findOne(id);
     if (!request) throw new NotFoundException(`Service request with ID ${id} not found`);
-    const meetings = await this.meetingRepository.findByServiceRequestId(id);
-    return { ...request, meetings: meetings.map((meeting) => this.toMeetingResult(meeting)) };
+    const [meetings, checkouts] = await Promise.all([
+      this.meetingRepository.findByServiceRequestId(id),
+      this.checkoutRepository.findAllByServiceRequestId(id),
+    ]);
+    const meetingResults = meetings.map((meeting) => this.toMeetingResult(meeting));
+    return {
+      ...request,
+      meetings: meetingResults,
+      paymentSchedule: this.buildPaymentSchedule(request, meetingResults, checkouts),
+    };
+  }
+
+  private buildPaymentSchedule(
+    request: NonNullable<Awaited<ReturnType<ServiceRequestRepository['findOne']>>>,
+    meetings: Array<{ status: string; serviceMilestoneIndex: number | null }>,
+    checkouts: Checkout[],
+  ) {
+    const totalPrice = Number(request.proposedPrice);
+    const amounts = calculateServiceInstallmentAmounts(totalPrice, request.paymentPlan);
+    const checkoutByInstallment = new Map(
+      checkouts.flatMap((item) =>
+        item.serviceInstallmentIndex === null ? [] : [[item.serviceInstallmentIndex, item] as const],
+      ),
+    );
+
+    return request.paymentPlan.installments.map((installment, installmentIndex) => {
+      const installmentCheckout = checkoutByInstallment.get(installmentIndex);
+      const isApproved = installmentCheckout?.status === 'approved';
+      const canPay = ['proposal_sent', 'payment_pending', 'paid'].includes(request.status);
+      const available = !isApproved && request.status !== 'completed' && canPay;
+      const availabilityMessage = !isApproved && !canPay ? 'Disponible cuando el consultor envíe su propuesta' : null;
+
+      return {
+        installmentIndex,
+        ...installment,
+        amount: amounts[installmentIndex]?.toFixed(2) ?? null,
+        status: installmentCheckout?.status ?? ('not_started' as const),
+        available,
+        availabilityMessage,
+        paidAt: isApproved ? installmentCheckout.updatedAt : null,
+      };
+    });
   }
 
   private getParticipantRole(currentUser: User): 'pyme' | 'consultor' {
@@ -646,6 +699,136 @@ export class ServiceRequestService {
 
   private cleanStringList(values: string[]) {
     return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+  }
+
+  private buildServiceMilestones(
+    milestones: ServiceRequestCreateDto['milestones'],
+    deadline: string,
+    initialMeetingStartTimes: string[],
+  ): ServiceRequestMilestone[] {
+    const normalized = (milestones ?? []).map((milestone) => ({
+      title: milestone.title.trim(),
+      dueDate: milestone.dueDate,
+    }));
+    const kickoffMilestone = normalized.find((milestone) => this.isKickoffMilestoneTitle(milestone.title));
+    const kickoffMeetingDate = initialMeetingStartTimes
+      .map((value) => this.dateStringInTimeZone(new Date(value), 'America/Lima'))
+      .sort()[0];
+    const today = this.currentDateString();
+    const kickoffDate = this.clampDateOnly(kickoffMeetingDate ?? kickoffMilestone?.dueDate ?? today, today, deadline);
+    const intermediateMilestones = normalized
+      .filter(
+        (milestone) =>
+          !this.isKickoffMilestoneTitle(milestone.title) && !this.isCompletionMilestoneTitle(milestone.title),
+      )
+      .map((milestone) => ({
+        title: milestone.title,
+        dueDate: this.clampDateOnly(milestone.dueDate, kickoffDate, deadline),
+      }))
+      .sort((left, right) => left.dueDate.localeCompare(right.dueDate))
+      .slice(0, 18);
+
+    return [
+      { title: KICKOFF_MILESTONE_TITLE, dueDate: kickoffDate },
+      ...intermediateMilestones,
+      { title: COMPLETION_MILESTONE_TITLE, dueDate: deadline },
+    ];
+  }
+
+  private normalizePaymentPlan(
+    paymentPlan: ServiceRequestCreateDto['paymentPlan'],
+    milestones: ServiceRequestMilestone[],
+  ): ServiceRequestPaymentPlan {
+    const finalMilestoneIndex = milestones.length - 1;
+    const installments = paymentPlan.installments.map((installment) => ({
+      label: installment.label.trim(),
+      percentage: installment.percentage,
+      trigger: installment.trigger,
+      milestoneIndex: installment.milestoneIndex,
+    }));
+    const totalPercentage = installments.reduce((total, installment) => total + installment.percentage, 0);
+    const milestoneIndexes = installments.map((installment) => installment.milestoneIndex);
+
+    if (!paymentPlan.summary.trim() || !paymentPlan.rationale.trim()) {
+      throw new BadRequestException(['El plan de pagos debe incluir un resumen y su justificación']);
+    }
+    if (totalPercentage !== 100 || installments.some((installment) => installment.percentage < 10)) {
+      throw new BadRequestException(['Las cuotas deben sumar 100% y cada una debe representar al menos 10%']);
+    }
+    if (
+      installments.some(
+        (installment) =>
+          !installment.label || installment.milestoneIndex < 0 || installment.milestoneIndex > finalMilestoneIndex,
+      ) ||
+      new Set(milestoneIndexes).size !== milestoneIndexes.length ||
+      milestoneIndexes.some((milestoneIndex, index) => index > 0 && milestoneIndex <= milestoneIndexes[index - 1])
+    ) {
+      throw new BadRequestException(['Las cuotas deben vincularse una sola vez y en orden a hitos válidos']);
+    }
+
+    const firstInstallment = installments[0];
+    const lastInstallment = installments.at(-1);
+    if (firstInstallment?.milestoneIndex !== 0 || firstInstallment.trigger !== 'service_approval') {
+      throw new BadRequestException(['La primera cuota debe corresponder a la aprobación e inicio del servicio']);
+    }
+
+    if (paymentPlan.strategy === 'single') {
+      if (installments.length !== 1 || firstInstallment.percentage !== 100) {
+        throw new BadRequestException(['El pago único debe contener una sola cuota del 100%']);
+      }
+    } else {
+      if (
+        !lastInstallment ||
+        lastInstallment.milestoneIndex !== finalMilestoneIndex ||
+        lastInstallment.trigger !== 'service_completion'
+      ) {
+        throw new BadRequestException(['El plan fraccionado debe reservar una cuota para el cierre del servicio']);
+      }
+      if (installments.slice(1, -1).some((installment) => installment.trigger !== 'milestone_completion')) {
+        throw new BadRequestException(['Las cuotas intermedias deben depender de la conclusión de su hito']);
+      }
+    }
+
+    if (paymentPlan.strategy === 'initial_final' && installments.length !== 2) {
+      throw new BadRequestException(['El plan inicial y final debe contener exactamente dos cuotas']);
+    }
+    if (paymentPlan.strategy === 'milestone_installments' && installments.length < 3) {
+      throw new BadRequestException(['El pago por hitos debe contener una cuota inicial, una intermedia y una final']);
+    }
+
+    return {
+      strategy: paymentPlan.strategy,
+      summary: paymentPlan.summary.trim(),
+      rationale: paymentPlan.rationale.trim(),
+      installments,
+    };
+  }
+
+  private isKickoffMilestoneTitle(title: string) {
+    return /kickoff|reunion inicial|inicio del servicio|presentacion|alineamiento inicial|arranque inicial/i.test(
+      this.normalizeForComparison(title),
+    );
+  }
+
+  private isCompletionMilestoneTitle(title: string) {
+    return /reunion final|cierre del servicio|finalizacion del servicio|entrega final|culminacion/i.test(
+      this.normalizeForComparison(title),
+    );
+  }
+
+  private normalizeForComparison(value: string) {
+    return value
+      .toLocaleLowerCase('es-PE')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private clampDateOnly(value: string, minimum: string, maximum: string) {
+    if (value < minimum) return minimum;
+    if (value > maximum) return maximum;
+    return value;
   }
 
   private validateRequestDetails(data: ServiceRequestCreateDto) {

@@ -5,6 +5,7 @@ import {
   SERVICE_REQUEST_WORK_MODALITIES,
   serviceRequestStatusEnum,
 } from '@db/tables/service-request.table';
+import { checkoutStatusEnum } from '@db/tables/checkout.table';
 import type {
   ServiceRequestBudgetType,
   ServiceRequestCategory,
@@ -13,6 +14,7 @@ import type {
   ServiceRequestWorkModality,
 } from '@db/tables/service-request.table';
 import { MeetingResultDto } from '@modules/admin/meeting/dto/meeting-result.dto';
+import { ServiceRequestPaymentPlanDto } from './service-request-payment-plan.dto';
 
 export class ServiceRequestMilestoneResultDto {
   @ApiProperty()
@@ -60,6 +62,38 @@ export class ServiceRequestEvidenceAttachmentResultDto
 
   @ApiProperty({ enum: ['pyme', 'consultor'] })
   uploadedByRole: 'pyme' | 'consultor';
+}
+
+export class ServiceRequestPaymentScheduleItemDto {
+  @ApiProperty({ minimum: 0 })
+  installmentIndex: number;
+
+  @ApiProperty()
+  label: string;
+
+  @ApiProperty({ minimum: 1, maximum: 100 })
+  percentage: number;
+
+  @ApiProperty({ enum: ['service_approval', 'milestone_completion', 'service_completion'] })
+  trigger: 'service_approval' | 'milestone_completion' | 'service_completion';
+
+  @ApiProperty({ minimum: 0 })
+  milestoneIndex: number;
+
+  @ApiPropertyOptional({ nullable: true })
+  amount: string | null;
+
+  @ApiProperty({ enum: ['not_started', ...checkoutStatusEnum.enumValues] })
+  status: 'not_started' | (typeof checkoutStatusEnum.enumValues)[number];
+
+  @ApiProperty()
+  available: boolean;
+
+  @ApiPropertyOptional({ nullable: true })
+  availabilityMessage: string | null;
+
+  @ApiPropertyOptional({ nullable: true, type: Date })
+  paidAt: Date | null;
 }
 
 export class ServiceRequestResultDto {
@@ -152,6 +186,12 @@ export class ServiceRequestResultDto {
 
   @ApiProperty({ type: [ServiceRequestMilestoneResultDto] })
   milestones: ServiceRequestMilestoneResultDto[];
+
+  @ApiProperty({ type: ServiceRequestPaymentPlanDto })
+  paymentPlan: ServiceRequestPaymentPlanDto;
+
+  @ApiProperty({ type: [ServiceRequestPaymentScheduleItemDto] })
+  paymentSchedule: ServiceRequestPaymentScheduleItemDto[];
 
   @ApiProperty({ type: [MeetingResultDto] })
   meetings: MeetingResultDto[];

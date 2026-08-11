@@ -13,7 +13,9 @@ import {
   SERVICE_REQUEST_BUDGET_TYPES,
   SERVICE_REQUEST_CATEGORIES,
   SERVICE_REQUEST_CATEGORY_OPTIONS,
+  SERVICE_REQUEST_PAYMENT_PLAN_STRATEGIES,
 } from '@db/tables/service-request.table';
+import type { ServiceRequestPaymentPlanStrategy } from '@db/tables/service-request.table';
 import {
   ConsultantCaseStudyDto,
   ConsultantEducationDto,
@@ -28,6 +30,8 @@ import {
 } from './dto/service-request/service-consultant-match-result.dto';
 import { ServiceRequestChatRunDto } from './dto/service-request/service-request-chat-run.dto';
 import { ServiceRequestChatResultDto } from './dto/service-request/service-request-chat-result.dto';
+import { ServicePaymentPlanRunDto } from './dto/service-request/service-payment-plan-run.dto';
+import { ServicePaymentPlanResultDto } from './dto/service-request/service-payment-plan-result.dto';
 import {
   ServiceRequestDraftDto,
   ServiceRequestMilestoneDraftDto,
@@ -38,6 +42,23 @@ type RunPromptOptions = {
   useGoogleSearch?: boolean;
   temperature?: number;
   responseJsonSchema?: UnknownRecord;
+};
+type InteractionResponseShape = {
+  steps?: Array<
+    | string
+    | {
+        model_turn?: { parts?: Array<{ text?: string }> };
+        text?: string;
+      }
+  >;
+  outputs?: Array<{ type?: string; text?: string }>;
+  text?: string;
+  output_text?: string;
+  usage?: {
+    total_input_tokens?: number;
+    total_output_tokens?: number;
+    total_tokens?: number;
+  };
 };
 type ServiceChatMessage = { role: 'assistant' | 'user'; content: string };
 type ServiceRequestEvaluation = {
@@ -164,6 +185,32 @@ const SERVICE_REQUEST_RESPONSE_SCHEMA: UnknownRecord = {
   required: ['message'],
 };
 
+const SERVICE_PAYMENT_PLAN_SCHEMA: UnknownRecord = {
+  type: 'object',
+  additionalProperties: false,
+  propertyOrdering: ['strategy', 'summary', 'rationale', 'installments'],
+  properties: {
+    strategy: { type: 'string', enum: SERVICE_REQUEST_PAYMENT_PLAN_STRATEGIES },
+    summary: { type: 'string' },
+    rationale: { type: 'string' },
+    installments: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 6,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          percentage: { type: 'integer', minimum: 10, maximum: 100 },
+          milestoneIndex: { type: 'integer', minimum: 0 },
+        },
+        required: ['percentage', 'milestoneIndex'],
+      },
+    },
+  },
+  required: ['strategy', 'summary', 'rationale', 'installments'],
+};
+
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
@@ -232,20 +279,20 @@ export class AiService {
           max_output_tokens: 65536,
           top_p: 0.95,
         },
-      })) as any;
+      })) as unknown as InteractionResponseShape;
 
       let resultText = '';
 
       // 1. Intentar obtener el texto del último paso (como interaction.steps?.at(-1))
       const lastStep = interaction.steps?.at(-1);
-      if (lastStep) {
+      if (lastStep && typeof lastStep !== 'string') {
         if (lastStep.model_turn?.parts?.[0]?.text) {
           resultText = lastStep.model_turn.parts[0].text;
         } else if (lastStep.text) {
           resultText = lastStep.text;
-        } else if (typeof lastStep === 'string') {
-          resultText = lastStep;
         }
+      } else if (typeof lastStep === 'string') {
+        resultText = lastStep;
       }
 
       // 2. Fallback al array de outputs si steps no tiene texto directo
@@ -420,7 +467,7 @@ export class AiService {
       'deliverables enumera resultados concretos y verificables que la PYME espera recibir para considerar terminado el servicio. Consolida las evidencias expresadas por la PYME en distintos turnos y no repitas la pregunta si ya existe un entregable válido. Una respuesta breve como “informe digital”, “un informe detallado” o “las facturas boleteadas” sí es una respuesta válida cuando aparece como continuación de una pregunta sobre entregables: normalízala usando el contexto, por ejemplo como un informe digital, un informe de contabilidad o comprobantes boleteados y registrados. Si la PYME todavía no dijo qué quiere recibir, deja deliverables vacío porque ese dato se preguntará explícitamente después. Nunca conviertas un ejemplo sugerido únicamente por el asistente en un entregable confirmado por la PYME.\n' +
       'exclusions registra lo que no se incluye; referenceUrls contiene enlaces externos; deadline usa YYYY-MM-DD; estimatedDuration indica cuánto durará el trabajo. Resuelve expresiones inequívocas como “fin de mes”, “el próximo viernes” o una fecha sin año usando la fecha actual. Para “antes de fin de mes”, usa el último día del mes correspondiente. Si una fecha sin año todavía no ocurrió, usa el año actual; si ya pasó, usa el siguiente.\n' +
       'Para presupuesto: “máximo X”, “hasta X” o “pagaría X como máximo” significa budgetType=fixed, budgetMin=X y budgetMax vacío. Solo usa budgetType=range cuando la PYME indique explícitamente dos límites, por ejemplo “entre X e Y” o “de X a Y”. Si responde únicamente con un monto a una pregunta de presupuesto, úsalo como fixed y reemplaza el presupuesto anterior; no combines automáticamente montos de mensajes distintos para fabricar un rango. Guarda montos sin símbolo.\n' +
-      'workModality siempre es remote; workMethod explica cómo se realizará y coordinará el trabajo; milestones debe identificar de forma proactiva las etapas necesarias del servicio, nombrarlas de manera clara y asignarles fechas YYYY-MM-DD. Cuando la duración y la fecha límite sean suficientemente claras, propón hitos razonables aproximadamente cada 7 días, sin superar 20, incluyendo una etapa final de cierre si corresponde. No preguntes por los hitos como requisito obligatorio: puedes inferirlos del problema, resultado esperado, entregables, duración y fecha límite; si todavía no hay información suficiente, deja milestones vacío. details conserva restricciones u otro contexto que no encaje en los campos anteriores.\n' +
+      'workModality siempre es remote; workMethod explica cómo se realizará y coordinará el trabajo. milestones debe representar el plan del servicio con fechas YYYY-MM-DD y tener siempre esta estructura: el primer hito es "Kickoff y alineamiento inicial", una reunión de presentación, revisión de expectativas y ajustes iniciales; el último hito es "Cierre y finalización del servicio", asociado a la entrega o validación final y a la fecha límite. Los hitos que la PYME mencione durante el chat son opcionales y deben conservarse como etapas intermedias entre esos dos hitos; nunca reemplazan, eliminan ni desplazan el kickoff o el cierre. No preguntes por el kickoff ni por el cierre como información faltante: infiérelos. Cuando la fecha límite sea clara, incluye el cierre con esa fecha; cuando haya etapas intermedias claras, asígnales fechas razonables sin superar 20 hitos en total. details conserva restricciones u otro contexto que no encaje en los campos anteriores.\n' +
       'Una afirmación breve como “sí”, “correcto” o “así es” normalmente confirma la pregunta anterior, pero no agrega requisitos nuevos al draft.\n' +
       'Interpreta las respuestas según su contexto conversacional, no por coincidencia de palabras aisladas. Devuelve únicamente el draft estructurado solicitado por el esquema.';
     const extractionPayload = JSON.stringify({
@@ -446,7 +493,7 @@ export class AiService {
       'Evalúa el draft y toda la conversación en contexto. readyForConfirmation=true solo cuando sean suficientemente claros: problema actual, resultado esperado, entregables concretos que la PYME confirmó, presupuesto fijo o rango, fecha límite, duración estimada y forma de trabajo remoto. El título, la categoría, la subcategoría y el alcance se derivan automáticamente con IA; nunca los reportes como datos faltantes ni pidas que la PYME los defina. Si draft.deliverables contiene al menos un resultado concreto expresado o confirmado por la PYME, no marques entregables como faltantes aunque una respuesta anterior del asistente los haya vuelto a preguntar.\n' +
       'No marques como faltante un dato que ya esté definido de forma válida en draft. “Máximo X” es un presupuesto válido de tipo fixed con tope X; una fecha relativa inequívoca ya convertida a YYYY-MM-DD es válida.\n' +
       'Marca userConfirmedReview=true cuando el último mensaje de la PYME confirme semánticamente el resumen o la pregunta final inmediatamente anterior. Ejemplos válidos: “sí”, “sí así es”, “es correcto”, “confirmo” o equivalentes, siempre que el mensaje anterior realmente pidiera confirmar la solicitud completa. No lo marques si ese sí respondía una pregunta de recopilación.\n' +
-      'missingInformation debe contener solo datos esenciales ausentes, ambiguos o demasiado vagos. Prioriza los entregables cuando falten: significa preguntar qué espera recibir la PYME para considerar terminado el servicio. Nunca incluyas título, categoría, subcategoría, alcance ni nombres de campos internos. No incluyas exclusiones, enlaces, archivos ni hitos porque son opcionales. Usa frases naturales en español.\n' +
+      'missingInformation debe contener solo datos esenciales ausentes, ambiguos o demasiado vagos. Prioriza los entregables cuando falten: significa preguntar qué espera recibir la PYME para considerar terminado el servicio. Nunca incluyas título, categoría, subcategoría, alcance ni nombres de campos internos. No incluyas exclusiones, enlaces, archivos, kickoff, cierre ni hitos intermedios porque son opcionales o se derivan del contexto. Usa frases naturales en español.\n' +
       'nextFocus debe indicar el único bloque lógico que conviene preguntar después; déjalo vacío cuando readyForConfirmation=true. No redactes preguntas ni mensajes de chat.';
     const evaluationPayload = JSON.stringify({
       dateContext,
@@ -471,7 +518,7 @@ export class AiService {
       'Antes de escribir, identifica qué acaba de decir la PYME y revisa draft y evaluation. La primera frase debe reconocer o aclarar la última aportación de la PYME, salvo que sea un saludo o una queja. Nunca menciones nombres internos de campos, flags, JSON ni procesos de evaluación. No uses frases genéricas prefabricadas, no repitas literalmente el mensaje anterior del asistente y no vuelvas a preguntar algo que ya esté presente en draft.\n' +
       'Si latestUserMessageIsOffTopic=true, no lo interpretes como un requisito ni como una confirmación. Responde con empatía, reconoce brevemente la frustración o el desvío, indica el dato útil más reciente que sí quedó registrado y retoma solo el siguiente dato faltante. No regañes ni reinicies la conversación.\n' +
       'Si evaluation.phase=gathering, formula UNA sola pregunta concreta sobre evaluation.nextFocus o el primer elemento de missingInformation. Si draft ya tiene deliverables, no preguntes otra vez por entregables. Si realmente faltan, pregunta exactamente qué espera recibir al finalizar para considerar terminado el servicio; ofrece ejemplos contextualizados como informe, archivo, capacitación realizada, manual, configuración implementada o sesiones completadas. Nunca preguntes por título, categoría, subcategoría ni alcance como campos separados. Puedes agrupar únicamente datos estrechamente relacionados.\n' +
-      'Si evaluation.phase=confirming, resume de manera breve los datos principales del draft y formula una sola confirmación final. En esa misma pregunta permite agregar opcionalmente exclusiones, enlaces, archivos de referencia o hitos.\n' +
+      'Si evaluation.phase=confirming, resume de manera breve los datos principales del draft y formula una sola confirmación final. En esa misma pregunta permite agregar opcionalmente exclusiones, enlaces, archivos de referencia o etapas intermedias; el kickoff y el cierre se agregarán siempre.\n' +
       'Si evaluation.phase=complete, confirma que la solicitud quedó lista para revisar y no hagas ninguna pregunta adicional.\n' +
       'No preguntes por el consultor ni por el método de pago. Devuelve solamente el mensaje solicitado por el esquema.';
     const responsePayload = JSON.stringify({
@@ -504,6 +551,46 @@ export class AiService {
     };
     await this.validateServiceRequestChat(response);
     return response;
+  }
+
+  async runServicePaymentPlan(data: ServicePaymentPlanRunDto, currentUser: User): Promise<ServicePaymentPlanResultDto> {
+    this.assertPyme(currentUser);
+    const draft = this.normalizeServiceDraft(data.draft);
+    const missingInformation = this.getDraftMissingInformation(draft);
+    if (missingInformation.length) {
+      throw new BadRequestException([
+        `Completa la solicitud antes de definir las cuotas: ${missingInformation.join(', ')}`,
+      ]);
+    }
+
+    const finalMilestoneIndex = draft.milestones.length - 1;
+    const prompt =
+      'Eres especialista en estructuración comercial y control de riesgo para servicios profesionales B2B dirigidos a PYMES peruanas. Recomienda una forma de pago justa para ambas partes a partir del alcance recopilado. Tu criterio importa más que repartir pagos por rutina.\n\n' +
+      'Evalúa en conjunto: monto o rango presupuestal, duración, claridad del alcance, esfuerzo inicial, incertidumbre, cantidad de entregables verificables y existencia de hitos intermedios que realmente permitan comprobar avance. Los hitos de kickoff y cierre son estructurales y no justifican por sí solos varias cuotas.\n\n' +
+      'Escoge una sola estrategia:\n' +
+      '- single: servicio corto, monto acotado, alcance claro y un resultado principal. Una cuota del 100% al aprobar.\n' +
+      '- initial_final: existe trabajo relevante antes de entregar, pero no hay suficientes cortes verificables. Usa una cuota inicial razonable para reservar capacidad e iniciar y otra al cierre.\n' +
+      '- milestone_installments: servicio prolongado o complejo con uno o más hitos intermedios verificables. Vincula pagos solo a hitos que representen avance o entrega real, no a reuniones administrativas.\n\n' +
+      'Reglas obligatorias: devuelve entre 1 y 6 cuotas, todas enteras y de al menos 10%; deben sumar exactamente 100%. La primera cuota se vincula al milestoneIndex 0. Todo plan fraccionado reserva la última cuota para el último hito. Usa únicamente índices existentes y en orden ascendente, sin repetirlos. Para milestone_installments incluye al menos un índice intermedio. Como guía: en initial_final suele ser razonable reservar entre 40% y 60% al inicio y el saldo al cierre; en milestone_installments el anticipo suele estar entre 20% y 40% y el cierre entre 15% y 35%, distribuyendo el resto entre avances verificables. Puedes apartarte de estos rangos si el riesgo o esfuerzo inicial lo justifica y lo explicas. No emitas recomendaciones legales, crediticias ni tributarias.\n\n' +
+      'summary debe describir la distribución en una frase breve. rationale debe explicar en español claro por qué protege el inicio, los avances comprobables y el cierre en este caso específico.';
+    const payload = JSON.stringify({
+      serviceRequest: draft,
+      validMilestoneIndexes: draft.milestones.map((milestone, milestoneIndex) => ({
+        milestoneIndex,
+        title: milestone.title,
+        dueDate: milestone.dueDate,
+        structural: milestoneIndex === 0 || milestoneIndex === finalMilestoneIndex,
+      })),
+    });
+    const { result } = await this.runPrompt(payload, prompt, {
+      useGoogleSearch: false,
+      temperature: 0.25,
+      responseJsonSchema: SERVICE_PAYMENT_PLAN_SCHEMA,
+    });
+    const parsed = this.parseServiceRequestJson(result, 'el plan de pagos');
+    const normalized = this.normalizeServicePaymentPlan(parsed, draft);
+    await this.validateServicePaymentPlan(normalized);
+    return normalized;
   }
 
   async runServiceConsultantMatches(
@@ -903,6 +990,120 @@ export class AiService {
     };
   }
 
+  private normalizeServicePaymentPlan(
+    value: UnknownRecord,
+    draft: ServiceRequestDraftDto,
+  ): ServicePaymentPlanResultDto {
+    const finalMilestoneIndex = draft.milestones.length - 1;
+    const requestedStrategy = SERVICE_REQUEST_PAYMENT_PLAN_STRATEGIES.find(
+      (strategy) => strategy === this.readString(value.strategy),
+    );
+    const rawInstallments = (Array.isArray(value.installments) ? value.installments : [])
+      .filter((installment): installment is UnknownRecord => this.isRecord(installment))
+      .map((installment) => ({
+        percentage: this.readNumber(installment.percentage),
+        milestoneIndex: this.readNumberIncludingZero(installment.milestoneIndex),
+      }));
+    const requestedIntermediateIndexes = rawInstallments
+      .map((installment) => installment.milestoneIndex)
+      .filter(
+        (milestoneIndex): milestoneIndex is number =>
+          milestoneIndex !== null && milestoneIndex > 0 && milestoneIndex < finalMilestoneIndex,
+      )
+      .filter((milestoneIndex, index, items) => items.indexOf(milestoneIndex) === index)
+      .sort((left, right) => left - right)
+      .slice(0, 4);
+
+    let strategy: ServiceRequestPaymentPlanStrategy = requestedStrategy ?? 'initial_final';
+    if (strategy === 'milestone_installments' && requestedIntermediateIndexes.length === 0) {
+      strategy = 'initial_final';
+    }
+
+    const milestoneIndexes =
+      strategy === 'single'
+        ? [0]
+        : strategy === 'initial_final'
+          ? [0, finalMilestoneIndex]
+          : [0, ...requestedIntermediateIndexes, finalMilestoneIndex];
+    const rawPercentageByMilestone = new Map(
+      rawInstallments.flatMap((installment) =>
+        installment.milestoneIndex === null ? [] : [[installment.milestoneIndex, installment.percentage] as const],
+      ),
+    );
+    const proposedPercentages = milestoneIndexes.map(
+      (milestoneIndex) => rawPercentageByMilestone.get(milestoneIndex) ?? 0,
+    );
+    const percentages =
+      rawInstallments.length === milestoneIndexes.length &&
+      proposedPercentages.every((percentage) => percentage >= 10) &&
+      proposedPercentages.reduce((total, percentage) => total + percentage, 0) === 100
+        ? proposedPercentages
+        : this.defaultServicePaymentPercentages(strategy, milestoneIndexes.length);
+    const installments = milestoneIndexes.map((milestoneIndex, installmentIndex) => {
+      const isFirst = installmentIndex === 0;
+      const isLast = installmentIndex === milestoneIndexes.length - 1;
+      const milestone = draft.milestones[milestoneIndex];
+      return {
+        label:
+          strategy === 'single'
+            ? 'Pago único del servicio'
+            : isFirst
+              ? 'Pago inicial para iniciar el servicio'
+              : isLast
+                ? 'Pago final al cerrar el servicio'
+                : `Pago al completar: ${milestone?.title ?? `Hito ${milestoneIndex + 1}`}`,
+        percentage: percentages[installmentIndex],
+        trigger: isFirst
+          ? ('service_approval' as const)
+          : isLast
+            ? ('service_completion' as const)
+            : ('milestone_completion' as const),
+        milestoneIndex,
+      };
+    });
+    const generatedSummary =
+      strategy === 'single'
+        ? 'Pago único del 100% al aprobar la propuesta'
+        : strategy === 'initial_final'
+          ? `${percentages[0]}% al iniciar y ${percentages.at(-1)}% al finalizar`
+          : `${installments.length} cuotas vinculadas al inicio, avances verificables y cierre`;
+    const rationale = this.readLongText(value.rationale, 1200);
+
+    return {
+      strategy,
+      summary: this.readString(value.summary).slice(0, 240) || generatedSummary,
+      rationale:
+        rationale ||
+        'La distribución equilibra la reserva de capacidad del consultor con pagos asociados a avances verificables y conserva una parte para validar el cierre.',
+      installments,
+    };
+  }
+
+  private defaultServicePaymentPercentages(strategy: ServiceRequestPaymentPlanStrategy, installmentCount: number) {
+    if (strategy === 'single') return [100];
+    if (strategy === 'initial_final') return [40, 60];
+
+    const initialPercentage = 30;
+    const finalPercentage = 25;
+    const intermediateCount = installmentCount - 2;
+    const intermediateTotal = 100 - initialPercentage - finalPercentage;
+    const basePercentage = Math.floor(intermediateTotal / intermediateCount);
+    const remainder = intermediateTotal - basePercentage * intermediateCount;
+    return [
+      initialPercentage,
+      ...Array.from(
+        { length: intermediateCount },
+        (_, index) => basePercentage + (index === intermediateCount - 1 ? remainder : 0),
+      ),
+      finalPercentage,
+    ];
+  }
+
+  private readNumberIncludingZero(value: unknown): number | null {
+    const numberValue = typeof value === 'number' ? value : Number(value);
+    return Number.isInteger(numberValue) && numberValue >= 0 ? numberValue : null;
+  }
+
   private getDraftMissingInformation(draft: ServiceRequestDraftDto) {
     const missing: string[] = [];
     if (draft.description.length < 10) missing.push('problema o necesidad actual');
@@ -924,8 +1125,7 @@ export class AiService {
   }
 
   private normalizeServiceMilestones(value: unknown, deadline: string): ServiceRequestMilestoneDraftDto[] {
-    if (!Array.isArray(value)) return [];
-    return value
+    const normalized = (Array.isArray(value) ? value : [])
       .filter((item): item is UnknownRecord => this.isRecord(item))
       .map((item) => ({
         title: this.readString(item.title).slice(0, 240),
@@ -941,6 +1141,49 @@ export class AiService {
           index,
       )
       .slice(0, 20);
+
+    if (!deadline) return normalized;
+
+    const kickoffIndex = normalized.findIndex((item) => this.isKickoffMilestoneTitle(item.title));
+    const completionIndex = normalized.findIndex((item) => this.isCompletionMilestoneTitle(item.title));
+    const today = this.getServiceRequestDateContext().today;
+    const kickoffDate = this.clampMilestoneDate(
+      kickoffIndex >= 0 ? normalized[kickoffIndex].dueDate : normalized[0]?.dueDate || today,
+      today,
+      deadline,
+    );
+    const intermediateMilestones = normalized
+      .filter((_, index) => index !== kickoffIndex && index !== completionIndex)
+      .map((item) => ({
+        title: item.title,
+        dueDate: this.clampMilestoneDate(item.dueDate, kickoffDate, deadline),
+      }))
+      .sort((left, right) => left.dueDate.localeCompare(right.dueDate))
+      .slice(0, 18);
+
+    return [
+      { title: 'Kickoff y alineamiento inicial', dueDate: kickoffDate },
+      ...intermediateMilestones,
+      { title: 'Cierre y finalización del servicio', dueDate: deadline },
+    ];
+  }
+
+  private isKickoffMilestoneTitle(title: string) {
+    return /kickoff|reunion inicial|inicio del servicio|presentacion|alineamiento inicial|arranque inicial/i.test(
+      this.normalizeForComparison(title),
+    );
+  }
+
+  private isCompletionMilestoneTitle(title: string) {
+    return /reunion final|cierre del servicio|finalizacion del servicio|entrega final|culminacion/i.test(
+      this.normalizeForComparison(title),
+    );
+  }
+
+  private clampMilestoneDate(value: string, minimum: string, maximum: string) {
+    if (value < minimum) return minimum;
+    if (value > maximum) return maximum;
+    return value;
   }
 
   private normalizeMoneyString(value: unknown) {
@@ -1084,6 +1327,14 @@ export class AiService {
     const errors = await validate(instance, { whitelist: true });
     if (errors.length) {
       throw new BadRequestException(['La IA devolvió una conversación con formato inválido']);
+    }
+  }
+
+  private async validateServicePaymentPlan(data: ServicePaymentPlanResultDto) {
+    const instance = plainToInstance(ServicePaymentPlanResultDto, data);
+    const errors = await validate(instance, { whitelist: true });
+    if (errors.length) {
+      throw new BadRequestException(['La IA devolvió un plan de pagos con formato inválido']);
     }
   }
 

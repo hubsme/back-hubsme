@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsInt, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsInt, IsNotEmpty, IsOptional, IsString, Min } from 'class-validator';
 
 export class MercadoPagoCreateCheckoutDto {
   @ApiProperty({ example: 3 })
@@ -67,6 +67,9 @@ export class MercadoPagoCheckoutDto {
   @ApiProperty({ nullable: true })
   serviceRequestId: number | null;
 
+  @ApiProperty({ nullable: true })
+  serviceInstallmentIndex: number | null;
+
   @ApiProperty()
   pymeId: number;
 
@@ -99,6 +102,19 @@ export class MercadoPagoCheckoutDto {
 
   @ApiPropertyOptional({ type: CheckoutMeetingDetailsDto, nullable: true })
   meetingDetails?: CheckoutMeetingDetailsDto | null;
+}
+
+export class MercadoPagoServicePaymentDto {
+  @ApiPropertyOptional({
+    example: 0,
+    minimum: 0,
+    description: 'Índice de la cuota que se desea pagar. Si se omite, se usa la primera pendiente.',
+  })
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  installmentIndex?: number;
 }
 
 export class MercadoPagoPaymentWebhookQueryDto {

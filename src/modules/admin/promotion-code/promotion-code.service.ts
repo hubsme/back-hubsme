@@ -1,14 +1,23 @@
-import { BadRequestException, Injectable, Logger, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { CheckoutRepository } from '@repositories/checkout.repository';
 import { PromotionCodeRepository } from '@repositories/promotion-code.repository';
 import { MeetingService } from '../meeting/meeting.service';
 import { ConsultantService } from '../consultant/consultant.service';
 import { PymeService } from '../pyme/pyme.service';
+import { ServiceRequestService } from '../service-request/service-request.service';
 import {
   PromotionCodeCreateDto,
   PromotionCodeListFiltersDto,
   PromotionCodeRedeemDto,
+  PromotionCodeRedeemServiceDto,
   PromotionCodeUpdateDto,
 } from './dto/promotion-code.dto';
 
@@ -22,6 +31,7 @@ export class PromotionCodeService {
     private readonly meetingService: MeetingService,
     private readonly consultantService: ConsultantService,
     private readonly pymeService: PymeService,
+    private readonly serviceRequestService: ServiceRequestService,
   ) {}
 
   async findAllPaginated(filters: PromotionCodeListFiltersDto) {
@@ -67,6 +77,7 @@ export class PromotionCodeService {
     try {
       return await this.promotionCodeRepository.create({
         code: this.normalizeCode(data.code || this.generateCode()),
+        type: data.type ?? 'consultation',
         description: data.description?.trim() || null,
         maxRedemptions: data.maxRedemptions,
         startsAt: data.startsAt,
@@ -90,6 +101,9 @@ export class PromotionCodeService {
 
     if (data.maxRedemptions !== undefined && data.maxRedemptions < current.redemptionCount) {
       throw new BadRequestException(['El máximo de usos no puede ser menor a los usos ya realizados']);
+    }
+    if (data.type && data.type !== current.type && current.redemptionCount > 0) {
+      throw new BadRequestException(['No puedes cambiar el tipo de un cupón que ya fue canjeado']);
     }
 
     const startsAt = data.startsAt ?? current.startsAt ?? undefined;
@@ -138,6 +152,7 @@ export class PromotionCodeService {
 
     const claim = await this.promotionCodeRepository.claim(
       this.normalizeCode(data.code),
+      'consultation',
       checkout.id,
       checkout.pymeId,
       checkout.consultantId,
@@ -179,6 +194,95 @@ export class PromotionCodeService {
         await this.meetingService.delete(meetingId).catch(() => undefined);
       }
       await this.promotionCodeRepository.releaseClaim(claim.redemption.id);
+      throw error;
+    }
+  }
+
+  async redeemService(currentUserId: number, data: PromotionCodeRedeemServiceDto) {
+    const serviceRequest = await this.serviceRequestService.findPayableForPyme(data.serviceRequestId, currentUserId);
+    const installment = serviceRequest.paymentSchedule.find((item) => item.status !== 'approved');
+    if (!installment) {
+      throw new BadRequestException(['Todas las cuotas de este servicio ya fueron pagadas']);
+    }
+    if (!installment.available) {
+      throw new BadRequestException([
+        installment.availabilityMessage ?? 'La siguiente cuota todavía no está disponible',
+      ]);
+    }
+
+    const amount = Number(installment.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new BadRequestException(['No se pudo calcular el monto de la siguiente cuota']);
+    }
+
+    let checkout = await this.checkoutRepository.findByServiceRequestInstallment(
+      serviceRequest.id,
+      installment.installmentIndex,
+    );
+    if (checkout?.status === 'approved') {
+      throw new ConflictException('La cuota ya fue pagada');
+    }
+    if (checkout?.preferenceId && (checkout.initPoint || checkout.sandboxInitPoint)) {
+      throw new ConflictException('Ya existe un pago iniciado para esta cuota');
+    }
+
+    if (!checkout) {
+      checkout = await this.checkoutRepository.create({
+        meetingId: null,
+        serviceRequestId: serviceRequest.id,
+        serviceInstallmentIndex: installment.installmentIndex,
+        pymeId: serviceRequest.pymeId,
+        consultantId: serviceRequest.consultantId,
+        preferenceId: null,
+        initPoint: null,
+        sandboxInitPoint: null,
+        externalReference: this.buildServicePaymentReference(serviceRequest.id, installment.installmentIndex),
+        status: 'created',
+        amount: amount.toFixed(2),
+        marketplaceFee: '0.00',
+        currency: serviceRequest.currency,
+      });
+    }
+
+    const claim = await this.promotionCodeRepository.claim(
+      this.normalizeCode(data.code),
+      'service',
+      checkout.id,
+      checkout.pymeId,
+      checkout.consultantId,
+    );
+    if (!claim) {
+      throw new BadRequestException(['El código no existe, venció o ya alcanzó su límite de usos']);
+    }
+
+    let finalized = false;
+    try {
+      const redemption = await this.promotionCodeRepository.finalizeServiceClaim(claim.redemption.id, checkout.id, {
+        source: 'promotion_code',
+        promotionCodeId: claim.promotion.id,
+        promotionCode: claim.promotion.code,
+        redemptionId: claim.redemption.id,
+        serviceRequestId: serviceRequest.id,
+        serviceInstallmentIndex: installment.installmentIndex,
+      });
+      if (!redemption) {
+        throw new ConflictException('La cuota fue pagada por otro proceso');
+      }
+      finalized = true;
+
+      await this.serviceRequestService.markPaid(serviceRequest.id);
+
+      return {
+        serviceRequestId: serviceRequest.id,
+        installmentIndex: installment.installmentIndex,
+        checkoutId: checkout.id,
+        code: claim.promotion.code,
+        message: 'Cuota de servicio confirmada con cupón',
+      };
+    } catch (error) {
+      if (!finalized) {
+        await this.promotionCodeRepository.releaseClaim(claim.redemption.id);
+      }
       throw error;
     }
   }
@@ -230,6 +334,10 @@ export class PromotionCodeService {
 
   private generateCode() {
     return `HUBSME-${randomBytes(4).toString('hex').toUpperCase()}`;
+  }
+
+  private buildServicePaymentReference(serviceRequestId: number, installmentIndex: number) {
+    return `service-hubsme:${serviceRequestId}:${installmentIndex}:promotion-code`;
   }
 
   private assertDateRange(startsAt?: Date, expiresAt?: Date) {
