@@ -552,7 +552,13 @@ export class ServiceRequestService {
     files: Express.Multer.File[],
     currentUser: User,
   ) {
-    const role = this.getParticipantRole(currentUser);
+    if (currentUser.role !== 'consultor') {
+      throw new ForbiddenException(
+        'Solo el consultor puede adjuntar evidencias y entregables del servicio',
+      );
+    }
+
+    const role = 'consultor' as const;
     const request = await this.findOne(id);
     this.assertParticipant(request, currentUser.id, role);
     if (request.status !== 'paid') {
@@ -605,12 +611,14 @@ export class ServiceRequestService {
   }
 
   async deleteEvidence(id: number, attachmentId: string, currentUser: User) {
-    if (currentUser.role !== 'pyme') {
-      throw new ForbiddenException('Solo la PYME puede eliminar evidencias del servicio');
+    if (currentUser.role !== 'consultor') {
+      throw new ForbiddenException(
+        'Solo el consultor puede eliminar evidencias y entregables del servicio',
+      );
     }
 
     const request = await this.findOne(id);
-    this.assertParticipant(request, currentUser.id, 'pyme');
+    this.assertParticipant(request, currentUser.id, 'consultor');
     if (request.status !== 'paid') {
       throw new BadRequestException(['Solo puedes eliminar evidencias de un servicio pagado']);
     }
