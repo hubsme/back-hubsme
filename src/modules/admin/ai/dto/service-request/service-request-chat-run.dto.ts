@@ -4,8 +4,10 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsInt,
   IsIn,
   IsOptional,
+  IsPositive,
   IsString,
   MaxLength,
   MinLength,
@@ -39,4 +41,14 @@ export class ServiceRequestChatRunDto {
   @ValidateNested()
   @Type(() => ServiceRequestDraftDto)
   draft?: ServiceRequestDraftDto;
+
+  @ApiPropertyOptional({
+    description: 'Acta finalizada de consultoría que se usará como contexto inicial de la solicitud',
+    minimum: 1,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @IsPositive()
+  sourceMeetingId?: number;
 }

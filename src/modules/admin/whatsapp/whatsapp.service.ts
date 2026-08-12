@@ -241,6 +241,18 @@ export class WhatsappService {
         language: { code: 'es_PE' },
         components: [
           {
+            type: 'header',
+            parameters: [
+              {
+                type: 'video',
+                video: {
+                  link:
+                    'https://hubsmestorage.blob.core.windows.net/hubsmestorage/consultants/videos/tutorial-calendario-hubsme_03_1786460597595.mp4',
+                },
+              },
+            ],
+          },
+          {
             type: 'body',
             parameters: [
               { type: 'text', parameter_name: 'nombre_consultor', text: data.consultantName },
