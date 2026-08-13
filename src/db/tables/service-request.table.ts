@@ -169,6 +169,7 @@ export const serviceRequest = pgTable(
     consultantId: integer('consultant_id')
       .notNull()
       .references(() => user.id),
+    serviceOfferId: integer('service_offer_id'),
     title: varchar('title', { length: 160 }).notNull(),
     category: serviceRequestCategoryEnum('category'),
     subcategory: varchar('subcategory', { length: 120 }),
@@ -214,6 +215,7 @@ export const serviceRequest = pgTable(
   (t) => [
     index('service_request_pyme_id_idx').on(t.pymeId),
     index('service_request_consultant_id_idx').on(t.consultantId),
+    index('service_request_service_offer_id_idx').on(t.serviceOfferId),
     index('service_request_status_idx').on(t.status),
     index('service_request_created_at_idx').on(t.createdAt),
     index('service_request_updated_at_idx').on(t.updatedAt),

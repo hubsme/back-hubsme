@@ -27,6 +27,7 @@ const serviceRequestSelection = {
   updatedAt: serviceRequest.updatedAt,
   pymeId: serviceRequest.pymeId,
   consultantId: serviceRequest.consultantId,
+  serviceOfferId: serviceRequest.serviceOfferId,
   pymeName: pyme.name,
   consultantName: consultant.fullName,
   consultantHeadline: consultant.headline,

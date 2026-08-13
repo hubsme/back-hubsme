@@ -112,6 +112,9 @@ export class ServiceRequestResultDto {
   @ApiProperty()
   consultantId: number;
 
+  @ApiPropertyOptional({ nullable: true })
+  serviceOfferId: number | null;
+
   @ApiProperty({ type: [String] })
   initialMeetingProposedStartTimes: string[];
 

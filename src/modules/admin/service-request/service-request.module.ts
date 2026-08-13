@@ -9,6 +9,7 @@ import { ConsultantAvailabilityModule } from '../consultant-availability/consult
 import { MeetingModule } from '../meeting/meeting.module';
 import { ServiceRequestController } from './service-request.controller';
 import { ServiceRequestService } from './service-request.service';
+import { ConsultantServiceOfferRepository } from '@repositories/consultant-service-offer.repository';
 
 @Module({
   imports: [AdminAuthModule, StorageModule, ConsultantAvailabilityModule, MeetingModule],
@@ -19,6 +20,7 @@ import { ServiceRequestService } from './service-request.service';
     ConsultantRepository,
     MeetingRepository,
     CheckoutRepository,
+    ConsultantServiceOfferRepository,
   ],
   exports: [ServiceRequestService],
 })

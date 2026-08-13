@@ -20,6 +20,7 @@ import { ConsultantRepository } from '@repositories/consultant.repository';
 import { CheckoutRepository } from '@repositories/checkout.repository';
 import { MeetingRepository } from '@repositories/meeting.repository';
 import { ServiceRequestRepository } from '@repositories/service-request.repository';
+import { ConsultantServiceOfferRepository } from '@repositories/consultant-service-offer.repository';
 import { ServiceRequestCreateDto } from './dto/service-request-create.dto';
 import { ServiceRequestListFiltersDto } from './dto/service-request-list.dto';
 import { ServiceRequestMilestoneMeetingDto } from './dto/service-request-milestone-meeting.dto';
@@ -50,6 +51,7 @@ export class ServiceRequestService {
 
   constructor(
     private readonly serviceRequestRepository: ServiceRequestRepository,
+    private readonly consultantServiceOfferRepository: ConsultantServiceOfferRepository,
     private readonly consultantRepository: ConsultantRepository,
     private readonly checkoutRepository: CheckoutRepository,
     private readonly meetingRepository: MeetingRepository,
@@ -104,6 +106,13 @@ export class ServiceRequestService {
     if (!consultantIds.length || consultantIds.length > 3) {
       throw new BadRequestException(['Selecciona entre 1 y 3 consultores']);
     }
+    if (data.serviceOfferId) {
+      const offer = await this.consultantServiceOfferRepository.findOne(data.serviceOfferId);
+      if (!offer?.isActive) throw new NotFoundException('La oferta seleccionada ya no está disponible');
+      if (consultantIds.length !== 1 || consultantIds[0] !== offer.consultantId) {
+        throw new BadRequestException(['La oferta solo puede solicitarse al consultor que la publicó']);
+      }
+    }
     const availableConsultants = await this.consultantRepository.findAvailableByUserIds(consultantIds);
     if (availableConsultants.length !== consultantIds.length) {
       throw new NotFoundException('Uno o más consultores seleccionados no están disponibles');
@@ -141,6 +150,7 @@ export class ServiceRequestService {
           return {
             pymeId: currentUser.id,
             consultantId,
+            serviceOfferId: data.serviceOfferId,
             title,
             category: data.category,
             subcategory: data.subcategory.trim(),
@@ -553,9 +563,7 @@ export class ServiceRequestService {
     currentUser: User,
   ) {
     if (currentUser.role !== 'consultor') {
-      throw new ForbiddenException(
-        'Solo el consultor puede adjuntar evidencias y entregables del servicio',
-      );
+      throw new ForbiddenException('Solo el consultor puede adjuntar evidencias y entregables del servicio');
     }
 
     const role = 'consultor' as const;
@@ -612,9 +620,7 @@ export class ServiceRequestService {
 
   async deleteEvidence(id: number, attachmentId: string, currentUser: User) {
     if (currentUser.role !== 'consultor') {
-      throw new ForbiddenException(
-        'Solo el consultor puede eliminar evidencias y entregables del servicio',
-      );
+      throw new ForbiddenException('Solo el consultor puede eliminar evidencias y entregables del servicio');
     }
 
     const request = await this.findOne(id);
