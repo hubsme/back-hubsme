@@ -24,6 +24,7 @@ import { PromotionCodeModule } from './modules/admin/promotion-code/promotion-co
 import { IdentityVerificationModule } from './modules/admin/identity-verification/identity-verification.module';
 import { FeedbackModule } from './modules/admin/feedback/feedback.module';
 import { ServiceRequestModule } from './modules/admin/service-request/service-request.module';
+import { ConsultantServiceOfferModule } from './modules/admin/consultant-service-offer/consultant-service-offer.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { ServiceRequestModule } from './modules/admin/service-request/service-re
     IdentityVerificationModule,
     FeedbackModule,
     ServiceRequestModule,
+    ConsultantServiceOfferModule,
   ],
   controllers: [AppController],
   providers: [AppService],

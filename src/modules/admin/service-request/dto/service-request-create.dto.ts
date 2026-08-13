@@ -102,6 +102,13 @@ export class ServiceRequestInitialMeetingOptionDto {
 }
 
 export class ServiceRequestCreateDto {
+  @ApiPropertyOptional({ description: 'Oferta del catálogo que originó la solicitud', minimum: 1 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  serviceOfferId?: number;
+
   @ApiProperty({ type: [Number], example: [8, 12, 19], minItems: 1, maxItems: 3 })
   @IsArray()
   @ArrayMinSize(1)
