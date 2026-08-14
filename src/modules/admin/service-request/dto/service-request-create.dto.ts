@@ -102,6 +102,13 @@ export class ServiceRequestInitialMeetingOptionDto {
 }
 
 export class ServiceRequestCreateDto {
+  @ApiPropertyOptional({ description: 'Tarea del acta que originó la solicitud', minimum: 1 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  sourceTaskId?: number;
+
   @ApiPropertyOptional({ description: 'Oferta del catálogo que originó la solicitud', minimum: 1 })
   @Type(() => Number)
   @IsInt()

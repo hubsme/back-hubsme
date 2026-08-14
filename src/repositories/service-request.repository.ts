@@ -4,6 +4,7 @@ import { database } from '@db/connection.db';
 import { consultant } from '@db/tables/consultant.table';
 import { meeting } from '@db/tables/meeting.table';
 import { pyme } from '@db/tables/pyme.table';
+import { task } from '@db/tables/task.table';
 import {
   serviceRequest,
   ServiceRequestDTO,
@@ -122,11 +123,26 @@ export class ServiceRequestRepository {
     return result[0];
   }
 
-  async createMany(data: ServiceRequestDTO[]) {
+  async createMany(data: ServiceRequestDTO[], sourceTaskId?: number) {
     if (!data.length) return [];
     return database.transaction(async (transaction) => {
+      if (sourceTaskId !== undefined) {
+        const [sourceTask] = await transaction
+          .select({ serviceRequestId: task.serviceRequestId })
+          .from(task)
+          .where(and(eq(task.id, sourceTaskId), isNull(task.deletedAt)))
+          .for('update');
+        if (!sourceTask || sourceTask.serviceRequestId !== null) return null;
+      }
+
       const inserted = await transaction.insert(serviceRequest).values(data).returning({ id: serviceRequest.id });
       const ids = inserted.map((item) => item.id);
+      if (sourceTaskId !== undefined) {
+        await transaction
+          .update(task)
+          .set({ serviceRequestId: ids[0], updatedAt: new Date() })
+          .where(eq(task.id, sourceTaskId));
+      }
       const created = await transaction
         .select(serviceRequestSelection)
         .from(serviceRequest)

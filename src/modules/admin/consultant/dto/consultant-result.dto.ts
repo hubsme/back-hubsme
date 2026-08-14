@@ -110,6 +110,13 @@ export class ConsultantResultDto {
   @ApiProperty()
   pricePerHour: string;
 
+  @ApiProperty({
+    example: 48,
+    default: 48,
+    description: 'Horas mínimas de anticipación para reservar.',
+  })
+  minimumBookingNoticeHours: number;
+
   @ApiProperty()
   rating: string;
 

@@ -1,6 +1,18 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsIn, IsInt, IsNumber, IsOptional, IsString, Matches, Min, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsIn,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  Min,
+  ValidateIf,
+  ValidateNested,
+} from 'class-validator';
 import { ConsultantCaseStudyDto, ConsultantEducationDto } from './consultant-profile-fields.dto';
 import {
   CONSULTANT_DIAGNOSTIC_AREAS,
@@ -174,6 +186,20 @@ export class ConsultantCreateDto {
   @Min(0)
   @IsOptional()
   pricePerHour?: number;
+
+  @ApiPropertyOptional({
+    example: 48,
+    default: 48,
+    minimum: 1,
+    maximum: 720,
+    description: 'Horas mínimas de anticipación para reservar. El valor predeterminado es 48 horas.',
+  })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(720)
+  @ValidateIf((_object, value) => value !== undefined)
+  minimumBookingNoticeHours?: number;
 
   @ApiPropertyOptional({ enum: ['true', 'false'], default: 'true' })
   @IsIn(['true', 'false'])

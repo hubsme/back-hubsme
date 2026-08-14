@@ -16,6 +16,9 @@ export class TaskResultDto {
   @ApiProperty({ nullable: true })
   meetingId: number | null;
 
+  @ApiProperty({ nullable: true })
+  serviceRequestId: number | null;
+
   @ApiProperty()
   pymeId: number;
 

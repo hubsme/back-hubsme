@@ -1,8 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsIn, IsNotEmpty, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { IsArray, IsIn, IsInt, IsNotEmpty, IsOptional, IsPositive, IsString, ValidateNested } from 'class-validator';
 
 export class MeetingFinalizeTaskDto {
+  @ApiPropertyOptional({ description: 'ID de la tarea existente al editar un acta', minimum: 1 })
+  @Type(() => Number)
+  @IsInt()
+  @IsPositive()
+  @IsOptional()
+  id?: number;
+
   @ApiProperty({ example: 'Preparar propuesta de optimizacion' })
   @IsString()
   @IsNotEmpty()

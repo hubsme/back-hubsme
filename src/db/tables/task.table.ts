@@ -1,6 +1,7 @@
-import { pgTable, serial, text, timestamp, integer, pgEnum, index } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, timestamp, integer, pgEnum, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { user } from './user.table';
 import { meeting } from './meeting.table';
+import { serviceRequest } from './service-request.table';
 
 export const taskAssignedToEnum = pgEnum('task_assigned_to', ['pyme', 'consultor']);
 export const taskPriorityEnum = pgEnum('task_priority', ['alta', 'media', 'baja']);
@@ -14,6 +15,7 @@ export const task = pgTable(
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
     deletedAt: timestamp('deleted_at'),
     meetingId: integer('meeting_id').references(() => meeting.id, { onDelete: 'cascade' }),
+    serviceRequestId: integer('service_request_id').references(() => serviceRequest.id, { onDelete: 'set null' }),
     pymeId: integer('pyme_id')
       .notNull()
       .references(() => user.id),
@@ -28,6 +30,7 @@ export const task = pgTable(
   (t) => [
     index('task_title_idx').using('gin', t.title.op('gin_trgm_ops')),
     index('task_meeting_id_idx').on(t.meetingId),
+    uniqueIndex('task_service_request_id_unique_idx').on(t.serviceRequestId),
     index('task_pyme_id_idx').on(t.pymeId),
     index('task_consultant_id_idx').on(t.consultantId),
     index('task_status_idx').on(t.status),

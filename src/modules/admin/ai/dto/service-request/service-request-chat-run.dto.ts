@@ -51,4 +51,14 @@ export class ServiceRequestChatRunDto {
   @IsInt()
   @IsPositive()
   sourceMeetingId?: number;
+
+  @ApiPropertyOptional({
+    description: 'Tarea concreta del acta que se usará como alcance inicial de la solicitud',
+    minimum: 1,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @IsPositive()
+  sourceTaskId?: number;
 }

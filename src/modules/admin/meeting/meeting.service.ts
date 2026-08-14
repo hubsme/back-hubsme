@@ -7,7 +7,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { TaskDTO } from '@db/tables/task.table';
+import { Task, TaskDTO } from '@db/tables/task.table';
 import { MeetingRepository } from '@repositories/meeting.repository';
 import { TaskRepository } from '@repositories/task.repository';
 import { MeetingCreateDto } from './dto/meeting-create.dto';
@@ -153,10 +153,11 @@ export class MeetingService {
     };
   }
 
-  async create(data: MeetingCreateDto) {
+  async create(data: MeetingCreateDto, enforceBookingNotice = true) {
     const title = data.title.trim();
     const durationMinutes = data.durationMinutes ?? 60;
     const requestedBy = data.requestedBy ?? 'pyme';
+    const shouldEnforceBookingNotice = enforceBookingNotice && requestedBy === 'pyme';
     const proposedStartTimes = this.cleanProposedStartTimes(data.proposedStartTimes ?? []);
     const startTime = data.startTime ?? (proposedStartTimes.length === 1 ? new Date(proposedStartTimes[0]) : undefined);
 
@@ -174,6 +175,7 @@ export class MeetingService {
         data.consultantId,
         proposedTime,
         durationMinutes,
+        { enforceBookingNotice: shouldEnforceBookingNotice },
       );
     }
 
@@ -281,6 +283,7 @@ export class MeetingService {
       meeting.consultantId,
       selectedStartTime,
       meeting.durationMinutes,
+      { enforceBookingNotice: false },
     );
 
     const teamsMeeting = await this.createTeamsMeeting({
@@ -426,6 +429,12 @@ export class MeetingService {
     if (!description) {
       throw new BadRequestException(['El contenido del acta es obligatorio']);
     }
+    const submittedTaskIds = new Set((data.tasks ?? []).flatMap((task) => (task.id ? [task.id] : [])));
+    if (currentMeeting.tasks.some((task) => task.serviceRequestId !== null && !submittedTaskIds.has(task.id))) {
+      throw new BadRequestException([
+        'No puedes eliminar del acta una tarea que ya tiene una solicitud de servicio vinculada',
+      ]);
+    }
 
     const meeting = await this.meetingRepository.update(id, {
       status: 'finalizada',
@@ -434,11 +443,12 @@ export class MeetingService {
     });
     await this.scheduledNotificationService.cancelMeetingReminders(id);
 
-    // Soft-delete existing tasks for this meeting to prevent duplicates on edit/refinalize
-    await this.taskRepository.deleteByMeetingId(id);
+    const currentTasksById = new Map(currentMeeting.tasks.map((task) => [task.id, task]));
+    const retainedTaskIds = new Set<number>();
+    const tasks: Task[] = [];
 
-    const tasksPayload: TaskDTO[] = (data.tasks ?? [])
-      .map((task) => ({
+    for (const task of data.tasks ?? []) {
+      const taskPayload: TaskDTO = {
         meetingId: currentMeeting.id,
         pymeId: currentMeeting.pymeId,
         consultantId: currentMeeting.consultantId,
@@ -448,9 +458,23 @@ export class MeetingService {
         priority: task.priority,
         status: task.status ?? 'pendiente',
         dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
-      }));
+      };
 
-    const tasks = await this.taskRepository.createMany(tasksPayload);
+      const existingTask = task.id ? currentTasksById.get(task.id) : undefined;
+      if (existingTask) {
+        retainedTaskIds.add(existingTask.id);
+        tasks.push(await this.taskRepository.update(existingTask.id, taskPayload));
+      } else {
+        tasks.push(await this.taskRepository.create(taskPayload));
+      }
+    }
+
+    for (const existingTask of currentMeeting.tasks) {
+      if (!retainedTaskIds.has(existingTask.id)) {
+        await this.taskRepository.delete(existingTask.id);
+      }
+    }
+
     return { meeting: this.toMeetingResult(meeting), tasks };
   }
 
