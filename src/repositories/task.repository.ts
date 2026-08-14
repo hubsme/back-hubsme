@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { eq, ilike, and, isNull, count, desc, sql } from 'drizzle-orm';
+import { eq, ilike, and, isNull, count, desc, getTableColumns, sql } from 'drizzle-orm';
 import { database } from '@db/connection.db';
+import { meeting } from '@db/tables/meeting.table';
 import { task, TaskDTO, taskAssignedToEnum, taskPriorityEnum, taskStatusEnum } from '@db/tables/task.table';
 
 @Injectable()
@@ -49,8 +50,13 @@ export class TaskRepository {
 
     const [{ total }] = await database.select({ total: count() }).from(task).where(whereClause);
     const data = await database
-      .select()
+      .select({
+        ...getTableColumns(task),
+        meetingStartTime: meeting.startTime,
+        meetingTitle: meeting.title,
+      })
       .from(task)
+      .leftJoin(meeting, eq(task.meetingId, meeting.id))
       .where(whereClause)
       .orderBy(desc(task.createdAt))
       .limit(limit)
@@ -61,8 +67,13 @@ export class TaskRepository {
 
   async findOne(id: number) {
     const result = await database
-      .select()
+      .select({
+        ...getTableColumns(task),
+        meetingStartTime: meeting.startTime,
+        meetingTitle: meeting.title,
+      })
       .from(task)
+      .leftJoin(meeting, eq(task.meetingId, meeting.id))
       .where(and(eq(task.id, id), isNull(task.deletedAt)));
     return result[0];
   }

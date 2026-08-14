@@ -104,6 +104,29 @@ El servidor se ejecuta en el puerto definido por `PORT` y usa `6001` por defecto
 
 La documentación interactiva de Swagger está disponible en `http://localhost:6001/api`.
 
+## 🕐 Fechas y zona horaria
+
+La zona de negocio de Hubsme es `America/Lima` (UTC-5). Toda conversión debe pasar por `src/functions/date.function.ts`; no se deben repetir offsets, `Intl.DateTimeFormat` con zonas horarias ni conversiones manuales dentro de módulos.
+
+Contrato de fechas:
+
+- Los instantes que viajan por API o se persisten usan ISO 8601 en UTC, por ejemplo `2026-08-20T05:00:00.000Z`.
+- Las fechas calendario sin hora usan `YYYY-MM-DD`, por ejemplo `2026-08-20`.
+- Si una fecha calendario debe convertirse en instante, `peruDateOnlyToUtc()` la interpreta desde medianoche de Perú. No usar `new Date('YYYY-MM-DD')`, porque JavaScript lo interpreta como medianoche UTC.
+- Para mostrar o agrupar instantes en Perú usar `formatInPeru()`, `dateKeyInPeru()` o `monthKeyInPeru()`.
+- Para rangos mensuales usar `peruMonthRange()`; para inputs con fecha y hora usar `peruDateTimeInputToUtc()`.
+- `formatInUtc()` se reserva para calendarios neutrales o valores `date-only` cuya aritmética es deliberadamente UTC.
+
+Ejemplo:
+
+```ts
+import { dateKeyInPeru, formatInPeru, peruDateOnlyToUtc } from '@functions/date.function';
+
+const today = dateKeyInPeru();
+const dueAt = peruDateOnlyToUtc('2026-08-20');
+const label = formatInPeru(new Date(), { dateStyle: 'long', timeStyle: 'short' });
+```
+
 ### Endpoints principales
 
 - `POST /auth/login` y `POST /auth/register`: autenticación de usuarios.

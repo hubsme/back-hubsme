@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { and, count, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import { database } from '@db/connection.db';
 import { consultant } from '@db/tables/consultant.table';
 import { diagnostic } from '@db/tables/diagnostic.table';
@@ -12,6 +12,11 @@ type DashboardRole = 'admin' | 'pyme' | 'consultor';
 type DashboardMeetingScope = {
   userId?: number;
   role?: DashboardRole;
+};
+
+type DashboardMeetingPeriod = {
+  start: Date;
+  end: Date;
 };
 
 export type DashboardMeetingStats = {
@@ -73,34 +78,35 @@ export class DashboardRepository {
     return latestDiagnostic ?? null;
   }
 
-  async getMeetingStats(scope: DashboardMeetingScope): Promise<DashboardMeetingStats> {
-    const conditions = this.getMeetingScopeConditions(scope);
+  async getMeetingStats(
+    scope: DashboardMeetingScope,
+    period: DashboardMeetingPeriod,
+  ): Promise<DashboardMeetingStats> {
+    const calendarStart = sql<Date>`
+      COALESCE(
+        ${meeting.startTime},
+        NULLIF(${meeting.proposedStartTimes}[1], '')::timestamp,
+        ${meeting.createdAt}
+      )
+    `;
+    const conditions = [
+      ...this.getMeetingScopeConditions(scope),
+      gte(calendarStart, period.start),
+      lt(calendarStart, period.end),
+    ];
 
-    const [statusRows, completedRows] = await Promise.all([
-      database
-        .select({ status: meeting.status, total: count() })
-        .from(meeting)
-        .where(and(...conditions))
-        .groupBy(meeting.status),
-      database
-        .select({ total: count() })
-        .from(meeting)
-        .where(
-          and(
-            ...conditions,
-            eq(meeting.status, 'finalizada'),
-            isNotNull(meeting.description),
-            sql`length(trim(${meeting.description})) > 0`,
-          ),
-        ),
-    ]);
+    const statusRows = await database
+      .select({ status: meeting.status, total: count() })
+      .from(meeting)
+      .where(and(...conditions))
+      .groupBy(meeting.status);
 
     const stats: DashboardMeetingStats = {
       total: 0,
       confirmed: 0,
       requested: 0,
       pending: 0,
-      completed: Number(completedRows[0]?.total ?? 0),
+      completed: 0,
     };
 
     for (const row of statusRows) {
@@ -108,7 +114,8 @@ export class DashboardRepository {
 
       if (row.status === 'confirmada') stats.confirmed += total;
       if (row.status === 'solicitada') stats.requested += total;
-      if (row.status === 'pago_pendiente' || row.status === 'por_confirmar') stats.pending += total;
+      if (row.status === 'por_confirmar') stats.pending += total;
+      if (row.status === 'finalizada') stats.completed += total;
     }
 
     stats.total = stats.confirmed + stats.requested + stats.pending + stats.completed;

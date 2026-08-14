@@ -38,8 +38,8 @@ export class PymeMeetingDocumentDto {
   @ApiProperty({ nullable: true })
   description: string | null;
 
-  @ApiProperty({ enum: ['solicitada', 'pago_pendiente', 'por_confirmar', 'confirmada', 'finalizada', 'cancelada'] })
-  status: 'solicitada' | 'pago_pendiente' | 'por_confirmar' | 'confirmada' | 'finalizada' | 'cancelada';
+  @ApiProperty({ enum: ['solicitada', 'por_confirmar', 'confirmada', 'finalizada', 'cancelada'] })
+  status: 'solicitada' | 'por_confirmar' | 'confirmada' | 'finalizada' | 'cancelada';
 
   @ApiProperty({ nullable: true })
   startTime: Date | null;

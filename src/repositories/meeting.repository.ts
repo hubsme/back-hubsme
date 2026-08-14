@@ -141,7 +141,11 @@ export class MeetingRepository {
   async findCalendarPaginated(
     page: number,
     limit: number,
-    range: { startDate: Date; endDate: Date },
+    range: {
+      startDate: Date;
+      endDate: Date;
+      status?: 'solicitada' | 'pendiente' | 'confirmada' | 'finalizada' | 'cancelada';
+    },
     requester: Pick<User, 'id' | 'role'>,
   ) {
     const offset = (page - 1) * limit;
@@ -172,6 +176,12 @@ export class MeetingRepository {
       conditions.push(eq(meeting.pymeId, requester.id));
     } else if (requester.role === 'consultor') {
       conditions.push(eq(meeting.consultantId, requester.id));
+    }
+
+    if (range.status === 'pendiente') {
+      conditions.push(eq(meeting.status, 'por_confirmar'));
+    } else if (range.status) {
+      conditions.push(eq(meeting.status, range.status));
     }
 
     const whereClause = and(...conditions);

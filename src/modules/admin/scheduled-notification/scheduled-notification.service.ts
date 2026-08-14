@@ -9,6 +9,7 @@ import { EmailService } from '../email/email.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { MeetingReminderPayload } from './scheduled-notification.types';
 import { buildMeetingAccessUrl } from '@functions/meeting-access-url.function';
+import { formatInPeru } from '@functions/date.function';
 
 const QUEUE_REFRESH_MS = 60_000;
 const PROCESSING_STALE_MS = 5 * 60_000;
@@ -134,8 +135,7 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
         return;
       }
 
-      const dateTime = meeting.startTime.toLocaleString('es-PE', {
-        timeZone: 'America/Lima',
+      const dateTime = formatInPeru(meeting.startTime, {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
@@ -247,8 +247,7 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
       const startTime = startTimeValue ? new Date(startTimeValue) : null;
       const dateTime =
         startTime && !Number.isNaN(startTime.getTime())
-          ? startTime.toLocaleString('es-PE', {
-              timeZone: 'America/Lima',
+          ? formatInPeru(startTime, {
               day: '2-digit',
               month: '2-digit',
               year: 'numeric',
@@ -475,10 +474,9 @@ export class ScheduledNotificationService implements OnApplicationBootstrap, OnM
       nombre_pyme: pymeName,
       nombre_consultor: consultantName,
       titulo_sesion: meeting.title,
-      fecha_hora: meeting.startTime.toLocaleString('es-PE', {
+      fecha_hora: formatInPeru(meeting.startTime, {
         dateStyle: 'short',
         timeStyle: 'short',
-        timeZone: 'America/Lima',
       }),
       tiempo: `${meeting.durationMinutes} minutos`,
       enlace: buildMeetingAccessUrl(meeting.id),

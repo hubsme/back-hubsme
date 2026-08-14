@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class TaskResultDto {
   @ApiProperty()
@@ -15,6 +15,12 @@ export class TaskResultDto {
 
   @ApiProperty({ nullable: true })
   meetingId: number | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  meetingStartTime?: Date | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  meetingTitle?: string | null;
 
   @ApiProperty({ nullable: true })
   serviceRequestId: number | null;

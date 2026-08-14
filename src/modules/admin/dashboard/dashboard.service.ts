@@ -9,6 +9,7 @@ import { task } from '@db/tables/task.table';
 import { user } from '@db/tables/user.table';
 import { DashboardRepository } from '@repositories/dashboard.repository';
 import { DashboardFilterDto } from './dto/dashboard-filter.dto';
+import { peruMonthRange } from '@functions/date.function';
 
 @Injectable()
 export class DashboardService {
@@ -36,6 +37,7 @@ export class DashboardService {
     }
 
     const now = new Date();
+    const meetingPeriod = this.currentLimaMonthRange(now);
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
     const billableMeetingConditions = [
@@ -46,7 +48,6 @@ export class DashboardService {
     ];
 
     const [
-      meetingCount,
       taskCount,
       diagnosticCount,
       taskRows,
@@ -57,10 +58,6 @@ export class DashboardService {
       meetingStats,
       latestDiagnostic,
     ] = await Promise.all([
-      database
-        .select({ total: count() })
-        .from(meeting)
-        .where(and(...meetingConditions)),
       database
         .select({ total: count() })
         .from(task)
@@ -90,7 +87,7 @@ export class DashboardService {
         .where(and(...alertConditions))
         .orderBy(desc(dashboardAlert.createdAt))
         .limit(5),
-      this.dashboardRepository.getMeetingStats({ userId, role }),
+      this.dashboardRepository.getMeetingStats({ userId, role }, meetingPeriod),
       this.dashboardRepository.findLatestDiagnostic({ userId, role }),
     ]);
 
@@ -136,7 +133,7 @@ export class DashboardService {
     return {
       stats: {
         clients: activeCounterpartCount,
-        meetings: Number(meetingCount[0].total),
+        meetings: meetingStats.total,
         tasks: Number(taskCount[0].total),
         diagnostics: Number(diagnosticCount[0].total),
         billableHours,
@@ -148,5 +145,9 @@ export class DashboardService {
       workloadByClient: Object.values(workloadByClient),
       alerts: alertRows,
     };
+  }
+
+  private currentLimaMonthRange(now: Date): { start: Date; end: Date } {
+    return peruMonthRange(now);
   }
 }
