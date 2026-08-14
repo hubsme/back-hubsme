@@ -82,6 +82,7 @@ export const consultant = pgTable(
     photoUrl: text('photo_url'),
     videoUrl: text('video_url'),
     pricePerHour: decimal('price_per_hour', { precision: 10, scale: 2 }).default('0.00').notNull(),
+    minimumBookingNoticeHours: integer('minimum_booking_notice_hours').default(48).notNull(),
     rating: decimal('rating', { precision: 3, scale: 2 }).default('0.00').notNull(),
     totalReviews: integer('total_reviews').default(0).notNull(),
     active: varchar('active', { length: 10 }).default('true').notNull(),

@@ -27,6 +27,10 @@ type BusyConflict = {
   endTime: Date | string;
 };
 
+type AvailabilityValidationOptions = {
+  enforceBookingNotice?: boolean;
+};
+
 @Injectable()
 export class ConsultantAvailabilityService {
   private readonly halfHourMinutes = 30;
@@ -66,6 +70,7 @@ export class ConsultantAvailabilityService {
   }
 
   async findVisibleMonth(filters: ConsultantAvailabilityMonthFiltersDto) {
+    const consultant = await this.validateConsultant(filters.consultantId);
     const { startFrom, startTo } = this.getMonthRange(filters.year, filters.month);
     const month = this.getMonthStart(filters.year, filters.month);
     const availability = await this.availabilityRepository.findByMonth(filters.consultantId, month);
@@ -81,12 +86,20 @@ export class ConsultantAvailabilityService {
       })),
       ...googleBusySlots,
     ];
+    const minimumBookingStartTime = this.getMinimumBookingStartTime(
+      consultant.minimumBookingNoticeHours,
+    );
 
     return {
       data: [
         {
           ...this.cleanAvailability(availability),
-          availableSchedule: this.removeBusyConflictsFromSchedule(availability.availableSchedule, month, busySlots),
+          availableSchedule: this.removeBusyConflictsFromSchedule(
+            availability.availableSchedule,
+            month,
+            busySlots,
+            minimumBookingStartTime,
+          ),
         },
       ],
     };
@@ -144,16 +157,24 @@ export class ConsultantAvailabilityService {
     return this.cleanAvailability(deleted);
   }
 
-  async assertAvailableForMeeting(consultantId: number, startTime: Date, durationMinutes: number) {
-    await this.validateConsultant(consultantId);
-    
-    // Validate that meetings are scheduled at least for tomorrow (from tomorrow onwards)
-    const nowLocal = new Date(Date.now() + this.businessTimezoneOffsetMinutes * 60 * 1000);
-    const tomorrowLocal = new Date(Date.UTC(nowLocal.getUTCFullYear(), nowLocal.getUTCMonth(), nowLocal.getUTCDate() + 1, 0, 0, 0, 0));
-    const tomorrowUtc = new Date(tomorrowLocal.getTime() - this.businessTimezoneOffsetMinutes * 60 * 1000);
+  async assertAvailableForMeeting(
+    consultantId: number,
+    startTime: Date,
+    durationMinutes: number,
+    options: AvailabilityValidationOptions = {},
+  ) {
+    const consultant = await this.validateConsultant(consultantId);
 
-    if (startTime.getTime() < tomorrowUtc.getTime()) {
-      throw new BadRequestException(['Las reuniones deben programarse al menos de un día para otro']);
+    if (options.enforceBookingNotice !== false) {
+      const minimumBookingStartTime = this.getMinimumBookingStartTime(
+        consultant.minimumBookingNoticeHours,
+      );
+      if (startTime.getTime() < minimumBookingStartTime.getTime()) {
+        const noticeHours = consultant.minimumBookingNoticeHours;
+        throw new BadRequestException([
+          `El consultor requiere al menos ${noticeHours} ${noticeHours === 1 ? 'hora' : 'horas'} de anticipación`,
+        ]);
+      }
     }
 
     const endTime = new Date(startTime.getTime() + durationMinutes * 60 * 1000);
@@ -189,6 +210,7 @@ export class ConsultantAvailabilityService {
     if (!consultant) {
       throw new NotFoundException(`Consultant profile for user ID ${consultantId} not found`);
     }
+    return consultant;
   }
 
   private cleanAvailability(availability: ConsultantAvailability) {
@@ -234,12 +256,14 @@ export class ConsultantAvailabilityService {
     schedule: ConsultantAvailabilitySchedule,
     month: Date,
     busySlots: BusyConflict[],
+    minimumBookingStartTime: Date,
   ): ConsultantAvailabilitySchedule {
     const filtered = new Map<string, Set<string>>();
 
     for (const [day, times] of Object.entries(schedule ?? {})) {
       for (const time of times) {
         const startTime = this.getDateFromMonthDayTime(month, Number(day), time);
+        if (startTime < minimumBookingStartTime) continue;
         const endTime = new Date(startTime.getTime() + this.halfHourMinutes * 60 * 1000);
         const hasConflict = busySlots.some((slot) =>
           this.overlaps(startTime, endTime, new Date(slot.startTime), new Date(slot.endTime)),
@@ -351,6 +375,10 @@ export class ConsultantAvailabilityService {
 
   private getUtcDateFromLocalParts(year: number, month: number, day: number, hours: number, minutes: number) {
     return new Date(Date.UTC(year, month - 1, day, hours, minutes, 0, 0) - this.businessTimezoneOffsetMinutes * 60 * 1000);
+  }
+
+  private getMinimumBookingStartTime(minimumBookingNoticeHours: number, now = new Date()) {
+    return new Date(now.getTime() + minimumBookingNoticeHours * 60 * 60 * 1000);
   }
 
   private getMeetingEndTime(meeting: MeetingConflict) {

@@ -21,6 +21,7 @@ import { CheckoutRepository } from '@repositories/checkout.repository';
 import { MeetingRepository } from '@repositories/meeting.repository';
 import { ServiceRequestRepository } from '@repositories/service-request.repository';
 import { ConsultantServiceOfferRepository } from '@repositories/consultant-service-offer.repository';
+import { TaskRepository } from '@repositories/task.repository';
 import { ServiceRequestCreateDto } from './dto/service-request-create.dto';
 import { ServiceRequestListFiltersDto } from './dto/service-request-list.dto';
 import { ServiceRequestMilestoneMeetingDto } from './dto/service-request-milestone-meeting.dto';
@@ -55,6 +56,7 @@ export class ServiceRequestService {
     private readonly consultantRepository: ConsultantRepository,
     private readonly checkoutRepository: CheckoutRepository,
     private readonly meetingRepository: MeetingRepository,
+    private readonly taskRepository: TaskRepository,
     private readonly consultantAvailabilityService: ConsultantAvailabilityService,
     private readonly meetingService: MeetingService,
     private readonly storageService: StorageService,
@@ -105,6 +107,12 @@ export class ServiceRequestService {
     const consultantIds = [...new Set(data.consultantIds)];
     if (!consultantIds.length || consultantIds.length > 3) {
       throw new BadRequestException(['Selecciona entre 1 y 3 consultores']);
+    }
+    if (data.sourceTaskId !== undefined) {
+      await this.assertAvailableSourceTask(data.sourceTaskId, currentUser.id);
+      if (consultantIds.length !== 1) {
+        throw new BadRequestException(['Las solicitudes originadas en una tarea deben enviarse a un solo consultor']);
+      }
     }
     if (data.serviceOfferId) {
       const offer = await this.consultantServiceOfferRepository.findOne(data.serviceOfferId);
@@ -177,11 +185,40 @@ export class ServiceRequestService {
             currency: process.env.MERCADO_PAGO_CURRENCY ?? 'PEN',
           };
         }),
+        data.sourceTaskId,
       );
+      if (!created) {
+        throw new ConflictException('Esta tarea ya tiene una solicitud de servicio vinculada');
+      }
       return created.map((item) => ({ ...item, meetings: [], paymentSchedule: [] }));
     } catch (error) {
       await this.deleteUploadedFiles(attachments.map((attachment) => attachment.storagePath));
       throw error;
+    }
+  }
+
+  private async assertAvailableSourceTask(sourceTaskId: number, pymeId: number) {
+    const sourceTask = await this.taskRepository.findOne(sourceTaskId);
+    if (!sourceTask) throw new NotFoundException('La tarea seleccionada no existe');
+    if (sourceTask.pymeId !== pymeId) {
+      throw new ForbiddenException('No puedes solicitar un servicio desde una tarea de otra PYME');
+    }
+    if (sourceTask.serviceRequestId !== null) {
+      throw new ConflictException('Esta tarea ya tiene una solicitud de servicio vinculada');
+    }
+    if (!sourceTask.meetingId) {
+      throw new BadRequestException(['La tarea debe pertenecer a un acta de reunión']);
+    }
+
+    const sourceMeeting = await this.meetingRepository.findOne(sourceTask.meetingId);
+    if (
+      !sourceMeeting ||
+      sourceMeeting.pymeId !== pymeId ||
+      sourceMeeting.status !== 'finalizada' ||
+      sourceMeeting.meetingType !== 'consultoria' ||
+      !sourceMeeting.description?.trim()
+    ) {
+      throw new BadRequestException(['La tarea debe pertenecer a un acta finalizada de consultoría']);
     }
   }
 
@@ -215,6 +252,7 @@ export class ServiceRequestService {
         request.consultantId,
         new Date(selectedInitialMeetingStartTime),
         60,
+        { enforceBookingNotice: false },
       );
     }
 
@@ -931,18 +969,21 @@ export class ServiceRequestService {
     if (hasInitialMeeting) return;
 
     try {
-      const meeting = await this.meetingService.create({
-        pymeId: request.pymeId,
-        consultantId: request.consultantId,
-        title: initialMeetingTitle,
-        startTime: new Date(request.initialMeetingStartTime),
-        durationMinutes: 60,
-        description: `Reunión inicial del servicio: ${request.title}`,
-        requestedBy: 'consultor',
-        meetingType: 'servicio',
-        serviceRequestId: request.id,
-        serviceMilestoneIndex: 0,
-      });
+      const meeting = await this.meetingService.create(
+        {
+          pymeId: request.pymeId,
+          consultantId: request.consultantId,
+          title: initialMeetingTitle,
+          startTime: new Date(request.initialMeetingStartTime),
+          durationMinutes: 60,
+          description: `Reunión inicial del servicio: ${request.title}`,
+          requestedBy: 'consultor',
+          meetingType: 'servicio',
+          serviceRequestId: request.id,
+          serviceMilestoneIndex: 0,
+        },
+        false,
+      );
       await this.meetingService.confirm(meeting.id);
       this.logger.log(`Reunión inicial de servicio ${request.id} creada como reunión ${meeting.id}`);
     } catch (error: unknown) {
@@ -991,7 +1032,6 @@ export class ServiceRequestService {
     const today = new Date(Date.UTC(year, month - 1, day));
 
     const start = new Date(today);
-    start.setUTCDate(start.getUTCDate() + 1);
 
     const monday = new Date(today);
     const daysSinceMonday = (monday.getUTCDay() + 6) % 7;

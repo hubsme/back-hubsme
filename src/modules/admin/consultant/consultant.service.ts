@@ -197,6 +197,8 @@ export class ConsultantService {
       photoUrl: data.photoUrl?.trim(),
       videoUrl: data.videoUrl?.trim(),
       pricePerHour: data.pricePerHour === undefined ? undefined : data.pricePerHour.toFixed(2),
+      minimumBookingNoticeHours:
+        data.minimumBookingNoticeHours === undefined ? undefined : (data.minimumBookingNoticeHours ?? 48),
     };
   }
 

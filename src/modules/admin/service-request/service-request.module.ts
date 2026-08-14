@@ -10,6 +10,7 @@ import { MeetingModule } from '../meeting/meeting.module';
 import { ServiceRequestController } from './service-request.controller';
 import { ServiceRequestService } from './service-request.service';
 import { ConsultantServiceOfferRepository } from '@repositories/consultant-service-offer.repository';
+import { TaskRepository } from '@repositories/task.repository';
 
 @Module({
   imports: [AdminAuthModule, StorageModule, ConsultantAvailabilityModule, MeetingModule],
@@ -21,6 +22,7 @@ import { ConsultantServiceOfferRepository } from '@repositories/consultant-servi
     MeetingRepository,
     CheckoutRepository,
     ConsultantServiceOfferRepository,
+    TaskRepository,
   ],
   exports: [ServiceRequestService],
 })
