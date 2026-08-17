@@ -57,6 +57,7 @@ export class DashboardService {
       alertRows,
       meetingStats,
       latestDiagnostic,
+      taskDeadlines,
     ] = await Promise.all([
       database
         .select({ total: count() })
@@ -89,6 +90,7 @@ export class DashboardService {
         .limit(5),
       this.dashboardRepository.getMeetingStats({ userId, role }, meetingPeriod),
       this.dashboardRepository.findLatestDiagnostic({ userId, role }),
+      this.dashboardRepository.findTaskDeadlines({ userId, role }, now),
     ]);
 
     const taskStatus = taskRows.reduce(
@@ -115,17 +117,31 @@ export class DashboardService {
       return acc;
     }, {});
     const workloadByClient = taskRows.reduce<
-      Record<number, { pymeId: number; name: string; total: number; completed: number }>
+      Record<
+        number,
+        {
+          pymeId: number;
+          name: string;
+          total: number;
+          completed: number;
+          pending: number;
+          inProgress: number;
+        }
+      >
     >((acc, row) => {
       const current = acc[row.pymeId] ?? {
         pymeId: row.pymeId,
         name: pymeNameByUserId[row.pymeId] ?? `PYME ${row.pymeId}`,
         total: 0,
         completed: 0,
+        pending: 0,
+        inProgress: 0,
       };
 
       current.total += 1;
       if (row.status === 'completada') current.completed += 1;
+      if (row.status === 'pendiente') current.pending += 1;
+      if (row.status === 'en_progreso') current.inProgress += 1;
       acc[row.pymeId] = current;
       return acc;
     }, {});
@@ -141,6 +157,7 @@ export class DashboardService {
       latestDiagnostic,
       meetingStats,
       taskStatus,
+      ...taskDeadlines,
       upcomingMeetings: upcomingRows,
       workloadByClient: Object.values(workloadByClient),
       alerts: alertRows,

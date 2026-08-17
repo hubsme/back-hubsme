@@ -1,11 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { and, count, desc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lt, ne, or, sql } from 'drizzle-orm';
 import { database } from '@db/connection.db';
 import { consultant } from '@db/tables/consultant.table';
 import { diagnostic } from '@db/tables/diagnostic.table';
 import { meeting } from '@db/tables/meeting.table';
 import { pyme } from '@db/tables/pyme.table';
 import { task } from '@db/tables/task.table';
+import { addDaysToDateOnly, dateKeyInPeru, peruDateOnlyToUtc } from '@functions/date.function';
 
 type DashboardRole = 'admin' | 'pyme' | 'consultor';
 
@@ -35,6 +36,47 @@ export type DashboardLatestDiagnostic = {
 
 @Injectable()
 export class DashboardRepository {
+  async findTaskDeadlines(scope: DashboardMeetingScope, now = new Date(), limit = 4) {
+    const todayKey = dateKeyInPeru(now);
+    const todayStart = peruDateOnlyToUtc(todayKey);
+    const horizonEnd = peruDateOnlyToUtc(addDaysToDateOnly(todayKey, 7));
+
+    if (!todayStart || !horizonEnd) {
+      return { upcomingTasks: [], overdueTasks: [] };
+    }
+
+    const fields = {
+      id: task.id,
+      title: task.title,
+      dueDate: task.dueDate,
+      priority: task.priority,
+      assignedTo: task.assignedTo,
+      status: task.status,
+    };
+    const baseConditions = [
+      ...this.getTaskScopeConditions(scope),
+      isNotNull(task.dueDate),
+      ne(task.status, 'completada'),
+    ];
+
+    const [upcomingTasks, overdueTasks] = await Promise.all([
+      database
+        .select(fields)
+        .from(task)
+        .where(and(...baseConditions, gte(task.dueDate, todayStart), lt(task.dueDate, horizonEnd)))
+        .orderBy(asc(task.dueDate), asc(task.id))
+        .limit(limit),
+      database
+        .select(fields)
+        .from(task)
+        .where(and(...baseConditions, lt(task.dueDate, todayStart)))
+        .orderBy(desc(task.dueDate), desc(task.id))
+        .limit(limit),
+    ]);
+
+    return { upcomingTasks, overdueTasks };
+  }
+
   async countActiveCounterparts(scope: DashboardMeetingScope): Promise<number> {
     if (!scope.userId || (scope.role !== 'pyme' && scope.role !== 'consultor')) return 0;
 
@@ -191,6 +233,20 @@ export class DashboardRepository {
 
     if (scope.userId && scope.role === 'pyme') {
       conditions.push(eq(meeting.pymeId, scope.userId));
+    }
+
+    return conditions;
+  }
+
+  private getTaskScopeConditions(scope: DashboardMeetingScope) {
+    const conditions = [isNull(task.deletedAt)];
+
+    if (scope.userId && scope.role === 'consultor') {
+      conditions.push(eq(task.consultantId, scope.userId));
+    }
+
+    if (scope.userId && scope.role === 'pyme') {
+      conditions.push(eq(task.pymeId, scope.userId));
     }
 
     return conditions;
