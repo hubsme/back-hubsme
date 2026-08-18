@@ -9,7 +9,8 @@ export class RucVerificationResultDto {
 
   @ApiProperty({
     nullable: true,
-    description: 'Nombre comercial asociado al RUC cuando existe en el registro',
+    description:
+      'Nombre comercial asociado al RUC; usa la razón social cuando el proveedor no informa un nombre comercial',
     example: 'Textiles del Sur SAC',
   })
   nombreComercial: string | null;
