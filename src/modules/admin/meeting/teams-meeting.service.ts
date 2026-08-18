@@ -15,6 +15,7 @@ import {
   GraphSharingPermission,
   MeetingRecording,
 } from './teams-meeting.interface';
+import { formatInPeru } from '@functions/date.function';
 
 @Injectable()
 export class TeamsMeetingService {
@@ -431,8 +432,7 @@ export class TeamsMeetingService {
     }
 
     const recordingPeruDateTime = firstRecordingDateTime
-      ? new Date(firstRecordingDateTime).toLocaleString('es-PE', {
-          timeZone: 'America/Lima',
+      ? formatInPeru(firstRecordingDateTime, {
           day: '2-digit',
           month: 'long',
           year: 'numeric',

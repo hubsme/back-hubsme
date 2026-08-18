@@ -18,6 +18,7 @@ import { buildMeetingDetailUrl } from '@functions/meeting-access-url.function';
 import { MeetingRepository } from '@repositories/meeting.repository';
 import { DiagnosticRepository } from '@repositories/diagnostic.repository';
 import { ConsultantDocumentListFiltersDto } from './dto/consultant-document.dto';
+import { formatInPeru } from '@functions/date.function';
 
 @Injectable()
 export class ConsultantService {
@@ -263,8 +264,7 @@ export class ConsultantService {
       const user = await this.userService.findOne(consultantId);
       if (!user) return;
 
-      const dateStr = startTime.toLocaleString('es-PE', {
-        timeZone: 'America/Lima',
+      const dateStr = formatInPeru(startTime, {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
@@ -363,8 +363,7 @@ export class ConsultantService {
   }
 
   private formatProposedStartTime(startTime: Date) {
-    return startTime.toLocaleString('es-PE', {
-      timeZone: 'America/Lima',
+    return formatInPeru(startTime, {
       weekday: 'long',
       day: '2-digit',
       month: 'long',

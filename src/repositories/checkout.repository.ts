@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { and, desc, eq, gte, isNull, lt, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, isNotNull, isNull, lt, ne, sql } from 'drizzle-orm';
 import { database } from '@db/connection.db';
 import { checkout, CheckoutDTO } from '@db/tables/checkout.table';
 import { promotionCode, promotionCodeRedemption } from '@db/tables/promotion-code.table';
 import { consultant } from '@db/tables/consultant.table';
+import { meeting } from '@db/tables/meeting.table';
 import { pyme } from '@db/tables/pyme.table';
 import { serviceRequest } from '@db/tables/service-request.table';
 
@@ -16,12 +17,59 @@ export type CheckoutHistoryFilters = {
   limit: number;
   from?: Date;
   to?: Date;
+  operationType?: 'servicio' | 'consultoria';
+  paymentType?: 'cupon' | 'mercado_pago' | 'tarjeta' | 'yape';
 };
+
+const paymentHistoryMethodId = sql<string>`LOWER(COALESCE(
+  ${checkout.rawPayment} ->> 'payment_method_id',
+  ${checkout.rawPayment} -> 'payment_method' ->> 'id',
+  ''
+))`;
+
+const paymentHistoryTypeId = sql<string>`LOWER(COALESCE(
+  ${checkout.rawPayment} ->> 'payment_type_id',
+  ${checkout.rawPayment} -> 'payment_method' ->> 'type',
+  ''
+))`;
+
+const hasPromotionCodeRedemption = sql<boolean>`EXISTS (
+  SELECT 1
+  FROM ${promotionCodeRedemption}
+  WHERE ${promotionCodeRedemption.checkoutId} = ${checkout.id}
+    AND ${promotionCodeRedemption.deletedAt} IS NULL
+)`;
 
 const paymentHistorySelection = {
   id: checkout.id,
   createdAt: checkout.createdAt,
   updatedAt: checkout.updatedAt,
+  meetingCreatedAt: sql<Date | null>`COALESCE(
+    ${meeting.createdAt},
+    (
+      SELECT service_meeting.created_at
+      FROM meeting AS service_meeting
+      WHERE service_meeting.service_request_id = ${checkout.serviceRequestId}
+        AND service_meeting.deleted_at IS NULL
+      ORDER BY service_meeting.service_milestone_index ASC NULLS LAST, service_meeting.id ASC
+      LIMIT 1
+    )
+  )`,
+  meetingStartTime: sql<Date | null>`COALESCE(
+    ${meeting.startTime},
+    NULLIF(${meeting.proposedStartTimes}[1], '')::timestamp,
+    (
+      SELECT COALESCE(
+        service_meeting.start_time,
+        NULLIF(service_meeting.proposed_start_times[1], '')::timestamp
+      )
+      FROM meeting AS service_meeting
+      WHERE service_meeting.service_request_id = ${checkout.serviceRequestId}
+        AND service_meeting.deleted_at IS NULL
+      ORDER BY service_meeting.service_milestone_index ASC NULLS LAST, service_meeting.id ASC
+      LIMIT 1
+    )
+  )`,
   meetingId: checkout.meetingId,
   serviceRequestId: checkout.serviceRequestId,
   serviceInstallmentIndex: checkout.serviceInstallmentIndex,
@@ -34,6 +82,8 @@ const paymentHistorySelection = {
   marketplaceFee: checkout.marketplaceFee,
   currency: checkout.currency,
   meetingDetails: checkout.meetingDetails,
+  meetingStatus: meeting.status,
+  meetingCancellationReason: meeting.cancellationReason,
   serviceTitle: serviceRequest.title,
   serviceDescription: serviceRequest.description,
   pymeName: pyme.name,
@@ -131,6 +181,24 @@ export class CheckoutRepository {
 
     if (filters.from) conditions.push(gte(checkout.createdAt, filters.from));
     if (filters.to) conditions.push(lt(checkout.createdAt, filters.to));
+    if (filters.operationType === 'servicio') {
+      conditions.push(isNotNull(checkout.serviceRequestId));
+    } else if (filters.operationType === 'consultoria') {
+      conditions.push(isNull(checkout.serviceRequestId));
+    }
+
+    if (filters.paymentType === 'cupon') {
+      conditions.push(hasPromotionCodeRedemption);
+    } else if (filters.paymentType) {
+      conditions.push(sql`NOT (${hasPromotionCodeRedemption})`);
+      if (filters.paymentType === 'mercado_pago') {
+        conditions.push(sql`(${paymentHistoryMethodId} = 'account_money' OR ${paymentHistoryTypeId} = 'account_money')`);
+      } else if (filters.paymentType === 'tarjeta') {
+        conditions.push(sql`${paymentHistoryTypeId} IN ('credit_card', 'debit_card', 'prepaid_card')`);
+      } else {
+        conditions.push(sql`${paymentHistoryMethodId} = 'yape'`);
+      }
+    }
 
     const where = and(...conditions);
     const offset = (filters.page - 1) * filters.limit;
@@ -141,6 +209,7 @@ export class CheckoutRepository {
         .from(checkout)
         .leftJoin(pyme, eq(checkout.pymeId, pyme.id))
         .leftJoin(consultant, eq(checkout.consultantId, consultant.id))
+        .leftJoin(meeting, eq(checkout.meetingId, meeting.id))
         .leftJoin(serviceRequest, eq(checkout.serviceRequestId, serviceRequest.id))
         .leftJoin(
           promotionCodeRedemption,
@@ -171,6 +240,7 @@ export class CheckoutRepository {
       .from(checkout)
       .leftJoin(pyme, eq(checkout.pymeId, pyme.id))
       .leftJoin(consultant, eq(checkout.consultantId, consultant.id))
+      .leftJoin(meeting, eq(checkout.meetingId, meeting.id))
       .leftJoin(serviceRequest, eq(checkout.serviceRequestId, serviceRequest.id))
       .leftJoin(
         promotionCodeRedemption,

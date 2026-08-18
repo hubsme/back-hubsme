@@ -6,6 +6,7 @@ import { DiagnosticDocumentService } from '../diagnostic-document/diagnostic-doc
 import { DiagnosticGenerateDto } from './dto/diagnostic-generate.dto';
 import { DiagnosticListFiltersDto } from './dto/diagnostic-list.dto';
 import { AiService } from '../ai/ai.service';
+import { formatInPeru } from '@functions/date.function';
 
 @Injectable()
 export class DiagnosticService {
@@ -270,7 +271,7 @@ export class DiagnosticService {
     result: DiagnosticResult,
   ): DiagnosticDocumentDTO[] {
     const businessName = String(data.pymeData?.name ?? 'PYME');
-    const createdAt = new Date().toLocaleDateString('es-PE', {
+    const createdAt = formatInPeru(new Date(), {
       day: '2-digit',
       month: 'long',
       year: 'numeric',

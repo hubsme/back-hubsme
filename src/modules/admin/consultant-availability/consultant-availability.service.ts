@@ -14,6 +14,7 @@ import {
 } from './dto/consultant-availability-list.dto';
 import { ConsultantAvailabilityReplaceMonthDto } from './dto/consultant-availability-replace-month.dto';
 import { ConsultantAvailabilityUpdateDto } from './dto/consultant-availability-update.dto';
+import { dateTimePartsInPeru, peruDateTimeToUtc } from '@functions/date.function';
 
 type MeetingConflict = {
   id: number;
@@ -34,7 +35,6 @@ type AvailabilityValidationOptions = {
 @Injectable()
 export class ConsultantAvailabilityService {
   private readonly halfHourMinutes = 30;
-  private readonly businessTimezoneOffsetMinutes = -5 * 60;
 
   constructor(
     private readonly availabilityRepository: ConsultantAvailabilityRepository,
@@ -363,18 +363,11 @@ export class ConsultantAvailabilityService {
   }
 
   private getLocalDateParts(date: Date) {
-    const localDate = new Date(date.getTime() + this.businessTimezoneOffsetMinutes * 60 * 1000);
-    return {
-      year: localDate.getUTCFullYear(),
-      month: localDate.getUTCMonth() + 1,
-      day: localDate.getUTCDate(),
-      hours: localDate.getUTCHours(),
-      minutes: localDate.getUTCMinutes(),
-    };
+    return dateTimePartsInPeru(date);
   }
 
   private getUtcDateFromLocalParts(year: number, month: number, day: number, hours: number, minutes: number) {
-    return new Date(Date.UTC(year, month - 1, day, hours, minutes, 0, 0) - this.businessTimezoneOffsetMinutes * 60 * 1000);
+    return peruDateTimeToUtc(year, month, day, hours, minutes);
   }
 
   private getMinimumBookingStartTime(minimumBookingNoticeHours: number, now = new Date()) {

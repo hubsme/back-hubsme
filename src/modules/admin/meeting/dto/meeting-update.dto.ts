@@ -37,8 +37,8 @@ export class MeetingUpdateDto {
   @IsOptional()
   description?: string;
 
-  @ApiPropertyOptional({ enum: ['solicitada', 'pago_pendiente', 'por_confirmar', 'confirmada', 'finalizada', 'cancelada'] })
-  @IsIn(['solicitada', 'pago_pendiente', 'por_confirmar', 'confirmada', 'finalizada', 'cancelada'])
+  @ApiPropertyOptional({ enum: ['solicitada', 'por_confirmar', 'confirmada', 'finalizada', 'cancelada'] })
+  @IsIn(['solicitada', 'por_confirmar', 'confirmada', 'finalizada', 'cancelada'])
   @IsOptional()
-  status?: 'solicitada' | 'pago_pendiente' | 'por_confirmar' | 'confirmada' | 'finalizada' | 'cancelada';
+  status?: 'solicitada' | 'por_confirmar' | 'confirmada' | 'finalizada' | 'cancelada';
 }

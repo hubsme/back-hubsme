@@ -41,6 +41,7 @@ import {
   hasValidServiceRequestFileSignature,
   isAllowedServiceRequestFile,
 } from './service-request-upload.config';
+import { dateKeyInPeru, isValidDateOnly } from '@functions/date.function';
 
 const KICKOFF_MILESTONE_TITLE = 'Kickoff y alineamiento inicial';
 const COMPLETION_MILESTONE_TITLE = 'Cierre y finalización del servicio';
@@ -441,8 +442,8 @@ export class ServiceRequestService {
     if (title.length < 3) {
       throw new BadRequestException(['El nombre del hito debe tener al menos 3 caracteres']);
     }
-    const today = this.dateStringInTimeZone(new Date(), 'America/Lima');
-    if (!this.isValidDateOnly(data.dueDate) || data.dueDate < today) {
+    const today = dateKeyInPeru();
+    if (!isValidDateOnly(data.dueDate) || data.dueDate < today) {
       throw new BadRequestException(['La fecha del hito no puede estar en el pasado']);
     }
     const previousMilestone = request.milestones[milestoneIndex - 1];
@@ -531,8 +532,8 @@ export class ServiceRequestService {
     }
 
     const title = data.title.trim();
-    const today = this.dateStringInTimeZone(new Date(), 'America/Lima');
-    if (!this.isValidDateOnly(data.dueDate) || data.dueDate < today) {
+    const today = dateKeyInPeru();
+    if (!isValidDateOnly(data.dueDate) || data.dueDate < today) {
       throw new BadRequestException(['La fecha del hito no puede estar en el pasado']);
     }
     if (request.deadline && data.dueDate > request.deadline) {
@@ -548,7 +549,7 @@ export class ServiceRequestService {
 
     const proposedStartTimes = this.cleanProposedStartTimes(data.proposedStartTimes);
     const meetingAfterMilestone = proposedStartTimes.some(
-      (value) => this.dateStringInTimeZone(new Date(value), 'America/Lima') > data.dueDate,
+      (value) => dateKeyInPeru(value) > data.dueDate,
     );
     if (meetingAfterMilestone) {
       throw new BadRequestException(['Los horarios propuestos deben ser anteriores o iguales a la fecha del hito']);
@@ -764,7 +765,7 @@ export class ServiceRequestService {
     }));
     const kickoffMilestone = normalized.find((milestone) => this.isKickoffMilestoneTitle(milestone.title));
     const kickoffMeetingDate = initialMeetingStartTimes
-      .map((value) => this.dateStringInTimeZone(new Date(value), 'America/Lima'))
+      .map((value) => dateKeyInPeru(value))
       .sort()[0];
     const today = this.currentDateString();
     const kickoffDate = this.clampDateOnly(kickoffMeetingDate ?? kickoffMilestone?.dueDate ?? today, today, deadline);
@@ -900,12 +901,12 @@ export class ServiceRequestService {
     }
 
     const today = this.currentDateString();
-    if (!this.isValidDateOnly(data.deadline) || data.deadline < today) {
+    if (!isValidDateOnly(data.deadline) || data.deadline < today) {
       throw new BadRequestException(['La fecha límite no puede estar en el pasado']);
     }
 
     for (const milestone of data.milestones ?? []) {
-      if (!this.isValidDateOnly(milestone.dueDate) || milestone.dueDate < today || milestone.dueDate > data.deadline) {
+      if (!isValidDateOnly(milestone.dueDate) || milestone.dueDate < today || milestone.dueDate > data.deadline) {
         throw new BadRequestException(['Cada hito debe tener una fecha válida entre hoy y la fecha límite']);
       }
     }
@@ -1004,7 +1005,7 @@ export class ServiceRequestService {
     const normalized = values.map((value) => this.normalizeDateTime(value));
     const uniqueValues = [...new Set(normalized)];
     if (uniqueValues.length !== 3) throw new BadRequestException(['Selecciona exactamente 3 horarios diferentes']);
-    const uniqueDays = new Set(uniqueValues.map((value) => this.dateStringInTimeZone(new Date(value), 'America/Lima')));
+    const uniqueDays = new Set(uniqueValues.map((value) => dateKeyInPeru(value)));
     if (uniqueDays.size !== 3) {
       throw new BadRequestException(['Selecciona horarios pertenecientes a 3 días diferentes']);
     }
@@ -1015,7 +1016,7 @@ export class ServiceRequestService {
   private validateInitialMeetingDateWindow(values: string[]) {
     const { start, end } = this.initialMeetingDateWindow();
     const outsideAllowedWindow = values.some((value) => {
-      const meetingDate = this.dateStringInTimeZone(new Date(value), 'America/Lima');
+      const meetingDate = dateKeyInPeru(value);
       return meetingDate < start || meetingDate > end;
     });
 
@@ -1027,7 +1028,7 @@ export class ServiceRequestService {
   }
 
   private initialMeetingDateWindow() {
-    const todayValue = this.dateStringInTimeZone(new Date(), 'America/Lima');
+    const todayValue = dateKeyInPeru();
     const [year, month, day] = todayValue.split('-').map(Number);
     const today = new Date(Date.UTC(year, month - 1, day));
 
@@ -1046,20 +1047,6 @@ export class ServiceRequestService {
     };
   }
 
-  private dateStringInTimeZone(date: Date, timeZone: string) {
-    const values: Record<string, string> = {};
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(date);
-    for (const part of parts) {
-      if (part.type !== 'literal') values[part.type] = part.value;
-    }
-    return `${values.year}-${values.month}-${values.day}`;
-  }
-
   private utcDateString(date: Date) {
     return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
   }
@@ -1074,18 +1061,7 @@ export class ServiceRequestService {
   }
 
   private currentDateString() {
-    const today = new Date();
-    return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  }
-
-  private isValidDateOnly(value: string) {
-    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-    if (!match) return false;
-    const year = Number(match[1]);
-    const month = Number(match[2]);
-    const day = Number(match[3]);
-    const parsed = new Date(Date.UTC(year, month - 1, day));
-    return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
+    return dateKeyInPeru();
   }
 
   private validateFiles(files: Express.Multer.File[]) {

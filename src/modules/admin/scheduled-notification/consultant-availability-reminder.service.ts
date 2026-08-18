@@ -4,8 +4,13 @@ import { ConsultantAvailabilityRepository } from '@repositories/consultant-avail
 import { ConsultantRepository } from '@repositories/consultant.repository';
 import { EmailService } from '../email/email.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
+import {
+  dateTimePartsInPeru,
+  formatInPeru,
+  formatInUtc,
+  peruDateTimeToUtc,
+} from '@functions/date.function';
 
-const LIMA_UTC_OFFSET_MS = 5 * 60 * 60 * 1000;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const MONDAY = 1;
 const REMINDER_HOUR_LIMA = 6;
@@ -50,8 +55,7 @@ export class ConsultantAvailabilityReminderService implements OnApplicationBoots
     this.timer.unref?.();
 
     this.logger.log(
-      `Proximo recordatorio de disponibilidad: ${nextRun.toLocaleString('es-PE', {
-        timeZone: 'America/Lima',
+      `Proximo recordatorio de disponibilidad: ${formatInPeru(nextRun, {
         dateStyle: 'full',
         timeStyle: 'short',
       })}`,
@@ -146,16 +150,13 @@ export class ConsultantAvailabilityReminderService implements OnApplicationBoots
   }
 
   private getNextMondayAtSix(reference: Date) {
-    const limaDate = new Date(reference.getTime() - LIMA_UTC_OFFSET_MS);
-    const weekday = limaDate.getUTCDay();
-    const daysUntilMonday = (MONDAY - weekday + 7) % 7;
-    let nextRun = new Date(
-      Date.UTC(
-        limaDate.getUTCFullYear(),
-        limaDate.getUTCMonth(),
-        limaDate.getUTCDate() + daysUntilMonday,
-        REMINDER_HOUR_LIMA + 5,
-      ),
+    const lima = dateTimePartsInPeru(reference);
+    const daysUntilMonday = (MONDAY - lima.weekday + 7) % 7;
+    let nextRun = peruDateTimeToUtc(
+      lima.year,
+      lima.month,
+      lima.day + daysUntilMonday,
+      REMINDER_HOUR_LIMA,
     );
 
     if (nextRun.getTime() <= reference.getTime()) {
@@ -166,10 +167,10 @@ export class ConsultantAvailabilityReminderService implements OnApplicationBoots
   }
 
   private getLimaWeekDates(reference: Date): WeekDate[] {
-    const limaDate = new Date(reference.getTime() - LIMA_UTC_OFFSET_MS);
-    const daysSinceMonday = (limaDate.getUTCDay() + 6) % 7;
+    const lima = dateTimePartsInPeru(reference);
+    const daysSinceMonday = (lima.weekday + 6) % 7;
     const monday = new Date(
-      Date.UTC(limaDate.getUTCFullYear(), limaDate.getUTCMonth(), limaDate.getUTCDate() - daysSinceMonday),
+      Date.UTC(lima.year, lima.month - 1, lima.day - daysSinceMonday),
     );
 
     return Array.from({ length: 7 }, (_, index) => {
@@ -207,13 +208,12 @@ export class ConsultantAvailabilityReminderService implements OnApplicationBoots
   }
 
   private formatWeekPeriod(weekDates: WeekDate[]) {
-    const formatter = new Intl.DateTimeFormat('es-PE', {
-      timeZone: 'UTC',
+    const options: Intl.DateTimeFormatOptions = {
       day: '2-digit',
       month: 'long',
       year: 'numeric',
-    });
-    return `Del ${formatter.format(weekDates[0].date)} al ${formatter.format(weekDates[6].date)}`;
+    };
+    return `Del ${formatInUtc(weekDates[0].date, options)} al ${formatInUtc(weekDates[6].date, options)}`;
   }
 
   private buildCalendarUrl() {

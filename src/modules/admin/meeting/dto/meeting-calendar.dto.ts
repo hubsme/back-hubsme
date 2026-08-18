@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDateString } from 'class-validator';
+import { IsDateString, IsIn, IsOptional } from 'class-validator';
 import { PaginationFiltersDto, PaginationMetaDto } from '@modules/admin/common/pagination.dto';
 
 export class MeetingCalendarFiltersDto extends PaginationFiltersDto {
@@ -16,6 +16,15 @@ export class MeetingCalendarFiltersDto extends PaginationFiltersDto {
   })
   @IsDateString()
   endDate: string;
+
+  @ApiProperty({
+    required: false,
+    enum: ['solicitada', 'pendiente', 'confirmada', 'finalizada', 'cancelada'],
+    description: 'Estado visible. Pendiente agrupa pago pendiente y por confirmar.',
+  })
+  @IsIn(['solicitada', 'pendiente', 'confirmada', 'finalizada', 'cancelada'])
+  @IsOptional()
+  status?: 'solicitada' | 'pendiente' | 'confirmada' | 'finalizada' | 'cancelada';
 }
 
 export class MeetingCalendarItemDto {
@@ -65,9 +74,9 @@ export class MeetingCalendarItemDto {
   hasMeetingLink: boolean;
 
   @ApiProperty({
-    enum: ['solicitada', 'pago_pendiente', 'por_confirmar', 'confirmada', 'finalizada', 'cancelada'],
+    enum: ['solicitada', 'por_confirmar', 'confirmada', 'finalizada', 'cancelada'],
   })
-  status: 'solicitada' | 'pago_pendiente' | 'por_confirmar' | 'confirmada' | 'finalizada' | 'cancelada';
+  status: 'solicitada' | 'por_confirmar' | 'confirmada' | 'finalizada' | 'cancelada';
 
   @ApiProperty({ enum: ['pyme', 'consultor'] })
   requestedBy: 'pyme' | 'consultor';

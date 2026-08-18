@@ -10,7 +10,6 @@ export class MeetingConfirmOptionDto {
 
 export const meetingStatuses = [
   'solicitada',
-  'pago_pendiente',
   'por_confirmar',
   'confirmada',
   'finalizada',

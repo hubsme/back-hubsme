@@ -23,6 +23,7 @@ import { User } from '@db/tables/user.table';
 import { MeetingAccessStatus } from './dto/meeting-access.dto';
 import { MeetingConsultantCancelDto } from './dto/meeting-consultant-cancel.dto';
 import { randomBytes } from 'crypto';
+import { parseDateInPeru } from '@functions/date.function';
 
 const MEETING_ACCESS_MARGIN_MS = 15 * 60 * 1000;
 const CONSULTANT_CANCELLATION_GRACE_MS = 24 * 60 * 60 * 1000;
@@ -58,7 +59,7 @@ export class MeetingService {
     const { data, total } = await this.meetingRepository.findCalendarPaginated(
       page,
       limit,
-      { startDate, endDate },
+      { startDate, endDate, status: filters.status },
       requester,
     );
     const totalPages = Math.ceil(total / limit);
@@ -188,7 +189,7 @@ export class MeetingService {
       teamsOnlineMeetingId: null,
       description: data.description?.trim(),
       durationMinutes,
-      status: requestedBy === 'pyme' ? 'pago_pendiente' : 'solicitada',
+      status: 'solicitada',
       requestedBy,
     });
     return this.toMeetingResult(meeting);
@@ -209,9 +210,11 @@ export class MeetingService {
       throw new BadRequestException(['Selecciona una de las opciones propuestas antes de confirmar la reunion']);
     }
 
-    if (!['solicitada', 'pago_pendiente'].includes(meeting.status)) {
+    if (meeting.status !== 'solicitada' || meeting.requestedBy !== 'consultor') {
       this.logger.warn(`Meeting ${meeting.id} cannot be confirmed because status is ${meeting.status}`);
-      throw new BadRequestException(['Solo se pueden confirmar reuniones solicitadas o pendientes de pago']);
+      throw new BadRequestException([
+        'Solo se pueden confirmar directamente las reuniones solicitadas por el consultor',
+      ]);
     }
 
     const teamsMeeting = await this.createTeamsMeeting({
@@ -236,8 +239,8 @@ export class MeetingService {
     const meeting = await this.findOne(id);
 
     if (meeting.status === 'por_confirmar') return meeting;
-    if (meeting.status !== 'pago_pendiente') {
-      throw new BadRequestException(['Solo se pueden marcar como pagadas las reuniones pendientes de pago']);
+    if (meeting.status !== 'solicitada' || meeting.requestedBy !== 'pyme') {
+      throw new BadRequestException(['Solo se pueden marcar como pagadas las reuniones solicitadas por la PYME']);
     }
     this.assertThreeProposedStartTimes(meeting.proposedStartTimes ?? []);
 
@@ -336,13 +339,8 @@ export class MeetingService {
     if (data.status === 'finalizada') {
       throw new BadRequestException(['Usa el endpoint de finalizacion para cerrar reuniones']);
     }
-    if (data.status === 'pago_pendiente') {
-      if (meeting.status !== 'solicitada' || meeting.requestedBy !== 'pyme') {
-        throw new BadRequestException(['Solo el consultor puede aceptar solicitudes creadas por la PYME']);
-      }
-    }
-    if (data.status === 'cancelada' && !['solicitada', 'pago_pendiente'].includes(meeting.status)) {
-      throw new BadRequestException(['Solo se pueden cancelar reuniones solicitadas o pendientes de pago']);
+    if (data.status === 'cancelada' && meeting.status !== 'solicitada') {
+      throw new BadRequestException(['Solo se pueden cancelar reuniones solicitadas']);
     }
 
     const updatedMeeting = await this.meetingRepository.update(id, {
@@ -457,7 +455,7 @@ export class MeetingService {
         assignedTo: task.assignedTo,
         priority: task.priority,
         status: task.status ?? 'pendiente',
-        dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
+        dueDate: this.parseTaskDueDate(task.dueDate),
       };
 
       const existingTask = task.id ? currentTasksById.get(task.id) : undefined;
@@ -529,6 +527,19 @@ export class MeetingService {
     if (values.length !== 3) {
       throw new BadRequestException(['Selecciona exactamente 3 opciones de horario']);
     }
+  }
+
+  private parseTaskDueDate(value?: string): Date | undefined {
+    const normalizedValue = value?.trim();
+    if (!normalizedValue) return undefined;
+
+    const parsedDate = parseDateInPeru(normalizedValue);
+
+    if (Number.isNaN(parsedDate.getTime())) {
+      throw new BadRequestException(['La fecha límite de una tarea no es válida']);
+    }
+
+    return parsedDate;
   }
 
   private assertMeetingParticipant(

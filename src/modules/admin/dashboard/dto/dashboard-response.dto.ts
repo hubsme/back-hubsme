@@ -59,6 +59,26 @@ export class DashboardTaskStatusDto {
   bloqueada: number;
 }
 
+export class DashboardTaskDeadlineDto {
+  @ApiProperty()
+  id: number;
+
+  @ApiProperty()
+  title: string;
+
+  @ApiProperty()
+  dueDate: Date;
+
+  @ApiProperty({ enum: ['alta', 'media', 'baja'] })
+  priority: 'alta' | 'media' | 'baja';
+
+  @ApiProperty({ enum: ['pyme', 'consultor'] })
+  assignedTo: 'pyme' | 'consultor';
+
+  @ApiProperty({ enum: ['pendiente', 'en_progreso', 'bloqueada'] })
+  status: 'pendiente' | 'en_progreso' | 'bloqueada';
+}
+
 export class DashboardMeetingDto {
   @ApiProperty()
   id: number;
@@ -88,6 +108,12 @@ export class DashboardWorkloadClientDto {
 
   @ApiProperty()
   completed: number;
+
+  @ApiProperty()
+  pending: number;
+
+  @ApiProperty()
+  inProgress: number;
 }
 
 export class DashboardAlertDto {
@@ -116,6 +142,12 @@ export class DashboardResponseDto {
 
   @ApiProperty({ type: DashboardTaskStatusDto })
   taskStatus: DashboardTaskStatusDto;
+
+  @ApiProperty({ type: [DashboardTaskDeadlineDto] })
+  upcomingTasks: DashboardTaskDeadlineDto[];
+
+  @ApiProperty({ type: [DashboardTaskDeadlineDto] })
+  overdueTasks: DashboardTaskDeadlineDto[];
 
   @ApiProperty({ type: [DashboardMeetingDto] })
   upcomingMeetings: DashboardMeetingDto[];

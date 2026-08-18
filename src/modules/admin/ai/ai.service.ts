@@ -27,6 +27,7 @@ import { MeetingRepository } from '@repositories/meeting.repository';
 import { TaskRepository } from '@repositories/task.repository';
 import { ConsultantCvProfileResultDto } from './dto/consultant-cv/consultant-cv-profile-result.dto';
 import { HubsmeAiResultDto } from './dto/hubsme-ai/hubsme-ai-result.dto';
+import { dateKeyInPeru, formatInPeru, isValidDateOnly, PERU_TIME_ZONE } from '@functions/date.function';
 import { ServiceConsultantMatchRunDto } from './dto/service-request/service-consultant-match-run.dto';
 import {
   ServiceConsultantMatchDto,
@@ -360,7 +361,7 @@ export class AiService {
       'Analiza la siguiente transcripción de reunión de consultoría y redacta un ACTA DE REUNIÓN, no un resumen narrativo.\n' +
       'El acta debe ser objetiva, verificable, breve en deliberaciones y fuerte en acuerdos. Debe conservar decisiones, acuerdos, responsables, fechas, pendientes y próximos pasos.\n' +
       'Estructura el campo summary en Markdown con estos apartados: # Acta de reunion, ## Datos de la sesion, ## Asistentes mencionados, ## Orden del dia o temas tratados, ## Deliberaciones principales, ## Acuerdos y decisiones, ## Compromisos de la PYME, ## Pendientes y riesgos, ## Proxima reunion, ## Cierre.\n' +
-      'La entrada puede comenzar con DATOS VERIFICADOS DE LA REUNIÓN. Esos datos tienen prioridad sobre la transcripción: usa la fecha y hora de la primera grabación y registra Microsoft Teams como lugar cuando se indique. Para fecha y hora usa siempre la referencia de Perú (America/Lima), con formato am/pm; no muestres UTC.\n' +
+      `La entrada puede comenzar con DATOS VERIFICADOS DE LA REUNIÓN. Esos datos tienen prioridad sobre la transcripción: usa la fecha y hora de la primera grabación y registra Microsoft Teams como lugar cuando se indique. Para fecha y hora usa siempre la referencia de Perú (${PERU_TIME_ZONE}), con formato am/pm; no muestres UTC.\n` +
       'Si un dato no aparece en la transcripción, escribe "No especificado" en vez de inventarlo.\n' +
       'Extrae todas las tareas accionables que se desprendan de la reunión, tanto para la PYME como para el consultor cuando corresponda. Usa assignedTo="pyme" o assignedTo="consultor" según el responsable explícito. No inventes tareas ni responsables; si no hay tareas, devuelve un arreglo vacío.\n\n' +
       'Debes responder ÚNICAMENTE con un objeto JSON válido con la siguiente estructura y en español:\n' +
@@ -1243,40 +1244,20 @@ export class AiService {
   }
 
   private getServiceRequestDateContext() {
-    const timeZone = 'America/Lima';
     const now = new Date();
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(now);
-    const values: Record<string, string> = {};
-    for (const part of parts) {
-      if (part.type !== 'literal') values[part.type] = part.value;
-    }
 
     return {
-      today: `${values.year}-${values.month}-${values.day}`,
-      formattedDate: new Intl.DateTimeFormat('es-PE', {
-        timeZone,
+      today: dateKeyInPeru(now),
+      formattedDate: formatInPeru(now, {
         dateStyle: 'full',
-      }).format(now),
-      timeZone,
+      }),
+      timeZone: PERU_TIME_ZONE,
     };
   }
 
   private normalizeDateString(value: unknown) {
     const date = this.readString(value);
-    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-    if (!match) return '';
-    const year = Number(match[1]);
-    const month = Number(match[2]);
-    const day = Number(match[3]);
-    const parsed = new Date(Date.UTC(year, month - 1, day));
-    return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day
-      ? date
-      : '';
+    return isValidDateOnly(date) ? date : '';
   }
 
   private isCurrentOrFutureDate(value: string) {
@@ -1429,7 +1410,7 @@ export class AiService {
             description: this.readLongText(sourceTask.description, 1_000),
             assignedTo: sourceTask.assignedTo,
             status: sourceTask.status,
-            dueDate: sourceTask.dueDate ? sourceTask.dueDate.toISOString().slice(0, 10) : null,
+            dueDate: sourceTask.dueDate ? dateKeyInPeru(sourceTask.dueDate) : null,
           }
         : null,
       tasks: (sourceTask ? meeting.tasks.filter((task) => task.id === sourceTask.id) : meeting.tasks)
@@ -1439,7 +1420,7 @@ export class AiService {
           description: this.readLongText(task.description, 1_000),
           assignedTo: task.assignedTo,
           status: task.status,
-          dueDate: task.dueDate ? task.dueDate.toISOString().slice(0, 10) : null,
+          dueDate: task.dueDate ? dateKeyInPeru(task.dueDate) : null,
         })),
     };
   }

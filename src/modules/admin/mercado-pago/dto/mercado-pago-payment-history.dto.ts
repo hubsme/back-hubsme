@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 import { PaginationFiltersDto, PaginationMetaDto } from '../../common/pagination.dto';
 import { CheckoutMeetingDetailsDto } from './mercado-pago-checkout.dto';
 
@@ -20,6 +20,19 @@ export class MercadoPagoPaymentHistoryFiltersDto extends PaginationFiltersDto {
   @IsOptional()
   month?: number = new Date().getMonth() + 1;
 
+  @ApiPropertyOptional({ enum: ['servicio', 'consultoria'], description: 'Type of operation' })
+  @IsIn(['servicio', 'consultoria'])
+  @IsOptional()
+  operationType?: 'servicio' | 'consultoria';
+
+  @ApiPropertyOptional({
+    enum: ['cupon', 'mercado_pago', 'tarjeta', 'yape'],
+    description: 'Payment method category',
+  })
+  @IsIn(['cupon', 'mercado_pago', 'tarjeta', 'yape'])
+  @IsOptional()
+  paymentType?: 'cupon' | 'mercado_pago' | 'tarjeta' | 'yape';
+
   @ApiPropertyOptional({ description: 'Maximum of 10 payments per page', default: 10, maximum: 10 })
   @Type(() => Number)
   @IsInt()
@@ -38,6 +51,12 @@ export class MercadoPagoPaymentHistoryItemDto {
 
   @ApiProperty()
   updatedAt: Date;
+
+  @ApiProperty({ nullable: true, type: Date })
+  meetingCreatedAt: Date | null;
+
+  @ApiProperty({ nullable: true, type: Date })
+  meetingStartTime: Date | null;
 
   @ApiProperty({ nullable: true })
   meetingId: number | null;
@@ -71,6 +90,15 @@ export class MercadoPagoPaymentHistoryItemDto {
 
   @ApiPropertyOptional({ type: CheckoutMeetingDetailsDto, nullable: true })
   meetingDetails?: CheckoutMeetingDetailsDto | null;
+
+  @ApiProperty({
+    enum: ['solicitada', 'por_confirmar', 'confirmada', 'finalizada', 'cancelada'],
+    nullable: true,
+  })
+  meetingStatus: 'solicitada' | 'por_confirmar' | 'confirmada' | 'finalizada' | 'cancelada' | null;
+
+  @ApiProperty({ nullable: true })
+  meetingCancellationReason: string | null;
 
   @ApiProperty({ nullable: true })
   serviceTitle: string | null;

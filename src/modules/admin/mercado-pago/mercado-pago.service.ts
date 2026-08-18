@@ -252,6 +252,8 @@ export class MercadoPagoService {
       limit,
       from,
       to,
+      operationType: filters.operationType,
+      paymentType: filters.paymentType,
     });
     const totalPages = result.total > 0 ? Math.ceil(result.total / limit) : 0;
 

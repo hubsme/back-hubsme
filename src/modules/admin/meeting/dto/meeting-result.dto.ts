@@ -41,8 +41,8 @@ export class MeetingResultDto {
   @ApiProperty({ description: 'Indica si la reunión tiene un acceso virtual configurado' })
   hasMeetingLink: boolean;
 
-  @ApiProperty({ enum: ['solicitada', 'pago_pendiente', 'por_confirmar', 'confirmada', 'finalizada', 'cancelada'] })
-  status: 'solicitada' | 'pago_pendiente' | 'por_confirmar' | 'confirmada' | 'finalizada' | 'cancelada';
+  @ApiProperty({ enum: ['solicitada', 'por_confirmar', 'confirmada', 'finalizada', 'cancelada'] })
+  status: 'solicitada' | 'por_confirmar' | 'confirmada' | 'finalizada' | 'cancelada';
 
   @ApiProperty({ enum: ['pyme', 'consultor'] })
   requestedBy: 'pyme' | 'consultor';

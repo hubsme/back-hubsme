@@ -11,6 +11,7 @@ import { EmailService } from '../email/email.service';
 import { MeetingRepository } from '@repositories/meeting.repository';
 import { DiagnosticRepository } from '@repositories/diagnostic.repository';
 import { PymeDocumentListFiltersDto } from './dto/pyme-document.dto';
+import { formatInPeru } from '@functions/date.function';
 
 @Injectable()
 export class PymeService {
@@ -151,8 +152,7 @@ export class PymeService {
       const pyme = await this.pymeRepository.findOne(pymeId);
       if (!pyme) return;
 
-      const dateStr = startTime.toLocaleString('es-PE', {
-        timeZone: 'America/Lima',
+      const dateStr = formatInPeru(startTime, {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
@@ -226,8 +226,7 @@ export class PymeService {
   }
 
   private formatProposedStartTime(startTime: Date) {
-    return startTime.toLocaleString('es-PE', {
-      timeZone: 'America/Lima',
+    return formatInPeru(startTime, {
       weekday: 'long',
       day: '2-digit',
       month: 'long',

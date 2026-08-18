@@ -4,7 +4,6 @@ import { serviceRequest } from './service-request.table';
 
 export const meetingStatusEnum = pgEnum('meeting_status', [
   'solicitada',
-  'pago_pendiente',
   'por_confirmar',
   'confirmada',
   'finalizada',

@@ -64,16 +64,32 @@ export class IdentityVerificationService {
       'RUC',
       [400, 404, 422],
     );
-    const providerFound = Boolean(providerBody?.estado && providerBody.resultado);
+    const providerResult = providerBody?.estado ? providerBody.resultado : null;
+    const providerFound = Boolean(providerResult);
 
     return {
       verified: providerFound,
       providerFound,
-      nombreComercial: providerFound ? providerBody?.resultado?.nombre_comercial ?? null : null,
+      nombreComercial: providerFound ? this.resolveRucBusinessName(providerResult) : null,
       message: providerFound
-        ? 'El RUC existe en el registro consultado.'
+        ? providerBody?.mensaje?.trim() || 'El RUC existe en el registro consultado.'
         : 'No se encontró información para el RUC enviado.',
     };
+  }
+
+  private resolveRucBusinessName(result: PeruDevsRucResponse['resultado']): string | null {
+    if (!result) return null;
+
+    const commercialName = this.normalizeProviderText(result.nombre_comercial);
+    if (commercialName) return commercialName;
+
+    return this.normalizeProviderText(result.razon_social);
+  }
+
+  private normalizeProviderText(value: string | null | undefined): string | null {
+    const normalized = value?.trim();
+    if (!normalized || normalized === '-' || normalized.toUpperCase() === 'N/A') return null;
+    return normalized;
   }
 
   private async requestProvider<T>(

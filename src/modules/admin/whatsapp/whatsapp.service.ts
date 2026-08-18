@@ -20,6 +20,7 @@ import { WhatsappConsultorConfirmarReunionDto } from './dto/whatsapp-consultor-c
 import { WhatsappNotificacionCancelacionPymeDto } from './dto/whatsapp-notificacion-cancelacion-pyme.dto';
 import { normalizeWhatsappPhone } from './utils/whatsapp.utils';
 import type { WhatsappWebhookMessage, WhatsappWebhookPayload } from './types/whatsapp-webhook.types';
+import { formatInPeru } from '@functions/date.function';
 
 type WhatsappProviderResponse = Record<string, unknown> | string | null;
 type ProposedOption = {
@@ -646,11 +647,10 @@ export class WhatsappService {
   }
 
   private formatMeetingDateTime(value: Date | string): string {
-    return new Intl.DateTimeFormat('es-PE', {
+    return formatInPeru(value, {
       dateStyle: 'full',
       timeStyle: 'short',
-      timeZone: 'America/Lima',
-    }).format(new Date(value));
+    });
   }
 
   private assertMetaSignature(rawBody: Buffer | undefined, signature?: string) {
