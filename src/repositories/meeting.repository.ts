@@ -7,6 +7,7 @@ import { consultant } from '@db/tables/consultant.table';
 import { pyme } from '@db/tables/pyme.table';
 import { User } from '@db/tables/user.table';
 import { promotionCode, PromotionCodeDTO } from '@db/tables/promotion-code.table';
+import { meetingRescheduleHistory } from '@db/tables/meeting-reschedule-history.table';
 
 @Injectable()
 export class MeetingRepository {
@@ -325,6 +326,29 @@ export class MeetingRepository {
         .insert(promotionCode)
         .values(promotionData)
         .returning();
+
+      const existingParent = await tx
+        .select({ rootMeetingId: meetingRescheduleHistory.rootMeetingId })
+        .from(meetingRescheduleHistory)
+        .where(
+          and(
+            eq(meetingRescheduleHistory.replacementMeetingId, id),
+            isNull(meetingRescheduleHistory.deletedAt),
+          ),
+        )
+        .limit(1);
+
+      const rootMeetingId = existingParent[0]?.rootMeetingId ?? id;
+
+      await tx.insert(meetingRescheduleHistory).values({
+        rootMeetingId,
+        sourceMeetingId: id,
+        promotionCodeId: promotionCodes[0].id,
+        cancellationReason,
+        cancelledBy: consultantId,
+        replacementMeetingId: null,
+        promotionCodeRedemptionId: null,
+      });
 
       return {
         meeting: cancelledMeetings[0],

@@ -2,7 +2,7 @@ import { BadRequestException, Injectable, Logger, NotFoundException, Unauthorize
 import { JwtService } from '@nestjs/jwt';
 import { Consultant } from '@db/tables/consultant.table';
 import { ConsultantMercadoPagoAccount } from '@db/tables/consultant-mercado-pago-account.table';
-import { CheckoutRaw } from '@db/tables/checkout.table';
+import { Checkout, CheckoutRaw } from '@db/tables/checkout.table';
 import { User } from '@db/tables/user.table';
 import { ConsultantMercadoPagoAccountRepository } from '@repositories/consultant-mercado-pago-account.repository';
 import { ConsultantRepository } from '@repositories/consultant.repository';
@@ -18,6 +18,7 @@ import { SubscriptionService } from '../subscription/subscription.service';
 import { ServiceRequestService } from '../service-request/service-request.service';
 import { MercadoPagoCreateCheckoutDto, MercadoPagoPaymentWebhookQueryDto } from './dto/mercado-pago-checkout.dto';
 import { MercadoPagoPaymentHistoryFiltersDto } from './dto/mercado-pago-payment-history.dto';
+import { MeetingConsultantPayoutService } from '../meeting/meeting-consultant-payout.service';
 
 type MercadoPagoState = {
   flow: 'consultant-mercado-pago';
@@ -89,6 +90,7 @@ export class MercadoPagoService {
     private readonly pymeService: PymeService,
     private readonly subscriptionService: SubscriptionService,
     private readonly serviceRequestService: ServiceRequestService,
+    private readonly meetingConsultantPayoutService: MeetingConsultantPayoutService,
   ) {}
 
   async getAuthUrl(query: MercadoPagoAuthUrlDto) {
@@ -198,8 +200,7 @@ export class MercadoPagoService {
 
     const consultant = await this.validateConsultant(data.consultantId);
     const amount = this.calculateAmount(consultant, durationMinutes);
-    const marketplaceFee = this.calculateMarketplaceFee(amount);
-
+    const platformCommission = this.calculatePlatformCommission(amount);
     const tempRef = `pending:${pymeId}:${data.consultantId}:${Date.now()}`;
 
     return this.checkoutRepository.create({
@@ -211,8 +212,9 @@ export class MercadoPagoService {
       sandboxInitPoint: null,
       externalReference: tempRef,
       status: 'created',
+      collectionDestination: 'hubsme',
       amount: amount.toFixed(2),
-      marketplaceFee: marketplaceFee.toFixed(2),
+      marketplaceFee: platformCommission.toFixed(2),
       currency: this.getCurrency(),
       meetingDetails: {
         startTime: proposedStartTimes[0],
@@ -296,16 +298,14 @@ export class MercadoPagoService {
       throw new BadRequestException(['El checkout no contiene los datos de la reunión']);
     }
 
-    const account = await this.accountRepository.findByConsultantId(checkout.consultantId);
-    if (!account) {
-      throw new BadRequestException(['El consultor aun no conecto su cuenta de Mercado Pago']);
-    }
-
-    const accessToken = await this.getValidAccessToken(account);
+    const isCollectedByHubsme = checkout.collectionDestination === 'hubsme';
+    const accessToken = isCollectedByHubsme
+      ? this.getPlatformAccessToken()
+      : await this.getConsultantCheckoutAccessToken(checkout.consultantId);
     const preference = await this.createPreference(accessToken, {
       title: checkout.meetingDetails.title,
       amount: Number(checkout.amount),
-      marketplaceFee: Number(checkout.marketplaceFee),
+      marketplaceFee: isCollectedByHubsme ? undefined : Number(checkout.marketplaceFee),
       externalReference: checkout.externalReference,
     });
 
@@ -371,6 +371,7 @@ export class MercadoPagoService {
         sandboxInitPoint: null,
         externalReference,
         status: 'created',
+        collectionDestination: 'hubsme',
         amount: amount.toFixed(2),
         marketplaceFee: '0.00',
         currency: serviceRequest.currency,
@@ -382,6 +383,7 @@ export class MercadoPagoService {
         sandboxInitPoint: null,
         externalReference,
         status: 'created',
+        collectionDestination: 'hubsme',
         amount: amount.toFixed(2),
         marketplaceFee: '0.00',
         currency: serviceRequest.currency,
@@ -481,7 +483,7 @@ export class MercadoPagoService {
       ? await this.checkoutRepository.findByExternalReference(queryExternalReference)
       : undefined;
     const consultantToken =
-      checkoutFromQuery && !this.isHubsmeServicePayment(checkoutFromQuery)
+      checkoutFromQuery?.collectionDestination === 'consultant'
         ? await this.getPaymentAccessTokenForCheckout(checkoutFromQuery.consultantId)
         : undefined;
     const payment = await this.getPayment(paymentId, consultantToken);
@@ -512,8 +514,13 @@ export class MercadoPagoService {
     });
 
     if (!approvedCheckout) {
-      if (checkout.status === 'approved') {
-        await this.markServicePaidAfterInitialInstallment(checkout);
+      const persistedCheckout = (await this.checkoutRepository.findOne(checkout.id)) ?? checkout;
+      if (persistedCheckout.status === 'approved') {
+        if (persistedCheckout.serviceRequestId) {
+          await this.markServicePaidAfterInitialInstallment(persistedCheckout);
+        } else {
+          await this.meetingConsultantPayoutService.ensurePendingFromCheckout(persistedCheckout);
+        }
       }
       return { received: true };
     }
@@ -525,6 +532,7 @@ export class MercadoPagoService {
       }
 
       let meetingId = approvedCheckout.meetingId;
+      let payoutCheckout: Checkout = approvedCheckout;
       if (meetingId) {
         await this.meetingService.markPaidPendingConfirmation(meetingId);
       } else if (approvedCheckout.meetingDetails) {
@@ -541,17 +549,22 @@ export class MercadoPagoService {
 
         await this.meetingService.markPaidPendingConfirmation(newMeeting.id);
 
-        await this.checkoutRepository.update(approvedCheckout.id, {
+        payoutCheckout = await this.checkoutRepository.update(approvedCheckout.id, {
           meetingId: newMeeting.id,
         });
         meetingId = newMeeting.id;
       }
 
       if (meetingId) {
+        await this.meetingConsultantPayoutService.ensurePendingFromCheckout(payoutCheckout);
         this.sendMeetingNotifications(meetingId, approvedCheckout).catch(() => undefined);
       }
     } catch (error) {
-      // Ignorar errores silenciosamente
+      this.logger.error(
+        `No se pudo completar el pago de consultoría del checkout ${approvedCheckout.id}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      throw error;
     }
 
     return { received: true };
@@ -801,10 +814,15 @@ export class MercadoPagoService {
     return Number(amount.toFixed(2));
   }
 
-  private calculateMarketplaceFee(amount: number) {
-    const rawPercent = Number(process.env.MERCADO_PAGO_PLATFORM_FEE_PERCENT ?? 0);
-    const fee = (amount * (Number.isFinite(rawPercent) ? rawPercent : 0)) / 100;
-    return Number(Math.max(0, fee).toFixed(2));
+  /**
+   * Comisión contable de Hubsme. En los checkouts cobrados por Hubsme este valor
+   * no se envía a Mercado Pago como marketplace_fee: el total entra a Hubsme y
+   * la comisión se descuenta únicamente al calcular el depósito al consultor.
+   */
+  private calculatePlatformCommission(amount: number) {
+    const configuredPercent = Number(process.env.MERCADO_PAGO_PLATFORM_FEE_PERCENT ?? 0);
+    const percent = Number.isFinite(configuredPercent) ? Math.min(Math.max(configuredPercent, 0), 100) : 0;
+    return Number(((amount * percent) / 100).toFixed(2));
   }
 
   private mapPaymentStatus(status?: string): 'created' | 'pending' | 'approved' | 'rejected' | 'cancelled' | 'expired' {
@@ -919,6 +937,14 @@ export class MercadoPagoService {
   private async getPaymentAccessTokenForCheckout(consultantId: number) {
     const account = await this.accountRepository.findByConsultantId(consultantId);
     return account ? this.getValidAccessToken(account) : undefined;
+  }
+
+  private async getConsultantCheckoutAccessToken(consultantId: number) {
+    const account = await this.accountRepository.findByConsultantId(consultantId);
+    if (!account) {
+      throw new BadRequestException(['El consultor aún no conectó su cuenta de Mercado Pago']);
+    }
+    return this.getValidAccessToken(account);
   }
 
   private getOAuthConfig(requireSecret = false) {
