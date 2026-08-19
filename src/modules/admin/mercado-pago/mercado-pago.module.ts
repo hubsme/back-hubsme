@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConsultantRepository } from '@repositories/consultant.repository';
 import { PymeRepository } from '@repositories/pyme.repository';
-import { ConsultantMercadoPagoAccountRepository } from '@repositories/consultant-mercado-pago-account.repository';
 import { MeetingRepository } from '@repositories/meeting.repository';
 import { CheckoutRepository } from '@repositories/checkout.repository';
 
@@ -14,6 +13,7 @@ import { SubscriptionModule } from '../subscription/subscription.module';
 import { ServiceRequestModule } from '../service-request/service-request.module';
 import { MercadoPagoController } from './mercado-pago.controller';
 import { MercadoPagoService } from './mercado-pago.service';
+import { MercadoPagoAccountModule } from './mercado-pago-account.module';
 
 @Module({
   imports: [
@@ -24,13 +24,13 @@ import { MercadoPagoService } from './mercado-pago.service';
     PymeModule,
     SubscriptionModule,
     ServiceRequestModule,
+    MercadoPagoAccountModule,
   ],
   controllers: [MercadoPagoController],
   providers: [
     MercadoPagoService,
     ConsultantRepository,
     PymeRepository,
-    ConsultantMercadoPagoAccountRepository,
     CheckoutRepository,
     MeetingRepository,
   ],

@@ -13,12 +13,12 @@ import { ConsultantCaseStudyDto, ConsultantEducationDto } from './dto/consultant
 import { UserService } from '../user/user.service';
 import { WhatsappService } from '../whatsapp/whatsapp.service';
 import { EmailService } from '../email/email.service';
-import { ConsultantMercadoPagoAccountRepository } from '@repositories/consultant-mercado-pago-account.repository';
 import { buildMeetingDetailUrl } from '@functions/meeting-access-url.function';
 import { MeetingRepository } from '@repositories/meeting.repository';
 import { DiagnosticRepository } from '@repositories/diagnostic.repository';
 import { ConsultantDocumentListFiltersDto } from './dto/consultant-document.dto';
 import { formatInPeru } from '@functions/date.function';
+import { MercadoPagoAccountService } from '../mercado-pago/mercado-pago-account.service';
 
 @Injectable()
 export class ConsultantService {
@@ -28,7 +28,7 @@ export class ConsultantService {
     private readonly userService: UserService,
     private readonly whatsappService: WhatsappService,
     private readonly emailService: EmailService,
-    private readonly mercadoPagoAccountRepository: ConsultantMercadoPagoAccountRepository,
+    private readonly mercadoPagoAccountService: MercadoPagoAccountService,
     private readonly meetingRepository: MeetingRepository,
     private readonly diagnosticRepository: DiagnosticRepository,
   ) {}
@@ -36,9 +36,7 @@ export class ConsultantService {
   async findAllPaginated(filters: ConsultantListFiltersDto, onlyAvailable = false) {
     const page = filters.page ?? 1;
     const limit = filters.limit ?? 10;
-    const listFilters = onlyAvailable
-      ? { ...filters, active: 'true', validated: 'true' as const }
-      : filters;
+    const listFilters = onlyAvailable ? { ...filters, active: 'true', validated: 'true' as const } : filters;
     const { data, total } = await this.consultantRepository.findAllPaginated(page, limit, listFilters);
     const totalPages = Math.ceil(total / limit);
 
@@ -56,16 +54,17 @@ export class ConsultantService {
 
   async findMercadoPagoDetails(id: number) {
     await this.findOne(id);
-    const account = await this.mercadoPagoAccountRepository.findConnectionDetailsByConsultantId(id);
+    return this.mercadoPagoAccountService.findAdminDetails(id);
+  }
 
-    return {
-      connected: Boolean(account),
-      mercadoPagoUserId: account?.mercadoPagoUserId ?? null,
-      nickname: account?.nickname ?? null,
-      email: account?.email ?? null,
-      connectedAt: account?.connectedAt ?? null,
-      lastUpdatedAt: account?.lastUpdatedAt ?? null,
-    };
+  async findMercadoPagoFinancialDetails(id: number) {
+    await this.findOne(id);
+    return this.mercadoPagoAccountService.findFinancialDetails(id);
+  }
+
+  async downloadMercadoPagoFinancialReport(id: number, taskId?: string) {
+    await this.findOne(id);
+    return this.mercadoPagoAccountService.downloadLatestFinancialReport(id, taskId);
   }
 
   async findByUserId(userId: number) {
@@ -218,9 +217,7 @@ export class ConsultantService {
     const trimmedValue = value?.trim();
     if (!trimmedValue) return undefined;
 
-    return /^https?:\/\//i.test(trimmedValue)
-      ? trimmedValue
-      : `https://${trimmedValue.replace(/^\/+/, '')}`;
+    return /^https?:\/\//i.test(trimmedValue) ? trimmedValue : `https://${trimmedValue.replace(/^\/+/, '')}`;
   }
 
   private cleanDiagnosticAreas(value?: ConsultantDiagnosticArea[]) {
