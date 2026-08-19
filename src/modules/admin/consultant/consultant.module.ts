@@ -8,18 +8,17 @@ import { UserModule } from '../user/user.module';
 import { WhatsappModule } from '../whatsapp/whatsapp.module';
 import { EmailModule } from '../email/email.module';
 import { ConsultantAdminController } from './consultant-admin.controller';
-import { ConsultantMercadoPagoAccountRepository } from '@repositories/consultant-mercado-pago-account.repository';
 import { MeetingRepository } from '@repositories/meeting.repository';
 import { DiagnosticRepository } from '@repositories/diagnostic.repository';
+import { MercadoPagoAccountModule } from '../mercado-pago/mercado-pago-account.module';
 
 @Module({
-  imports: [AdminAuthModule, UserModule, WhatsappModule, EmailModule],
+  imports: [AdminAuthModule, UserModule, WhatsappModule, EmailModule, MercadoPagoAccountModule],
   controllers: [ConsultantAdminController, ConsultantController],
   providers: [
     ConsultantService,
     ConsultantRepository,
     PymeRepository,
-    ConsultantMercadoPagoAccountRepository,
     MeetingRepository,
     DiagnosticRepository,
   ],
