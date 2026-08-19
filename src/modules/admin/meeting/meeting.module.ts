@@ -9,11 +9,29 @@ import { AdminAuthModule } from '../admin-auth/admin-auth.module';
 import { ConsultantAvailabilityModule } from '../consultant-availability/consultant-availability.module';
 import { MeetingAdminController } from './meeting-admin.controller';
 import { ScheduledNotificationModule } from '../scheduled-notification/scheduled-notification.module';
+import { StorageModule } from '../../storage/storage.module';
+import { MeetingConsultantPayoutRepository } from '@repositories/meeting-consultant-payout.repository';
+import { MeetingConsultantPayoutService } from './meeting-consultant-payout.service';
+import { MeetingRescheduleHistoryRepository } from '@repositories/meeting-reschedule-history.repository';
 
 @Module({
-  imports: [AdminAuthModule, AiModule, ConsultantAvailabilityModule, forwardRef(() => ScheduledNotificationModule)],
+  imports: [
+    AdminAuthModule,
+    AiModule,
+    ConsultantAvailabilityModule,
+    StorageModule,
+    forwardRef(() => ScheduledNotificationModule),
+  ],
   controllers: [MeetingAdminController, MeetingController],
-  providers: [MeetingService, TeamsMeetingService, MeetingRepository, TaskRepository],
-  exports: [MeetingService],
+  providers: [
+    MeetingService,
+    MeetingConsultantPayoutService,
+    TeamsMeetingService,
+    MeetingRepository,
+    MeetingConsultantPayoutRepository,
+    MeetingRescheduleHistoryRepository,
+    TaskRepository,
+  ],
+  exports: [MeetingService, MeetingConsultantPayoutService, MeetingRescheduleHistoryRepository],
 })
 export class MeetingModule {}

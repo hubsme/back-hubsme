@@ -26,6 +26,8 @@ export const checkoutStatusEnum = pgEnum('checkout_status', [
   'expired',
 ]);
 
+export const checkoutCollectionDestinationEnum = pgEnum('checkout_collection_destination', ['consultant', 'hubsme']);
+
 export type CheckoutRaw = Record<string, unknown>;
 
 export const checkout = pgTable(
@@ -50,6 +52,7 @@ export const checkout = pgTable(
     externalReference: varchar('external_reference', { length: 180 }).notNull(),
     mercadoPagoPaymentId: varchar('mercado_pago_payment_id', { length: 180 }),
     status: checkoutStatusEnum('status').default('created').notNull(),
+    collectionDestination: checkoutCollectionDestinationEnum('collection_destination').default('hubsme').notNull(),
     amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
     marketplaceFee: decimal('marketplace_fee', { precision: 10, scale: 2 }).default('0.00').notNull(),
     currency: varchar('currency', { length: 10 }).default('PEN').notNull(),
@@ -68,6 +71,7 @@ export const checkout = pgTable(
     index('checkout_preference_id_idx').on(t.preferenceId),
     index('checkout_external_reference_idx').on(t.externalReference),
     index('checkout_status_idx').on(t.status),
+    index('checkout_collection_destination_idx').on(t.collectionDestination),
     uniqueIndex('checkout_meeting_unique_active_idx')
       .on(t.meetingId)
       .where(sql`${t.deletedAt} IS NULL AND ${t.meetingId} IS NOT NULL`),

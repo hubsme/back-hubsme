@@ -270,8 +270,13 @@ export class AuthService {
     }
   }
 
-  async validateUser(userId: number) {
-    const user = await this.userRepository.findOne(userId);
+  async validateUser(userId: number | string) {
+    const numericId = typeof userId === 'number' ? userId : Number(userId);
+    if (!Number.isInteger(numericId) || numericId <= 0) {
+      return null;
+    }
+
+    const user = await this.userRepository.findOne(numericId);
     if (!user || user.isActive !== 'true') {
       return null;
     }

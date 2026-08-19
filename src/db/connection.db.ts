@@ -22,6 +22,8 @@ import { feedback } from '@db/tables/feedback.table';
 import { feedbackAttachment } from '@db/tables/feedback-attachment.table';
 import { feedbackReply } from '@db/tables/feedback-reply.table';
 import { consultantServiceOffer } from '@db/tables/consultant-service-offer.table';
+import { meetingConsultantPayout } from '@db/tables/meeting-consultant-payout.table';
+import { meetingRescheduleHistory } from '@db/tables/meeting-reschedule-history.table';
 
 const pool = new Pool(dbConfig);
 
@@ -47,6 +49,8 @@ const schema = {
   feedbackAttachment,
   feedbackReply,
   consultantServiceOffer,
+  meetingConsultantPayout,
+  meetingRescheduleHistory,
 };
 
 export const database = drizzle(pool, { schema: schema });

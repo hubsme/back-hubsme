@@ -9,6 +9,7 @@ import {
 import { randomBytes } from 'crypto';
 import { CheckoutRepository } from '@repositories/checkout.repository';
 import { PromotionCodeRepository } from '@repositories/promotion-code.repository';
+import { MeetingRescheduleHistoryRepository } from '@repositories/meeting-reschedule-history.repository';
 import { MeetingService } from '../meeting/meeting.service';
 import { ConsultantService } from '../consultant/consultant.service';
 import { PymeService } from '../pyme/pyme.service';
@@ -28,6 +29,7 @@ export class PromotionCodeService {
   constructor(
     private readonly promotionCodeRepository: PromotionCodeRepository,
     private readonly checkoutRepository: CheckoutRepository,
+    private readonly meetingRescheduleHistoryRepository: MeetingRescheduleHistoryRepository,
     private readonly meetingService: MeetingService,
     private readonly consultantService: ConsultantService,
     private readonly pymeService: PymeService,
@@ -181,6 +183,13 @@ export class PromotionCodeService {
         promotionCode: claim.promotion.code,
         redemptionId: claim.redemption.id,
       });
+      await this.meetingRescheduleHistoryRepository.updateReplacementByPromotionCodeId(
+        claim.promotion.id,
+        {
+          replacementMeetingId: meeting.id,
+          promotionCodeRedemptionId: claim.redemption.id,
+        },
+      );
       await this.sendMeetingNotifications(meeting.id);
 
       return {

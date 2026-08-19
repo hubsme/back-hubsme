@@ -127,6 +127,22 @@ const dueAt = peruDateOnlyToUtc('2026-08-20');
 const label = formatInPeru(new Date(), { dateStyle: 'long', timeStyle: 'short' });
 ```
 
+## 💳 Cobros de consultoría y depósitos a consultores
+
+Los checkouts nuevos de consultoría se crean con `collection_destination = hubsme`: Mercado Pago cobra el importe completo usando la cuenta de Hubsme y no recibe `marketplace_fee`. El campo `checkout.marketplace_fee` conserva únicamente la comisión contable configurada en `MERCADO_PAGO_PLATFORM_FEE_PERCENT` para calcular el neto que corresponde al consultor.
+
+Cuando Mercado Pago confirma un pago real de consultoría:
+
+1. El total cobrado queda registrado en `checkout.amount`.
+2. La comisión de Hubsme queda registrada en `checkout.marketplace_fee`.
+3. Se crea idempotentemente una obligación `meeting_consultant_payout` en estado `pending` por el neto (`amount - marketplace_fee`).
+4. El administrador realiza el depósito fuera del sistema y lo registra desde Backoffice > Reuniones > Pagos a consultores.
+5. Para cambiar la obligación a `paid` son obligatorias la referencia, la constancia PDF/imagen, la fecha y el administrador responsable.
+
+Los cupones no generan obligaciones monetarias y las cuotas de servicios usan su flujo propio. Los checkouts históricos de consultoría se conservan con destino `consultant` para no duplicar deudas ya liquidadas mediante el split anterior.
+
+La estructura se incorpora mediante las migraciones manuales `src/db/migrations/version_009/v009_001_create_meeting_consultant_payout.sql` y `src/db/migrations/version_009/v009_002_create_meeting_reschedule_history.sql`. Debido a que la base está en producción, debe aplicarlas una persona autorizada; la IA no ejecuta migraciones.
+
 ### Endpoints principales
 
 - `POST /auth/login` y `POST /auth/register`: autenticación de usuarios.
