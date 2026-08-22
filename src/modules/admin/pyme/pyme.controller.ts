@@ -1,8 +1,8 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { HttpErrorDto } from '@core/dto/http-error.dto';
-import { User } from '@db/tables/user.table';
 import { JwtAuthGuard } from '@modules/auth/jwt-auth.guard';
+import type { AuthenticatedRequest } from '@modules/auth/authenticated-user.type';
 import { ConsultantListDto } from '@modules/admin/consultant/dto/consultant-list.dto';
 import { PymeCreateDto } from './dto/pyme-create.dto';
 import { PymeListDto, PymeListFiltersDto } from './dto/pyme-list.dto';
@@ -15,8 +15,12 @@ import {
   PymeDocumentListFiltersDto,
   PymeMeetingDocumentsDto,
 } from './dto/pyme-document.dto';
-
-type AuthenticatedRequest = { user: User };
+import {
+  CreatePymeInvitationDto,
+  MessageResultDto,
+  PymeInvitationResultDto,
+  PymeTeamResultDto,
+} from './dto/pyme-membership.dto';
 
 @ApiTags('pyme')
 @ApiBearerAuth()
@@ -38,7 +42,7 @@ export class PymeController {
   @ApiResponse({ status: 200, type: ConsultantListDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
   meetingConsultants(@Request() req: AuthenticatedRequest, @Query() filters: PymeMeetingConsultantsFiltersDto) {
-    return this.pymeService.findMeetingConsultants(req.user.id, filters);
+    return this.pymeService.findMeetingConsultants(req.user.pymeId ?? req.user.id, filters);
   }
 
   @Get('documents/meetings')
@@ -46,7 +50,7 @@ export class PymeController {
   @ApiResponse({ status: 200, type: PymeMeetingDocumentsDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
   meetingDocuments(@Request() req: AuthenticatedRequest, @Query() filters: PymeDocumentListFiltersDto) {
-    return this.pymeService.findMeetingDocuments(req.user.id, filters);
+    return this.pymeService.findMeetingDocuments(req.user.pymeId ?? req.user.id, filters);
   }
 
   @Get('documents/diagnostics')
@@ -54,7 +58,35 @@ export class PymeController {
   @ApiResponse({ status: 200, type: PymeDiagnosticDocumentsDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
   diagnosticDocuments(@Request() req: AuthenticatedRequest, @Query() filters: PymeDocumentListFiltersDto) {
-    return this.pymeService.findDiagnosticDocuments(req.user.id, filters);
+    return this.pymeService.findDiagnosticDocuments(req.user.pymeId ?? req.user.id, filters);
+  }
+
+  @Get('team')
+  @ApiOperation({ summary: 'Get members and pending invitations for the current PYME' })
+  @ApiResponse({ status: 200, type: PymeTeamResultDto })
+  team(@Request() req: AuthenticatedRequest) {
+    return this.pymeService.findTeam(req.user);
+  }
+
+  @Post('invitations')
+  @ApiOperation({ summary: 'Invite a user to the current PYME' })
+  @ApiResponse({ status: 200, type: PymeInvitationResultDto })
+  createInvitation(@Request() req: AuthenticatedRequest, @Body() body: CreatePymeInvitationDto) {
+    return this.pymeService.createInvitation(req.user, body);
+  }
+
+  @Delete('invitations/:id')
+  @ApiOperation({ summary: 'Revoke a pending PYME invitation' })
+  @ApiResponse({ status: 200, type: MessageResultDto })
+  revokeInvitation(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.pymeService.revokeInvitation(req.user, +id);
+  }
+
+  @Delete('members/:userId')
+  @ApiOperation({ summary: 'Remove a member from the current PYME' })
+  @ApiResponse({ status: 200, type: MessageResultDto })
+  removeMember(@Request() req: AuthenticatedRequest, @Param('userId') userId: string) {
+    return this.pymeService.removeMember(req.user, +userId);
   }
 
   @Get('find-one/:id')
@@ -62,8 +94,8 @@ export class PymeController {
   @ApiParam({ name: 'id', type: 'number' })
   @ApiResponse({ status: 200, type: PymeResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  findOne(@Param('id') id: string) {
-    return this.pymeService.findOne(+id);
+  findOne(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.pymeService.findOneForUser(req.user, +id);
   }
 
   @Get('find-by-user/:userId')
@@ -71,16 +103,16 @@ export class PymeController {
   @ApiParam({ name: 'userId', type: 'number' })
   @ApiResponse({ status: 200, type: PymeResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  findByUser(@Param('userId') userId: string) {
-    return this.pymeService.findByUserId(+userId);
+  findByUser(@Request() req: AuthenticatedRequest, @Param('userId') userId: string) {
+    return this.pymeService.findByUserForUser(req.user, +userId);
   }
 
   @Post('create')
   @ApiOperation({ summary: 'Create a new PYME profile' })
   @ApiResponse({ status: 200, type: PymeResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  create(@Body() createPymeDto: PymeCreateDto) {
-    return this.pymeService.create(createPymeDto);
+  create(@Request() req: AuthenticatedRequest, @Body() createPymeDto: PymeCreateDto) {
+    return this.pymeService.createForUser(req.user, createPymeDto);
   }
 
   @Patch('update/:id')
@@ -88,8 +120,8 @@ export class PymeController {
   @ApiParam({ name: 'id', type: 'number' })
   @ApiResponse({ status: 200, type: PymeResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  update(@Param('id') id: string, @Body() updatePymeDto: PymeUpdateDto) {
-    return this.pymeService.update(+id, updatePymeDto);
+  update(@Request() req: AuthenticatedRequest, @Param('id') id: string, @Body() updatePymeDto: PymeUpdateDto) {
+    return this.pymeService.updateForUser(req.user, +id, updatePymeDto);
   }
 
   @Delete('delete/:id')
@@ -97,7 +129,7 @@ export class PymeController {
   @ApiParam({ name: 'id', type: 'number' })
   @ApiResponse({ status: 200, type: PymeResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  remove(@Param('id') id: string) {
-    return this.pymeService.delete(+id);
+  remove(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.pymeService.deleteForUser(req.user, +id);
   }
 }

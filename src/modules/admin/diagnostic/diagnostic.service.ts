@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { DiagnosticDocumentDTO } from '@db/tables/diagnostic-document.table';
 import { DiagnosticResult } from '@db/tables/diagnostic.table';
 import { DiagnosticRepository } from '@repositories/diagnostic.repository';
@@ -7,6 +7,7 @@ import { DiagnosticGenerateDto } from './dto/diagnostic-generate.dto';
 import { DiagnosticListFiltersDto } from './dto/diagnostic-list.dto';
 import { AiService } from '../ai/ai.service';
 import { formatInPeru } from '@functions/date.function';
+import { AuthenticatedUser } from '@modules/auth/authenticated-user.type';
 
 @Injectable()
 export class DiagnosticService {
@@ -16,10 +17,12 @@ export class DiagnosticService {
     private readonly aiService: AiService,
   ) {}
 
-  async findAllPaginated(filters: DiagnosticListFiltersDto) {
+  async findAllPaginated(filters: DiagnosticListFiltersDto, currentUser?: AuthenticatedUser) {
     const page = filters.page ?? 1;
     const limit = filters.limit ?? 10;
-    const { data, total } = await this.diagnosticRepository.findAllPaginated(page, limit, filters);
+    const scopedFilters =
+      currentUser?.role === 'pyme' ? { ...filters, pymeId: this.requirePymeId(currentUser) } : filters;
+    const { data, total } = await this.diagnosticRepository.findAllPaginated(page, limit, scopedFilters);
     const totalPages = Math.ceil(total / limit);
 
     return {
@@ -34,6 +37,22 @@ export class DiagnosticService {
     return diagnostic;
   }
 
+  async findOneForUser(id: number, currentUser: AuthenticatedUser) {
+    const diagnostic = await this.findOne(id);
+    if (currentUser.role === 'pyme' && diagnostic.pymeId !== this.requirePymeId(currentUser)) {
+      throw new ForbiddenException('No tienes acceso a este diagnóstico');
+    }
+    return diagnostic;
+  }
+
+  async generateForUser(data: DiagnosticGenerateDto, currentUser: AuthenticatedUser) {
+    this.requireOwnerIfPyme(currentUser);
+    return this.generate({
+      ...data,
+      pymeId: currentUser.role === 'pyme' ? this.requirePymeId(currentUser) : data.pymeId,
+    });
+  }
+
   async generate(data: DiagnosticGenerateDto) {
     const baseResult = this.buildDiagnostic(data.pymeData ?? {}, data.responses);
     const result = this.normalizeDiagnosticResult(await this.generateWithAi(data, baseResult), baseResult);
@@ -45,9 +64,7 @@ export class DiagnosticService {
       summary: result.resumenEjecutivo,
     });
 
-    await this.diagnosticDocumentService.createMany(
-      this.buildDiagnosticDocuments(data, diagnostic.id, result),
-    );
+    await this.diagnosticDocumentService.createMany(this.buildDiagnosticDocuments(data, diagnostic.id, result));
 
     return diagnostic;
   }
@@ -55,6 +72,23 @@ export class DiagnosticService {
   async delete(id: number) {
     await this.findOne(id);
     return this.diagnosticRepository.delete(id);
+  }
+
+  async deleteForUser(id: number, currentUser: AuthenticatedUser) {
+    this.requireOwnerIfPyme(currentUser);
+    await this.findOneForUser(id, currentUser);
+    return this.diagnosticRepository.delete(id);
+  }
+
+  private requirePymeId(currentUser: AuthenticatedUser) {
+    if (!currentUser.pymeId) throw new ForbiddenException('No tienes una empresa asociada');
+    return currentUser.pymeId;
+  }
+
+  private requireOwnerIfPyme(currentUser: AuthenticatedUser) {
+    if (currentUser.role === 'pyme' && currentUser.membershipRole !== 'owner') {
+      throw new ForbiddenException('Tu acceso a la empresa es de solo lectura');
+    }
   }
 
   private buildDiagnostic(pymeData: Record<string, unknown>, responses: Record<string, unknown>): DiagnosticResult {
@@ -91,7 +125,7 @@ export class DiagnosticService {
     const q12 = this.getScoreFor(responses, ['procesos', 'ordenados', 'repetibles']);
     const q13 = this.getScoreFor(responses, ['inventarios', 'entrega']);
     const q14 = this.getScoreFor(responses, ['problemas', 'errores', 'reprocesos']);
-    
+
     let operacionesSum = q12 + q14;
     let operacionesMax = 10;
     if (q13 !== -1) {
@@ -123,27 +157,71 @@ export class DiagnosticService {
     const q21 = this.getScoreFor(responses, ['obligaciones tributarias', 'sunat']);
     const tributarioScore = Math.round((q21 / 5) * 100);
 
-    const totalObtained = estrategicaSum + financieraSum + comercialSum + q10 + q11 + operacionesSum + rrhhSum + q18 + q19 + q20 + q21;
+    const totalObtained =
+      estrategicaSum + financieraSum + comercialSum + q10 + q11 + operacionesSum + rrhhSum + q18 + q19 + q20 + q21;
     const totalMax = 15 + 15 + 15 + 5 + 5 + operacionesMax + 15 + 5 + 5 + 5 + 5;
     const score = Math.round((totalObtained / totalMax) * 100);
 
     const businessName = String(pymeData.name ?? 'La PYME');
 
     const areasEvaluadas = [
-      this.area('Estratégica', estrategicaScore, `El negocio cuenta con un nivel de madurez estratégica calificado como: ${this.getEstrategicaStatus(estrategicaSum)}.`),
-      this.area('Financiera', financieraScore, `El control financiero actual se interpreta como: ${this.getFinancieraStatus(financieraSum)}.`),
-      this.area('Comercial / Ventas', comercialScore, `La estructura del área comercial se evalúa como: ${this.getComercialStatus(comercialSum)}.`),
-      this.area('Marketing', marketingScore, `La presencia de marketing se cataloga como: ${this.getMarketingStatus(q10)}.`),
-      this.area('Servicio al cliente', servicioScore, `La gestión del servicio al cliente se define como: ${this.getServicioStatus(q11)}.`),
-      this.area('Operaciones', operacionesScore, `La eficiencia y control operativo se interpreta como: ${this.getOperacionesStatus(operacionesSum, operacionesMax)}.`),
-      this.area('Organizacional / RRHH', rrhhScore, `La estructura organizacional del equipo es calificada como: ${this.getRrhhStatus(rrhhSum)}.`),
-      this.area('Tecnología', tecnologiaScore, `El nivel de digitalización tecnológica actual es: ${this.getTecnologiaStatus(q18)}.`),
+      this.area(
+        'Estratégica',
+        estrategicaScore,
+        `El negocio cuenta con un nivel de madurez estratégica calificado como: ${this.getEstrategicaStatus(estrategicaSum)}.`,
+      ),
+      this.area(
+        'Financiera',
+        financieraScore,
+        `El control financiero actual se interpreta como: ${this.getFinancieraStatus(financieraSum)}.`,
+      ),
+      this.area(
+        'Comercial / Ventas',
+        comercialScore,
+        `La estructura del área comercial se evalúa como: ${this.getComercialStatus(comercialSum)}.`,
+      ),
+      this.area(
+        'Marketing',
+        marketingScore,
+        `La presencia de marketing se cataloga como: ${this.getMarketingStatus(q10)}.`,
+      ),
+      this.area(
+        'Servicio al cliente',
+        servicioScore,
+        `La gestión del servicio al cliente se define como: ${this.getServicioStatus(q11)}.`,
+      ),
+      this.area(
+        'Operaciones',
+        operacionesScore,
+        `La eficiencia y control operativo se interpreta como: ${this.getOperacionesStatus(operacionesSum, operacionesMax)}.`,
+      ),
+      this.area(
+        'Organizacional / RRHH',
+        rrhhScore,
+        `La estructura organizacional del equipo es calificada como: ${this.getRrhhStatus(rrhhSum)}.`,
+      ),
+      this.area(
+        'Tecnología',
+        tecnologiaScore,
+        `El nivel de digitalización tecnológica actual es: ${this.getTecnologiaStatus(q18)}.`,
+      ),
       this.area('Legal', legalScore, `La documentación legal del negocio se evalúa como: ${this.getLegalStatus(q19)}.`),
-      this.area('Laboral', laboralScore, `El cumplimiento de obligaciones laborales es: ${this.getLaboralStatus(q20)}.`),
-      this.area('Tributario / Contable', tributarioScore, `El cumplimiento tributario ante SUNAT se evalúa como: ${this.getTributarioStatus(q21)}.`),
+      this.area(
+        'Laboral',
+        laboralScore,
+        `El cumplimiento de obligaciones laborales es: ${this.getLaboralStatus(q20)}.`,
+      ),
+      this.area(
+        'Tributario / Contable',
+        tributarioScore,
+        `El cumplimiento tributario ante SUNAT se evalúa como: ${this.getTributarioStatus(q21)}.`,
+      ),
     ];
 
-    const challenges = Object.values(responses).map((val) => String(val)).join(' ').toLowerCase();
+    const challenges = Object.values(responses)
+      .map((val) => String(val))
+      .join(' ')
+      .toLowerCase();
 
     const problemasCriticos = [
       {
@@ -195,12 +273,15 @@ export class DiagnosticService {
         fortalezas: ['Control contable y cumplimiento tributario básico.'],
         oportunidades: ['Estandarización de procesos comerciales.', 'Digitalización de canales de captación.'],
         debilidades: ['Dependencia operativa del dueño.', 'Bajo control de flujo de caja y rentabilidad.'],
-        amenazas: ['Pérdida de clientes clave por concentración de ingresos.']
-      }
+        amenazas: ['Pérdida de clientes clave por concentración de ingresos.'],
+      },
     };
   }
 
-  private async generateWithAi(data: DiagnosticGenerateDto, baseResult: DiagnosticResult): Promise<DiagnosticResult | null> {
+  private async generateWithAi(
+    data: DiagnosticGenerateDto,
+    baseResult: DiagnosticResult,
+  ): Promise<DiagnosticResult | null> {
     const prompt = `
       Eres un consultor empresarial senior especializado en PYMES latinoamericanas.
       Analiza los datos, respuestas cerradas y abiertas de la PYME. Ya existe un score base calculado por Hubsme.
@@ -293,7 +374,7 @@ export class DiagnosticService {
       .join('\n');
 
     const fodaMd = result.foda
-      ? `## Análisis FODA\n\n### Fortalezas\n${result.foda.fortalezas.map(f => `- ${f}`).join('\n')}\n\n### Oportunidades\n${result.foda.oportunidades.map(o => `- ${o}`).join('\n')}\n\n### Debilidades\n${result.foda.debilidades.map(d => `- ${d}`).join('\n')}\n\n### Amenazas\n${result.foda.amenazas.map(a => `- ${a}`).join('\n')}`
+      ? `## Análisis FODA\n\n### Fortalezas\n${result.foda.fortalezas.map((f) => `- ${f}`).join('\n')}\n\n### Oportunidades\n${result.foda.oportunidades.map((o) => `- ${o}`).join('\n')}\n\n### Debilidades\n${result.foda.debilidades.map((d) => `- ${d}`).join('\n')}\n\n### Amenazas\n${result.foda.amenazas.map((a) => `- ${a}`).join('\n')}`
       : '';
 
     return [
@@ -332,10 +413,7 @@ ${responses}
     ];
   }
 
-  private normalizeDiagnosticResult(
-    result: DiagnosticResult | null,
-    fallback: DiagnosticResult,
-  ): DiagnosticResult {
+  private normalizeDiagnosticResult(result: DiagnosticResult | null, fallback: DiagnosticResult): DiagnosticResult {
     if (!result) return fallback;
 
     return {
@@ -343,18 +421,28 @@ ${responses}
       puntajeGeneral: Number.isFinite(result.puntajeGeneral) ? result.puntajeGeneral : fallback.puntajeGeneral,
       feedbackIa: result.feedbackIa || fallback.feedbackIa,
       areasEvaluadas: this.normalizeAreas(result.areasEvaluadas, fallback.areasEvaluadas),
-      problemasCriticos: Array.isArray(result.problemasCriticos) && result.problemasCriticos.length
-        ? result.problemasCriticos
-        : fallback.problemasCriticos,
-      recomendaciones: Array.isArray(result.recomendaciones) && result.recomendaciones.length
-        ? result.recomendaciones
-        : fallback.recomendaciones,
-      foda: result.foda ? {
-        fortalezas: Array.isArray(result.foda.fortalezas) ? result.foda.fortalezas : fallback.foda?.fortalezas || [],
-        oportunidades: Array.isArray(result.foda.oportunidades) ? result.foda.oportunidades : fallback.foda?.oportunidades || [],
-        debilidades: Array.isArray(result.foda.debilidades) ? result.foda.debilidades : fallback.foda?.debilidades || [],
-        amenazas: Array.isArray(result.foda.amenazas) ? result.foda.amenazas : fallback.foda?.amenazas || [],
-      } : fallback.foda,
+      problemasCriticos:
+        Array.isArray(result.problemasCriticos) && result.problemasCriticos.length
+          ? result.problemasCriticos
+          : fallback.problemasCriticos,
+      recomendaciones:
+        Array.isArray(result.recomendaciones) && result.recomendaciones.length
+          ? result.recomendaciones
+          : fallback.recomendaciones,
+      foda: result.foda
+        ? {
+            fortalezas: Array.isArray(result.foda.fortalezas)
+              ? result.foda.fortalezas
+              : fallback.foda?.fortalezas || [],
+            oportunidades: Array.isArray(result.foda.oportunidades)
+              ? result.foda.oportunidades
+              : fallback.foda?.oportunidades || [],
+            debilidades: Array.isArray(result.foda.debilidades)
+              ? result.foda.debilidades
+              : fallback.foda?.debilidades || [],
+            amenazas: Array.isArray(result.foda.amenazas) ? result.foda.amenazas : fallback.foda?.amenazas || [],
+          }
+        : fallback.foda,
     };
   }
 
@@ -393,19 +481,24 @@ ${responses}
         return (
           normalizedArea.includes(normalizedDesired) ||
           (desiredArea === 'Comercial / Ventas' && normalizedArea.includes('comerc')) ||
-          (desiredArea === 'Organizacional / RRHH' && (normalizedArea.includes('rrhh') || normalizedArea.includes('organi'))) ||
+          (desiredArea === 'Organizacional / RRHH' &&
+            (normalizedArea.includes('rrhh') || normalizedArea.includes('organi'))) ||
           (desiredArea === 'Tributario / Contable' && normalizedArea.includes('tribut'))
         );
       });
 
-      return area ?? fallbackAreas.find((item) => item.area === desiredArea) ?? this.area(desiredArea, 50, 'Sin hallazgo disponible.');
+      return (
+        area ??
+        fallbackAreas.find((item) => item.area === desiredArea) ??
+        this.area(desiredArea, 50, 'Sin hallazgo disponible.')
+      );
     });
   }
 
   private getScoreFor(responses: Record<string, unknown>, keywords: string[]): number {
     const entry = Object.entries(responses).find(([key]) => {
       const normalizedKey = this.normalizeText(key);
-      return keywords.every(kw => normalizedKey.includes(kw));
+      return keywords.every((kw) => normalizedKey.includes(kw));
     });
     if (!entry) return 3;
     const value = String(entry[1] ?? '');

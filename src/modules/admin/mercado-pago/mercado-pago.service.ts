@@ -3,7 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Consultant } from '@db/tables/consultant.table';
 import { ConsultantMercadoPagoAccount } from '@db/tables/consultant-mercado-pago-account.table';
 import { Checkout, CheckoutRaw } from '@db/tables/checkout.table';
-import { User } from '@db/tables/user.table';
+import { AuthenticatedUser } from '@modules/auth/authenticated-user.type';
 import { ConsultantMercadoPagoAccountRepository } from '@repositories/consultant-mercado-pago-account.repository';
 import { ConsultantRepository } from '@repositories/consultant.repository';
 import { PymeRepository } from '@repositories/pyme.repository';
@@ -181,8 +181,9 @@ export class MercadoPagoService {
     return { connected: false, mercadoPagoUserId: null, nickname: null, email: null, connectedAt: null };
   }
 
-  async createCheckout(currentUserId: number, data: MercadoPagoCreateCheckoutDto) {
-    const pymeId = currentUserId;
+  async createCheckout(currentUser: AuthenticatedUser, data: MercadoPagoCreateCheckoutDto) {
+    this.assertPymeOwner(currentUser);
+    const pymeId = this.participantId(currentUser);
     const durationMinutes = data.durationMinutes ?? 60;
     const proposedStartTimes = this.normalizeProposedStartTimes(data.proposedStartTimes);
 
@@ -226,7 +227,8 @@ export class MercadoPagoService {
     });
   }
 
-  async findCheckout(currentUserId: number, id: number) {
+  async findCheckout(currentUser: AuthenticatedUser, id: number) {
+    const currentUserId = this.participantId(currentUser);
     const checkout = await this.checkoutRepository.findOne(id);
     if (!checkout) {
       throw new NotFoundException(`Mercado Pago checkout with ID ${id} not found`);
@@ -239,7 +241,7 @@ export class MercadoPagoService {
     return checkout;
   }
 
-  async findPayments(currentUser: User, filters: MercadoPagoPaymentHistoryFiltersDto) {
+  async findPayments(currentUser: AuthenticatedUser, filters: MercadoPagoPaymentHistoryFiltersDto) {
     const role = this.getPaymentHistoryRole(currentUser);
     const page = filters.page ?? 1;
     const limit = Math.min(filters.limit ?? 10, 10);
@@ -248,7 +250,7 @@ export class MercadoPagoService {
     const from = new Date(Date.UTC(year, month - 1, 1));
     const to = new Date(Date.UTC(year, month, 1));
     const result = await this.checkoutRepository.findAllForUser({
-      userId: currentUser.id,
+      userId: this.participantId(currentUser),
       role,
       page,
       limit,
@@ -272,9 +274,9 @@ export class MercadoPagoService {
     };
   }
 
-  async findPayment(currentUser: User, id: number) {
+  async findPayment(currentUser: AuthenticatedUser, id: number) {
     const role = this.getPaymentHistoryRole(currentUser);
-    const payment = await this.checkoutRepository.findOneForUser(id, currentUser.id, role);
+    const payment = await this.checkoutRepository.findOneForUser(id, this.participantId(currentUser), role);
     if (!payment) {
       throw new NotFoundException(`Mercado Pago payment with ID ${id} not found`);
     }
@@ -282,8 +284,10 @@ export class MercadoPagoService {
     return payment;
   }
 
-  async prepareCheckoutPayment(currentUserId: number, id: number) {
-    const checkout = await this.findCheckout(currentUserId, id);
+  async prepareCheckoutPayment(currentUser: AuthenticatedUser, id: number) {
+    this.assertPymeOwner(currentUser);
+    const currentUserId = this.participantId(currentUser);
+    const checkout = await this.findCheckout(currentUser, id);
 
     if (checkout.pymeId !== currentUserId) {
       throw new UnauthorizedException('Solo la PYME puede iniciar el pago de este checkout');
@@ -316,7 +320,9 @@ export class MercadoPagoService {
     });
   }
 
-  async prepareServicePayment(currentUserId: number, serviceRequestId: number, installmentIndex?: number) {
+  async prepareServicePayment(currentUser: AuthenticatedUser, serviceRequestId: number, installmentIndex?: number) {
+    this.assertPymeOwner(currentUser);
+    const currentUserId = this.participantId(currentUser);
     const serviceRequest = await this.serviceRequestService.findPayableForPyme(serviceRequestId, currentUserId);
     const installment =
       installmentIndex === undefined
@@ -409,7 +415,7 @@ export class MercadoPagoService {
     return updatedCheckout;
   }
 
-  async syncServicePayment(currentUser: User, serviceRequestId: number, installmentIndex?: number) {
+  async syncServicePayment(currentUser: AuthenticatedUser, serviceRequestId: number, installmentIndex?: number) {
     if (currentUser.role !== 'pyme') {
       throw new UnauthorizedException('Solo la PYME puede verificar el pago de un servicio');
     }
@@ -448,12 +454,22 @@ export class MercadoPagoService {
     return approvedCheckout ?? (await this.checkoutRepository.findOne(checkout.id)) ?? checkout;
   }
 
-  private getPaymentHistoryRole(currentUser: User): 'pyme' | 'consultor' {
+  private getPaymentHistoryRole(currentUser: AuthenticatedUser): 'pyme' | 'consultor' {
     if (currentUser.role === 'pyme' || currentUser.role === 'consultor') {
       return currentUser.role;
     }
 
     throw new UnauthorizedException('Solo una PYME o un consultor puede consultar su historial de pagos');
+  }
+
+  private participantId(currentUser: AuthenticatedUser) {
+    return currentUser.role === 'pyme' ? (currentUser.pymeId ?? currentUser.id) : currentUser.id;
+  }
+
+  private assertPymeOwner(currentUser: AuthenticatedUser) {
+    if (currentUser.role !== 'pyme' || currentUser.membershipRole !== 'owner') {
+      throw new UnauthorizedException('Solo el propietario de la PYME puede iniciar pagos');
+    }
   }
 
   async handleWebhook(query: MercadoPagoPaymentWebhookQueryDto = {}) {

@@ -10,10 +10,20 @@ import { user } from '@db/tables/user.table';
 import { DashboardRepository } from '@repositories/dashboard.repository';
 import { DashboardFilterDto } from './dto/dashboard-filter.dto';
 import { peruMonthRange } from '@functions/date.function';
+import { AuthenticatedUser } from '@modules/auth/authenticated-user.type';
 
 @Injectable()
 export class DashboardService {
   constructor(private readonly dashboardRepository: DashboardRepository) {}
+
+  summaryForUser(filters: DashboardFilterDto, currentUser: AuthenticatedUser) {
+    if (currentUser.role === 'admin') return this.summary(filters);
+    return this.summary({
+      ...filters,
+      role: currentUser.role,
+      userId: currentUser.role === 'pyme' ? (currentUser.pymeId ?? currentUser.id) : currentUser.id,
+    });
+  }
 
   async summary(filters: DashboardFilterDto) {
     const role = filters.role ?? 'admin';

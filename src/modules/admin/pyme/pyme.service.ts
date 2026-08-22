@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConsultantRepository } from '@repositories/consultant.repository';
 import { PymeRepository } from '@repositories/pyme.repository';
 import { handleDbError } from '@functions/db-error.function';
@@ -12,6 +12,11 @@ import { MeetingRepository } from '@repositories/meeting.repository';
 import { DiagnosticRepository } from '@repositories/diagnostic.repository';
 import { PymeDocumentListFiltersDto } from './dto/pyme-document.dto';
 import { formatInPeru } from '@functions/date.function';
+import { PymeMembershipRepository } from '@repositories/pyme-membership.repository';
+import { UserRepository } from '@repositories/user.repository';
+import { AuthenticatedUser } from '@modules/auth/authenticated-user.type';
+import { CreatePymeInvitationDto } from './dto/pyme-membership.dto';
+import { createHash, randomBytes } from 'crypto';
 
 @Injectable()
 export class PymeService {
@@ -22,6 +27,8 @@ export class PymeService {
     private readonly emailService: EmailService,
     private readonly meetingRepository: MeetingRepository,
     private readonly diagnosticRepository: DiagnosticRepository,
+    private readonly pymeMembershipRepository: PymeMembershipRepository,
+    private readonly userRepository: UserRepository,
   ) {}
 
   async findAllPaginated(filters: PymeListFiltersDto) {
@@ -42,10 +49,28 @@ export class PymeService {
     return pyme;
   }
 
+  async findOneForUser(currentUser: AuthenticatedUser, id: number) {
+    if (currentUser.role === 'pyme' && currentUser.pymeId !== id) {
+      throw new ForbiddenException('No tienes acceso a esta empresa');
+    }
+    return this.findOne(id);
+  }
+
   async findByUserId(userId: number) {
-    const pyme = await this.pymeRepository.findByUserId(userId);
+    const membership = await this.pymeMembershipRepository.findOrganizationByUserId(userId);
+    const pyme = membership
+      ? await this.pymeRepository.findOne(membership.pymeId)
+      : await this.pymeRepository.findByUserId(userId);
     if (!pyme) throw new NotFoundException(`PYME profile for user ID ${userId} not found`);
     return pyme;
+  }
+
+  async findByUserForUser(currentUser: AuthenticatedUser, userId: number) {
+    const result = await this.findByUserId(userId);
+    if (currentUser.role === 'pyme' && currentUser.pymeId !== result.id) {
+      throw new ForbiddenException('No tienes acceso a esta empresa');
+    }
+    return result;
   }
 
   async findMeetingConsultants(userId: number, filters: PymeMeetingConsultantsFiltersDto) {
@@ -110,6 +135,13 @@ export class PymeService {
     }
   }
 
+  async createForUser(currentUser: AuthenticatedUser, data: PymeCreateDto) {
+    if (currentUser.role !== 'admin') {
+      throw new ForbiddenException('Solo un administrador puede crear perfiles de empresa manualmente');
+    }
+    return this.create(data);
+  }
+
   async update(id: number, data: PymeUpdateDto) {
     await this.findOne(id);
     try {
@@ -119,9 +151,152 @@ export class PymeService {
     }
   }
 
+  async updateForUser(currentUser: AuthenticatedUser, id: number, data: PymeUpdateDto) {
+    this.assertOwnerOf(currentUser, id);
+    return this.update(id, data);
+  }
+
   async delete(id: number) {
     await this.findOne(id);
     return this.pymeRepository.delete(id);
+  }
+
+  async deleteForUser(currentUser: AuthenticatedUser, id: number) {
+    this.assertOwnerOf(currentUser, id);
+    return this.delete(id);
+  }
+
+  async findTeam(currentUser: AuthenticatedUser) {
+    const pymeId = this.requirePyme(currentUser);
+    const members = await this.pymeMembershipRepository.listMembers(pymeId);
+    const pendingInvitations =
+      currentUser.membershipRole === 'owner' ? await this.pymeMembershipRepository.listPendingInvitations(pymeId) : [];
+    return {
+      members: members.map((member) => ({ ...member, isCurrentUser: member.userId === currentUser.id })),
+      pendingInvitations,
+    };
+  }
+
+  async createInvitation(currentUser: AuthenticatedUser, data: CreatePymeInvitationDto) {
+    const pymeId = this.requireOwner(currentUser);
+    const email = data.email.trim().toLowerCase();
+    const existingUser = await this.userRepository.findByEmail(email);
+    if (existingUser) {
+      const existingMembership = await this.pymeMembershipRepository.findActiveMembershipByUserId(existingUser.id);
+      if (existingMembership?.pymeId === pymeId) {
+        throw new BadRequestException(['Este usuario ya pertenece a tu empresa']);
+      }
+      if (existingMembership) {
+        throw new BadRequestException(['Este usuario ya pertenece a otra empresa']);
+      }
+      if (existingUser.role !== 'pyme') {
+        throw new BadRequestException(['El correo pertenece a una cuenta con un perfil incompatible']);
+      }
+    }
+
+    const pendingInvitation = await this.pymeMembershipRepository.findPendingInvitationByEmail(pymeId, email);
+    if (pendingInvitation && pendingInvitation.expiresAt > new Date()) {
+      throw new BadRequestException(['Ya existe una invitación pendiente para este correo']);
+    }
+    if (pendingInvitation) {
+      await this.pymeMembershipRepository.revokeInvitation(pendingInvitation.id, pymeId);
+    }
+
+    const rawToken = randomBytes(32).toString('hex');
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const invitation = await this.pymeMembershipRepository.createInvitation({
+      pymeId,
+      email,
+      role: 'member',
+      tokenHash,
+      status: 'pending',
+      invitedByUserId: currentUser.id,
+      expiresAt,
+    });
+
+    const organizationName = currentUser.organization?.name ?? 'tu empresa';
+    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:6200';
+    const invitationUrl = `${frontendUrl}/auth/join?token=${encodeURIComponent(rawToken)}`;
+    try {
+      await this.emailService.sendEmail({
+        to: email,
+        subject: `${currentUser.name} te invitó a ${organizationName} en HUBSME`,
+        text: `Únete a ${organizationName} en HUBSME desde este enlace: ${invitationUrl}. La invitación vence en 7 días.`,
+        html: this.buildInvitationEmail(currentUser.name, organizationName, invitationUrl),
+      });
+    } catch (error) {
+      await this.pymeMembershipRepository.revokeInvitation(invitation.id, pymeId);
+      throw error;
+    }
+
+    const { tokenHash: _, invitedByUserId: __, deletedAt: ___, updatedAt: ____, pymeId: _____, ...result } = invitation;
+    return result;
+  }
+
+  async revokeInvitation(currentUser: AuthenticatedUser, invitationId: number) {
+    const pymeId = this.requireOwner(currentUser);
+    const invitation = await this.pymeMembershipRepository.revokeInvitation(invitationId, pymeId);
+    if (!invitation) throw new NotFoundException('Invitación pendiente no encontrada');
+    return { message: 'Invitación revocada' };
+  }
+
+  async removeMember(currentUser: AuthenticatedUser, userId: number) {
+    const pymeId = this.requireOwner(currentUser);
+    if (userId === currentUser.id) {
+      throw new BadRequestException(['El propietario no puede retirarse de su propia empresa']);
+    }
+    const member = await this.pymeMembershipRepository.removeMember(pymeId, userId);
+    if (!member) throw new NotFoundException('Miembro no encontrado');
+    return { message: 'Miembro retirado de la empresa' };
+  }
+
+  private requirePyme(currentUser: AuthenticatedUser) {
+    if (currentUser.role !== 'pyme' || !currentUser.pymeId) {
+      throw new ForbiddenException('No tienes acceso a una organización PYME');
+    }
+    return currentUser.pymeId;
+  }
+
+  private requireOwner(currentUser: AuthenticatedUser) {
+    const pymeId = this.requirePyme(currentUser);
+    if (currentUser.membershipRole !== 'owner') {
+      throw new ForbiddenException('Solo el propietario puede administrar el equipo');
+    }
+    return pymeId;
+  }
+
+  private assertOwnerOf(currentUser: AuthenticatedUser, pymeId: number) {
+    if (currentUser.role === 'admin') return;
+    if (this.requireOwner(currentUser) !== pymeId) {
+      throw new ForbiddenException('No puedes modificar esta empresa');
+    }
+  }
+
+  private buildInvitationEmail(inviterName: string, organizationName: string, invitationUrl: string) {
+    return `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#1f2937">
+        <h2 style="color:#3876c7">Te invitaron a colaborar en HUBSME</h2>
+        <p><strong>${this.escapeHtml(inviterName)}</strong> te invitó a unirte a <strong>${this.escapeHtml(organizationName)}</strong>.</p>
+        <p>Al aceptar podrás consultar los diagnósticos, reuniones, calendario, tareas y documentos compartidos de la empresa.</p>
+        <p style="margin:28px 0"><a href="${this.escapeHtml(invitationUrl)}" style="background:#3876c7;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">Aceptar invitación</a></p>
+        <p style="color:#6b7280;font-size:13px">La invitación vence en 7 días y solo funciona con este correo.</p>
+      </div>
+    `;
+  }
+
+  private escapeHtml(value: string) {
+    return value.replace(
+      /[&<>'"]/g,
+      (character) =>
+        ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          "'": '&#39;',
+          '"': '&quot;',
+        })[character] ?? character,
+    );
   }
 
   private clean<T extends Partial<PymeCreateDto>>(data: T): T {

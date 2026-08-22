@@ -24,6 +24,8 @@ const payoutSelection = {
   pymeId: meetingConsultantPayout.pymeId,
   consultantId: meetingConsultantPayout.consultantId,
   amount: meetingConsultantPayout.amount,
+  mercadoPagoFeeAmount: meetingConsultantPayout.mercadoPagoFeeAmount,
+  mercadoPagoFeePercent: meetingConsultantPayout.mercadoPagoFeePercent,
   currency: meetingConsultantPayout.currency,
   status: meetingConsultantPayout.status,
   paymentReference: meetingConsultantPayout.paymentReference,
@@ -206,6 +208,19 @@ export class MeetingConsultantPayoutRepository {
     const updated = await database
       .update(meetingConsultantPayout)
       .set({ ...data, status: 'paid', updatedAt: new Date() })
+      .where(and(eq(meetingConsultantPayout.id, id), eq(meetingConsultantPayout.status, 'pending')))
+      .returning({ id: meetingConsultantPayout.id });
+
+    return updated[0] ? this.findOne(updated[0].id) : undefined;
+  }
+
+  async updatePendingFinancials(
+    id: number,
+    data: Pick<MeetingConsultantPayoutDTO, 'amount' | 'mercadoPagoFeeAmount' | 'mercadoPagoFeePercent'>,
+  ) {
+    const updated = await database
+      .update(meetingConsultantPayout)
+      .set({ ...data, updatedAt: new Date() })
       .where(and(eq(meetingConsultantPayout.id, id), eq(meetingConsultantPayout.status, 'pending')))
       .returning({ id: meetingConsultantPayout.id });
 

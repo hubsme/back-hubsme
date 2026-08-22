@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { HttpErrorDto } from '@core/dto/http-error.dto';
 import { JwtAuthGuard } from '@modules/auth/jwt-auth.guard';
@@ -8,6 +8,7 @@ import { TaskResultDto } from './dto/task-result.dto';
 import { TaskStatusDto } from './dto/task-status.dto';
 import { TaskUpdateDto } from './dto/task-update.dto';
 import { TaskService } from './task.service';
+import type { AuthenticatedRequest } from '@modules/auth/authenticated-user.type';
 
 @ApiTags('task')
 @ApiBearerAuth()
@@ -20,8 +21,8 @@ export class TaskController {
   @ApiOperation({ summary: 'Get all tasks paginated' })
   @ApiResponse({ status: 200, type: TaskListDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  findAll(@Query() filters: TaskListFiltersDto) {
-    return this.taskService.findAllPaginated(filters);
+  findAll(@Request() req: AuthenticatedRequest, @Query() filters: TaskListFiltersDto) {
+    return this.taskService.findAllPaginated(filters, req.user);
   }
 
   @Get('find-one/:id')
@@ -29,16 +30,16 @@ export class TaskController {
   @ApiParam({ name: 'id', type: 'number' })
   @ApiResponse({ status: 200, type: TaskResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  findOne(@Param('id') id: string) {
-    return this.taskService.findOne(+id);
+  findOne(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.taskService.findOneForUser(+id, req.user);
   }
 
   @Post('create')
   @ApiOperation({ summary: 'Create a new task' })
   @ApiResponse({ status: 200, type: TaskResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  create(@Body() createTaskDto: TaskCreateDto) {
-    return this.taskService.create(createTaskDto);
+  create(@Request() req: AuthenticatedRequest, @Body() createTaskDto: TaskCreateDto) {
+    return this.taskService.createForUser(createTaskDto, req.user);
   }
 
   @Patch('update/:id')
@@ -46,8 +47,8 @@ export class TaskController {
   @ApiParam({ name: 'id', type: 'number' })
   @ApiResponse({ status: 200, type: TaskResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  update(@Param('id') id: string, @Body() updateTaskDto: TaskUpdateDto) {
-    return this.taskService.update(+id, updateTaskDto);
+  update(@Request() req: AuthenticatedRequest, @Param('id') id: string, @Body() updateTaskDto: TaskUpdateDto) {
+    return this.taskService.updateForUser(+id, updateTaskDto, req.user);
   }
 
   @Patch('update-status/:id')
@@ -55,8 +56,8 @@ export class TaskController {
   @ApiParam({ name: 'id', type: 'number' })
   @ApiResponse({ status: 200, type: TaskResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  updateStatus(@Param('id') id: string, @Body() statusDto: TaskStatusDto) {
-    return this.taskService.updateStatus(+id, statusDto.status);
+  updateStatus(@Request() req: AuthenticatedRequest, @Param('id') id: string, @Body() statusDto: TaskStatusDto) {
+    return this.taskService.updateStatusForUser(+id, statusDto.status, req.user);
   }
 
   @Delete('delete/:id')
@@ -64,7 +65,7 @@ export class TaskController {
   @ApiParam({ name: 'id', type: 'number' })
   @ApiResponse({ status: 200, type: TaskResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  remove(@Param('id') id: string) {
-    return this.taskService.delete(+id);
+  remove(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.taskService.deleteForUser(+id, req.user);
   }
 }

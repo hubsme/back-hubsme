@@ -2,15 +2,13 @@ import { Body, Controller, Get, Param, Post, Query, Request, UseGuards } from '@
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { HttpErrorDto } from '@core/dto/http-error.dto';
 import { JwtAuthGuard } from '@modules/auth/jwt-auth.guard';
-import { User } from '@db/tables/user.table';
+import type { AuthenticatedRequest } from '@modules/auth/authenticated-user.type';
 import { PlanResultDto, SubscriptionResultDto } from './dto/subscription-result.dto';
 import { SubscriptionListDto, SubscriptionListFiltersDto } from './dto/subscription-list.dto';
 import { SubscriptionUpsertDto } from './dto/subscription-upsert.dto';
 import { SubscriptionCheckoutDto } from './dto/subscription-checkout.dto';
 import { SubscriptionCheckoutResultDto } from './dto/subscription-checkout-result.dto';
 import { SubscriptionService } from './subscription.service';
-
-type AuthenticatedRequest = { user: User };
 
 @ApiTags('subscription')
 @ApiBearerAuth()
@@ -48,16 +46,16 @@ export class SubscriptionController {
   @ApiParam({ name: 'userId', type: 'number' })
   @ApiResponse({ status: 200, type: SubscriptionResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  findByUser(@Param('userId') userId: string) {
-    return this.subscriptionService.findByUserId(+userId);
+  findByUser(@Request() req: AuthenticatedRequest, @Param('userId') userId: string) {
+    return this.subscriptionService.findByUserForUser(req.user, +userId);
   }
 
   @Post('upsert')
   @ApiOperation({ summary: 'Create or update a user subscription' })
   @ApiResponse({ status: 200, type: SubscriptionResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  upsert(@Body() upsertDto: SubscriptionUpsertDto) {
-    return this.subscriptionService.upsert(upsertDto);
+  upsert(@Request() req: AuthenticatedRequest, @Body() upsertDto: SubscriptionUpsertDto) {
+    return this.subscriptionService.upsertForUser(req.user, upsertDto);
   }
 
   @Post('checkout')
@@ -65,6 +63,6 @@ export class SubscriptionController {
   @ApiResponse({ status: 200, type: SubscriptionCheckoutResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
   createCheckout(@Request() req: AuthenticatedRequest, @Body() body: SubscriptionCheckoutDto) {
-    return this.subscriptionService.createCheckout(req.user.id, body.planId);
+    return this.subscriptionService.createCheckoutForUser(req.user, body.planId);
   }
 }

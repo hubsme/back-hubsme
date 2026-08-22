@@ -15,7 +15,7 @@ import {
   ServiceRequestPaymentPlan,
   ServiceRequestReferenceAttachment,
 } from '@db/tables/service-request.table';
-import { User } from '@db/tables/user.table';
+import { AuthenticatedUser } from '@modules/auth/authenticated-user.type';
 import { ConsultantRepository } from '@repositories/consultant.repository';
 import { CheckoutRepository } from '@repositories/checkout.repository';
 import { MeetingRepository } from '@repositories/meeting.repository';
@@ -63,12 +63,12 @@ export class ServiceRequestService {
     private readonly storageService: StorageService,
   ) {}
 
-  async findAllForUser(filters: ServiceRequestListFiltersDto, currentUser: User) {
+  async findAllForUser(filters: ServiceRequestListFiltersDto, currentUser: AuthenticatedUser) {
     const role = this.getParticipantRole(currentUser);
     const page = filters.page ?? 1;
     const limit = Math.min(filters.limit ?? 10, 20);
     const { data, total } = await this.serviceRequestRepository.findAllPaginated(page, limit, {
-      userId: currentUser.id,
+      userId: this.getParticipantId(currentUser),
       role,
       stage: filters.stage,
       status: filters.status,
@@ -89,10 +89,10 @@ export class ServiceRequestService {
     };
   }
 
-  async findOneForUser(id: number, currentUser: User) {
+  async findOneForUser(id: number, currentUser: AuthenticatedUser) {
     const role = this.getParticipantRole(currentUser);
     const request = await this.findOne(id);
-    this.assertParticipant(request, currentUser.id, role);
+    this.assertParticipant(request, this.getParticipantId(currentUser), role);
     if (request.status === 'paid' || request.status === 'completed') {
       await this.ensureInitialMeeting(request);
       return this.findOne(id);
@@ -100,17 +100,18 @@ export class ServiceRequestService {
     return request;
   }
 
-  async create(data: ServiceRequestCreateDto, files: Express.Multer.File[], currentUser: User) {
+  async create(data: ServiceRequestCreateDto, files: Express.Multer.File[], currentUser: AuthenticatedUser) {
     if (currentUser.role !== 'pyme') {
       throw new ForbiddenException('Solo una PYME puede solicitar servicios');
     }
+    this.assertPymeWriteAccess(currentUser);
 
     const consultantIds = [...new Set(data.consultantIds)];
     if (!consultantIds.length || consultantIds.length > 3) {
       throw new BadRequestException(['Selecciona entre 1 y 3 consultores']);
     }
     if (data.sourceTaskId !== undefined) {
-      await this.assertAvailableSourceTask(data.sourceTaskId, currentUser.id);
+      await this.assertAvailableSourceTask(data.sourceTaskId, this.getParticipantId(currentUser));
       if (consultantIds.length !== 1) {
         throw new BadRequestException(['Las solicitudes originadas en una tarea deben enviarse a un solo consultor']);
       }
@@ -157,7 +158,7 @@ export class ServiceRequestService {
             initialMeetingOptions.get(consultantId) ?? [],
           );
           return {
-            pymeId: currentUser.id,
+            pymeId: this.getParticipantId(currentUser),
             consultantId,
             serviceOfferId: data.serviceOfferId,
             title,
@@ -223,13 +224,13 @@ export class ServiceRequestService {
     }
   }
 
-  async sendProposal(id: number, data: ServiceRequestProposalDto, currentUser: User) {
+  async sendProposal(id: number, data: ServiceRequestProposalDto, currentUser: AuthenticatedUser) {
     if (currentUser.role !== 'consultor') {
       throw new ForbiddenException('Solo el consultor asignado puede enviar una cotización');
     }
 
     const request = await this.findOne(id);
-    this.assertParticipant(request, currentUser.id, 'consultor');
+    this.assertParticipant(request, this.getParticipantId(currentUser), 'consultor');
     if (request.status !== 'requested') {
       throw new BadRequestException(['Esta solicitud ya fue respondida']);
     }
@@ -272,10 +273,11 @@ export class ServiceRequestService {
     return this.findOne(id);
   }
 
-  async decline(id: number, data: ServiceRequestDeclineDto, currentUser: User) {
+  async decline(id: number, data: ServiceRequestDeclineDto, currentUser: AuthenticatedUser) {
     const role = this.getParticipantRole(currentUser);
     const request = await this.findOne(id);
-    this.assertParticipant(request, currentUser.id, role);
+    this.assertPymeWriteAccess(currentUser);
+    this.assertParticipant(request, this.getParticipantId(currentUser), role);
     const now = new Date();
 
     if (role === 'consultor') {
@@ -355,13 +357,14 @@ export class ServiceRequestService {
     return this.findOne(id);
   }
 
-  async completeService(id: number, currentUser: User) {
+  async completeService(id: number, currentUser: AuthenticatedUser) {
+    this.assertPymeWriteAccess(currentUser);
     if (currentUser.role !== 'pyme') {
       throw new ForbiddenException('Solo la PYME puede dar por completado el servicio');
     }
 
     const request = await this.findOne(id);
-    this.assertParticipant(request, currentUser.id, 'pyme');
+    this.assertParticipant(request, this.getParticipantId(currentUser), 'pyme');
     if (request.status === 'completed') return request;
     if (request.status !== 'paid') {
       throw new BadRequestException(['Solo puedes completar un servicio aprobado y pagado']);
@@ -377,13 +380,14 @@ export class ServiceRequestService {
     return this.findOne(id);
   }
 
-  async scheduleMilestoneMeeting(id: number, data: ServiceRequestMilestoneMeetingDto, currentUser: User) {
+  async scheduleMilestoneMeeting(id: number, data: ServiceRequestMilestoneMeetingDto, currentUser: AuthenticatedUser) {
+    this.assertPymeWriteAccess(currentUser);
     if (currentUser.role !== 'pyme') {
       throw new ForbiddenException('Solo la PYME puede proponer reuniones para los hitos');
     }
 
     const request = await this.findOne(id);
-    this.assertParticipant(request, currentUser.id, 'pyme');
+    this.assertParticipant(request, this.getParticipantId(currentUser), 'pyme');
     if (request.status !== 'paid') {
       throw new BadRequestException(['El servicio debe estar pagado antes de programar sus hitos']);
     }
@@ -418,13 +422,19 @@ export class ServiceRequestService {
     return this.findOne(id);
   }
 
-  async updateMilestone(id: number, milestoneIndex: number, data: ServiceRequestMilestoneUpdateDto, currentUser: User) {
+  async updateMilestone(
+    id: number,
+    milestoneIndex: number,
+    data: ServiceRequestMilestoneUpdateDto,
+    currentUser: AuthenticatedUser,
+  ) {
+    this.assertPymeWriteAccess(currentUser);
     if (currentUser.role !== 'pyme') {
       throw new ForbiddenException('Solo la PYME puede editar los hitos del servicio');
     }
 
     const request = await this.findOne(id);
-    this.assertParticipant(request, currentUser.id, 'pyme');
+    this.assertParticipant(request, this.getParticipantId(currentUser), 'pyme');
     if (request.status !== 'paid') {
       throw new BadRequestException(['Solo puedes editar hitos de un servicio pagado']);
     }
@@ -470,13 +480,14 @@ export class ServiceRequestService {
     return this.findOne(id);
   }
 
-  async removeMilestone(id: number, milestoneIndex: number, currentUser: User) {
+  async removeMilestone(id: number, milestoneIndex: number, currentUser: AuthenticatedUser) {
+    this.assertPymeWriteAccess(currentUser);
     if (currentUser.role !== 'pyme') {
       throw new ForbiddenException('Solo la PYME puede eliminar hitos del servicio');
     }
 
     const request = await this.findOne(id);
-    this.assertParticipant(request, currentUser.id, 'pyme');
+    this.assertParticipant(request, this.getParticipantId(currentUser), 'pyme');
     if (request.status !== 'paid') {
       throw new BadRequestException(['Solo puedes eliminar hitos de un servicio pagado']);
     }
@@ -507,13 +518,18 @@ export class ServiceRequestService {
     return this.findOne(id);
   }
 
-  async addExtraMilestoneMeeting(id: number, data: ServiceRequestExtraMilestoneMeetingDto, currentUser: User) {
+  async addExtraMilestoneMeeting(
+    id: number,
+    data: ServiceRequestExtraMilestoneMeetingDto,
+    currentUser: AuthenticatedUser,
+  ) {
+    this.assertPymeWriteAccess(currentUser);
     if (currentUser.role !== 'pyme') {
       throw new ForbiddenException('Solo la PYME puede agregar hitos al servicio');
     }
 
     const request = await this.findOne(id);
-    this.assertParticipant(request, currentUser.id, 'pyme');
+    this.assertParticipant(request, this.getParticipantId(currentUser), 'pyme');
     if (request.status !== 'paid') {
       throw new BadRequestException(['El servicio debe estar pagado antes de agregar un hito']);
     }
@@ -548,9 +564,7 @@ export class ServiceRequestService {
     }
 
     const proposedStartTimes = this.cleanProposedStartTimes(data.proposedStartTimes);
-    const meetingAfterMilestone = proposedStartTimes.some(
-      (value) => dateKeyInPeru(value) > data.dueDate,
-    );
+    const meetingAfterMilestone = proposedStartTimes.some((value) => dateKeyInPeru(value) > data.dueDate);
     if (meetingAfterMilestone) {
       throw new BadRequestException(['Los horarios propuestos deben ser anteriores o iguales a la fecha del hito']);
     }
@@ -599,7 +613,7 @@ export class ServiceRequestService {
     id: number,
     data: ServiceRequestEvidenceMultipartDto,
     files: Express.Multer.File[],
-    currentUser: User,
+    currentUser: AuthenticatedUser,
   ) {
     if (currentUser.role !== 'consultor') {
       throw new ForbiddenException('Solo el consultor puede adjuntar evidencias y entregables del servicio');
@@ -607,7 +621,7 @@ export class ServiceRequestService {
 
     const role = 'consultor' as const;
     const request = await this.findOne(id);
-    this.assertParticipant(request, currentUser.id, role);
+    this.assertParticipant(request, this.getParticipantId(currentUser), role);
     if (request.status !== 'paid') {
       throw new BadRequestException(['El servicio debe estar pagado para adjuntar evidencias']);
     }
@@ -657,13 +671,13 @@ export class ServiceRequestService {
     return this.findOne(id);
   }
 
-  async deleteEvidence(id: number, attachmentId: string, currentUser: User) {
+  async deleteEvidence(id: number, attachmentId: string, currentUser: AuthenticatedUser) {
     if (currentUser.role !== 'consultor') {
       throw new ForbiddenException('Solo el consultor puede eliminar evidencias y entregables del servicio');
     }
 
     const request = await this.findOne(id);
-    this.assertParticipant(request, currentUser.id, 'consultor');
+    this.assertParticipant(request, this.getParticipantId(currentUser), 'consultor');
     if (request.status !== 'paid') {
       throw new BadRequestException(['Solo puedes eliminar evidencias de un servicio pagado']);
     }
@@ -729,9 +743,19 @@ export class ServiceRequestService {
     });
   }
 
-  private getParticipantRole(currentUser: User): 'pyme' | 'consultor' {
+  private getParticipantRole(currentUser: AuthenticatedUser): 'pyme' | 'consultor' {
     if (currentUser.role === 'pyme' || currentUser.role === 'consultor') return currentUser.role;
     throw new ForbiddenException('Solo una PYME o un consultor puede acceder a servicios');
+  }
+
+  private getParticipantId(currentUser: AuthenticatedUser) {
+    return currentUser.role === 'pyme' ? (currentUser.pymeId ?? currentUser.id) : currentUser.id;
+  }
+
+  private assertPymeWriteAccess(currentUser: AuthenticatedUser) {
+    if (currentUser.role === 'pyme' && currentUser.membershipRole !== 'owner') {
+      throw new ForbiddenException('Tu acceso a la empresa es de solo lectura');
+    }
   }
 
   private assertParticipant(
@@ -764,9 +788,7 @@ export class ServiceRequestService {
       dueDate: milestone.dueDate,
     }));
     const kickoffMilestone = normalized.find((milestone) => this.isKickoffMilestoneTitle(milestone.title));
-    const kickoffMeetingDate = initialMeetingStartTimes
-      .map((value) => dateKeyInPeru(value))
-      .sort()[0];
+    const kickoffMeetingDate = initialMeetingStartTimes.map((value) => dateKeyInPeru(value)).sort()[0];
     const today = this.currentDateString();
     const kickoffDate = this.clampDateOnly(kickoffMeetingDate ?? kickoffMilestone?.dueDate ?? today, today, deadline);
     const intermediateMilestones = normalized

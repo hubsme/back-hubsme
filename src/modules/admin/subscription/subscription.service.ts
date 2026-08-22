@@ -1,8 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { SubscriptionRepository } from '@repositories/subscription.repository';
 import { SubscriptionPlanRepository } from '@repositories/subscription-plan.repository';
 import { SubscriptionListFiltersDto } from './dto/subscription-list.dto';
 import { SubscriptionUpsertDto } from './dto/subscription-upsert.dto';
+import { AuthenticatedUser } from '@modules/auth/authenticated-user.type';
 
 @Injectable()
 export class SubscriptionService {
@@ -39,6 +40,12 @@ export class SubscriptionService {
     return subscription;
   }
 
+  findByUserForUser(currentUser: AuthenticatedUser, requestedUserId: number) {
+    if (currentUser.role === 'admin') return this.findByUserId(requestedUserId);
+    const subscriptionUserId = currentUser.role === 'pyme' ? (currentUser.pymeId ?? currentUser.id) : currentUser.id;
+    return this.findByUserId(subscriptionUserId);
+  }
+
   async upsert(data: SubscriptionUpsertDto) {
     if (data.plan !== 'free' && data.status === 'active') {
       throw new BadRequestException(['Los planes de pago requieren cobro directo con pasarela Mercado Pago']);
@@ -59,6 +66,17 @@ export class SubscriptionService {
     return this.subscriptionRepository.create(payload);
   }
 
+  upsertForUser(currentUser: AuthenticatedUser, data: SubscriptionUpsertDto) {
+    if (currentUser.role === 'admin') return this.upsert(data);
+    if (currentUser.role === 'pyme' && currentUser.membershipRole !== 'owner') {
+      throw new ForbiddenException('Solo el propietario puede administrar la suscripción');
+    }
+    return this.upsert({
+      ...data,
+      userId: currentUser.role === 'pyme' ? (currentUser.pymeId ?? currentUser.id) : currentUser.id,
+    });
+  }
+
   async createCheckout(userId: number, planId: string) {
     const plan = await this.subscriptionPlanRepository.findById(planId);
     if (!plan) {
@@ -75,7 +93,9 @@ export class SubscriptionService {
     }
 
     const externalReference = `subscription:${userId}:${plan.id}:${Date.now()}`;
-    const webhookBaseUrl = process.env.MERCADO_PAGO_WEBHOOK_URL || `${process.env.BACKEND_URL || process.env.API_URL}/admin/mercado-pago/webhook`;
+    const webhookBaseUrl =
+      process.env.MERCADO_PAGO_WEBHOOK_URL ||
+      `${process.env.BACKEND_URL || process.env.API_URL}/admin/mercado-pago/webhook`;
     const notificationUrl = `${webhookBaseUrl}${webhookBaseUrl.includes('?') ? '&' : '?'}externalReference=${encodeURIComponent(externalReference)}`;
 
     const response = await fetch('https://api.mercadopago.com/checkout/preferences', {
@@ -113,6 +133,16 @@ export class SubscriptionService {
       initPoint: preference.init_point as string,
       sandboxInitPoint: preference.sandbox_init_point as string,
     };
+  }
+
+  async createCheckoutForUser(currentUser: AuthenticatedUser, planId: string) {
+    if (currentUser.role === 'pyme' && currentUser.membershipRole !== 'owner') {
+      throw new ForbiddenException('Solo el propietario puede administrar la suscripción');
+    }
+    return this.createCheckout(
+      currentUser.role === 'pyme' ? (currentUser.pymeId ?? currentUser.id) : currentUser.id,
+      planId,
+    );
   }
 
   async activatePlan(userId: number, planId: string) {

@@ -24,6 +24,8 @@ import { feedbackReply } from '@db/tables/feedback-reply.table';
 import { consultantServiceOffer } from '@db/tables/consultant-service-offer.table';
 import { meetingConsultantPayout } from '@db/tables/meeting-consultant-payout.table';
 import { meetingRescheduleHistory } from '@db/tables/meeting-reschedule-history.table';
+import { pymeMember } from '@db/tables/pyme-member.table';
+import { pymeInvitation } from '@db/tables/pyme-invitation.table';
 
 const pool = new Pool(dbConfig);
 
@@ -51,6 +53,8 @@ const schema = {
   consultantServiceOffer,
   meetingConsultantPayout,
   meetingRescheduleHistory,
+  pymeMember,
+  pymeInvitation,
 };
 
 export const database = drizzle(pool, { schema: schema });

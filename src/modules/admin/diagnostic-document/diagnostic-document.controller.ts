@@ -1,13 +1,11 @@
-import { Controller, Delete, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Delete, Get, Param, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { HttpErrorDto } from '@core/dto/http-error.dto';
 import { JwtAuthGuard } from '@modules/auth/jwt-auth.guard';
-import {
-  DiagnosticDocumentListDto,
-  DiagnosticDocumentListFiltersDto,
-} from './dto/diagnostic-document-list.dto';
+import { DiagnosticDocumentListDto, DiagnosticDocumentListFiltersDto } from './dto/diagnostic-document-list.dto';
 import { DiagnosticDocumentResultDto } from './dto/diagnostic-document-result.dto';
 import { DiagnosticDocumentService } from './diagnostic-document.service';
+import type { AuthenticatedRequest } from '@modules/auth/authenticated-user.type';
 
 @ApiTags('diagnosticDocument')
 @ApiBearerAuth()
@@ -20,8 +18,8 @@ export class DiagnosticDocumentController {
   @ApiOperation({ summary: 'Get all diagnostic documents paginated' })
   @ApiResponse({ status: 200, type: DiagnosticDocumentListDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  findAll(@Query() filters: DiagnosticDocumentListFiltersDto) {
-    return this.diagnosticDocumentService.findAllPaginated(filters);
+  findAll(@Request() req: AuthenticatedRequest, @Query() filters: DiagnosticDocumentListFiltersDto) {
+    return this.diagnosticDocumentService.findAllPaginated(filters, req.user);
   }
 
   @Get('find-one/:id')
@@ -29,8 +27,8 @@ export class DiagnosticDocumentController {
   @ApiParam({ name: 'id', type: 'number' })
   @ApiResponse({ status: 200, type: DiagnosticDocumentResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  findOne(@Param('id') id: string) {
-    return this.diagnosticDocumentService.findOne(+id);
+  findOne(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.diagnosticDocumentService.findOneForUser(+id, req.user);
   }
 
   @Delete('delete/:id')
@@ -38,7 +36,7 @@ export class DiagnosticDocumentController {
   @ApiParam({ name: 'id', type: 'number' })
   @ApiResponse({ status: 200, type: DiagnosticDocumentResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  remove(@Param('id') id: string) {
-    return this.diagnosticDocumentService.delete(+id);
+  remove(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
+    return this.diagnosticDocumentService.deleteForUser(+id, req.user);
   }
 }

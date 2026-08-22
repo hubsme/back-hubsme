@@ -9,11 +9,21 @@ import { EmailModule } from '../email/email.module';
 import { PymeAdminController } from './pyme-admin.controller';
 import { MeetingRepository } from '@repositories/meeting.repository';
 import { DiagnosticRepository } from '@repositories/diagnostic.repository';
+import { PymeMembershipRepository } from '@repositories/pyme-membership.repository';
+import { UserRepository } from '@repositories/user.repository';
 
 @Module({
   imports: [AdminAuthModule, WhatsappModule, EmailModule],
   controllers: [PymeAdminController, PymeController],
-  providers: [PymeService, PymeRepository, ConsultantRepository, MeetingRepository, DiagnosticRepository],
+  providers: [
+    PymeService,
+    PymeRepository,
+    ConsultantRepository,
+    MeetingRepository,
+    DiagnosticRepository,
+    PymeMembershipRepository,
+    UserRepository,
+  ],
   exports: [PymeService],
 })
 export class PymeModule {}

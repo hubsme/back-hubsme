@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { Checkout } from '@db/tables/checkout.table';
+import { getMercadoPagoSettlement } from '@functions/mercado-pago-fee.function';
 import { MeetingConsultantPayoutRepository } from '@repositories/meeting-consultant-payout.repository';
 import { MeetingRescheduleHistoryRepository } from '@repositories/meeting-reschedule-history.repository';
 import { StorageService } from '../../storage/storage.service';
@@ -35,7 +36,9 @@ export class MeetingConsultantPayoutService {
 
     const grossAmount = Number(checkout.amount);
     const platformCommission = Number(checkout.marketplaceFee);
-    const consultantAmount = Number((grossAmount - platformCommission).toFixed(2));
+    const settlement = getMercadoPagoSettlement(checkout.rawPayment, grossAmount);
+    const receivedAmount = settlement.netReceivedAmount ?? grossAmount;
+    const consultantAmount = Number((receivedAmount - platformCommission).toFixed(2));
     if (
       !Number.isFinite(grossAmount) ||
       !Number.isFinite(platformCommission) ||
@@ -46,15 +49,27 @@ export class MeetingConsultantPayoutService {
       throw new BadRequestException('El cobro aprobado no tiene un monto válido para el consultor');
     }
 
-    return this.payoutRepository.createPending({
+    const payout = await this.payoutRepository.createPending({
       meetingId: checkout.meetingId,
       checkoutId: checkout.id,
       pymeId: checkout.pymeId,
       consultantId: checkout.consultantId,
       amount: consultantAmount.toFixed(2),
+      mercadoPagoFeeAmount: settlement.feeAmount?.toFixed(2) ?? null,
+      mercadoPagoFeePercent: settlement.feePercent?.toFixed(4) ?? null,
       currency: checkout.currency,
       status: 'pending',
     });
+
+    if (!payout || payout.status === 'paid') return payout;
+
+    return (
+      (await this.payoutRepository.updatePendingFinancials(payout.id, {
+        amount: consultantAmount.toFixed(2),
+        mercadoPagoFeeAmount: settlement.feeAmount?.toFixed(2) ?? null,
+        mercadoPagoFeePercent: settlement.feePercent?.toFixed(4) ?? null,
+      })) ?? payout
+    );
   }
 
   async findAllPaginated(filters: MeetingConsultantPayoutFiltersDto) {
@@ -206,6 +221,8 @@ export class MeetingConsultantPayoutService {
         processedByAdmin: payout.processedByAdmin,
         grossAmount: payout.grossAmount,
         platformCommissionAmount: payout.platformCommissionAmount,
+        mercadoPagoFeeAmount: payout.mercadoPagoFeeAmount,
+        mercadoPagoFeePercent: payout.mercadoPagoFeePercent,
         mercadoPagoPaymentId: payout.mercadoPagoPaymentId,
         checkoutExternalReference: payout.checkoutExternalReference,
       },
