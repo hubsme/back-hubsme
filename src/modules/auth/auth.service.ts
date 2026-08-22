@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, HttpException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UserRepository } from '@repositories/user.repository';
 import { ConsultantRepository } from '@repositories/consultant.repository';
@@ -10,19 +10,25 @@ import { GoogleAuthUrlDto } from './dto/google-auth-url.dto';
 import { GoogleCallbackQueryDto } from './dto/google-callback-query.dto';
 import * as bcrypt from 'bcrypt';
 import { handleDbError } from '@functions/db-error.function';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { EmailService } from '@modules/admin/email/email.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { DniVerificationDto } from '@modules/admin/identity-verification/dto/dni-verification.dto';
-import { IdentityVerificationService, VerifiedDniProviderResult } from '@modules/admin/identity-verification/identity-verification.service';
+import {
+  IdentityVerificationService,
+  VerifiedDniProviderResult,
+} from '@modules/admin/identity-verification/identity-verification.service';
+import { PymeMembershipRepository } from '@repositories/pyme-membership.repository';
+import { AuthenticatedUser } from './authenticated-user.type';
 
 type AuthRole = 'pyme' | 'consultor';
-type GoogleAuthFlow = 'login' | 'register';
+type GoogleAuthFlow = 'login' | 'register' | 'invitation';
 
 type GoogleState = {
   flow: GoogleAuthFlow;
   role?: AuthRole;
+  invitationToken?: string;
 };
 
 type GoogleTokenResponse = {
@@ -51,6 +57,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly emailService: EmailService,
     private readonly subscriptionRepository: SubscriptionRepository,
+    private readonly pymeMembershipRepository: PymeMembershipRepository,
   ) {}
 
   async login(loginDto: LoginDto) {
@@ -73,22 +80,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Generate JWT token
-    const payload = {
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-    };
-
-    const accessToken = this.jwtService.sign(payload);
-
-    // Remove password from user object
-    const { password: _, ...userWithoutPassword } = user;
-
-    return {
-      accessToken,
-      user: userWithoutPassword,
-    };
+    return this.buildSession(user);
   }
 
   async register(registerDto: RegisterDto) {
@@ -97,6 +89,10 @@ export class AuthService {
       const firstName = registerDto.firstName?.trim();
       const lastName = registerDto.lastName?.trim();
       const displayName = this.buildDisplayName(registerDto);
+
+      if (registerDto.invitationToken?.trim()) {
+        return await this.registerFromInvitation(registerDto, displayName, firstName, lastName);
+      }
 
       if (role === 'consultor' && (!firstName || !lastName)) {
         throw new BadRequestException(['Completa nombres y apellidos del consultor']);
@@ -174,7 +170,6 @@ export class AuthService {
           active: 'true',
           validated: 'false',
         });
-
       } else if (user.role === 'pyme') {
         await this.pymeRepository.create({
           id: user.id,
@@ -186,6 +181,7 @@ export class AuthService {
           ownerPhone: registerDto.ownerPhone?.trim(),
           ownerPosition: registerDto.ownerPosition?.trim(),
         });
+        await this.pymeMembershipRepository.createOwnerMembership(user.id, user.id);
       }
 
       // Create default free subscription
@@ -196,19 +192,7 @@ export class AuthService {
         startedAt: new Date(),
       });
 
-      const payload = {
-        sub: user.id,
-        email: user.email,
-        role: user.role,
-      };
-
-      const accessToken = this.jwtService.sign(payload);
-      const { password: _, ...userWithoutPassword } = user;
-
-      return {
-        accessToken,
-        user: userWithoutPassword,
-      };
+      return await this.buildSession(user);
     } catch (error) {
       handleDbError(error);
     }
@@ -226,8 +210,18 @@ export class AuthService {
     if (flow === 'register' && !query.role) {
       throw new BadRequestException(['Selecciona el tipo de perfil para crear la cuenta con Google']);
     }
+    if (flow === 'invitation' && !query.invitationToken?.trim()) {
+      throw new BadRequestException(['Falta el token de invitación']);
+    }
 
-    const state = this.jwtService.sign({ flow, role: query.role } satisfies GoogleState, { expiresIn: '10m' });
+    const state = this.jwtService.sign(
+      {
+        flow,
+        role: query.role,
+        invitationToken: query.invitationToken?.trim(),
+      } satisfies GoogleState,
+      { expiresIn: '10m' },
+    );
     const params = new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirectUri,
@@ -244,7 +238,7 @@ export class AuthService {
   async handleGoogleCallback(query: GoogleCallbackQueryDto) {
     try {
       if (query.error) {
-        return this.buildGooglePopupResponse({ error: query.error });
+        return this.buildGooglePopupResponse({ error: this.translateGoogleError(query.error) });
       }
 
       if (!query.code || !query.state) {
@@ -262,10 +256,12 @@ export class AuthService {
       const session =
         state.flow === 'register'
           ? await this.registerWithGoogle(googleUser, state.role ?? 'pyme')
-          : await this.loginWithGoogle(googleUser);
+          : state.flow === 'invitation'
+            ? await this.joinWithGoogleInvitation(googleUser, state.invitationToken ?? '')
+            : await this.loginWithGoogle(googleUser);
       return this.buildGooglePopupResponse({ session });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'No se pudo autenticar con Google';
+      const message = this.getGoogleErrorMessage(error);
       return this.buildGooglePopupResponse({ error: message });
     }
   }
@@ -281,8 +277,7 @@ export class AuthService {
       return null;
     }
 
-    const { password: _, ...userWithoutPassword } = user;
-    return userWithoutPassword;
+    return this.buildAuthenticatedUser(user);
   }
 
   private async exchangeGoogleCode(code: string): Promise<Required<Pick<GoogleTokenResponse, 'access_token'>>> {
@@ -292,7 +287,7 @@ export class AuthService {
 
     if (!clientId || !clientSecret || !redirectUri) {
       throw new BadRequestException(['Google OAuth no esta configurado en el backend']);
-    } 
+    }
 
     const response = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -423,6 +418,7 @@ export class AuthService {
             ownerEmail: user.email,
             logoUrl: googleUser.picture,
           });
+          await this.pymeMembershipRepository.createOwnerMembership(user.id, user.id);
         } else if (!profile.logoUrl && googleUser.picture) {
           await this.pymeRepository.update(profile.id, {
             logoUrl: googleUser.picture,
@@ -444,10 +440,189 @@ export class AuthService {
     }
   }
 
-  private buildSession(user: NonNullable<Awaited<ReturnType<UserRepository['findOne']>>>) {
+  private async joinWithGoogleInvitation(googleUser: GoogleUserInfo, invitationToken: string) {
+    const invitation = await this.findValidInvitation(invitationToken);
+    const email = googleUser.email.trim().toLowerCase();
+
+    if (email !== invitation.email) {
+      throw new BadRequestException(['El correo de Google debe coincidir con el de la invitación']);
+    }
+
+    const existingUserByGoogleId = await this.userRepository.findByGoogleId(googleUser.sub);
+    const existingUserByEmail = await this.userRepository.findByEmail(email);
+    const existingUser = existingUserByGoogleId ?? existingUserByEmail;
+
+    if (existingUser) {
+      if (existingUser.email.trim().toLowerCase() !== email) {
+        throw new BadRequestException(['La cuenta de Google no coincide con el correo de la invitación']);
+      }
+
+      const session = await this.loginWithGoogle(googleUser);
+      return this.acceptInvitation(session.user, invitationToken);
+    }
+
+    const firstName = googleUser.given_name?.trim() || googleUser.name?.split(' ')[0]?.trim() || 'Usuario';
+    const lastName = googleUser.family_name?.trim() || googleUser.name?.split(' ').slice(1).join(' ').trim() || '';
+    const name = [firstName, lastName].filter(Boolean).join(' ');
+
+    try {
+      const result = await this.pymeMembershipRepository.createInvitedUserAndAcceptInvitation({
+        invitationId: invitation.id,
+        pymeId: invitation.pymeId,
+        user: {
+          email,
+          password: await bcrypt.hash(`google:${googleUser.sub}:${randomUUID()}`, 10),
+          name,
+          firstName,
+          lastName,
+          role: 'pyme',
+          authProvider: 'google',
+          googleId: googleUser.sub,
+          isActive: 'true',
+        },
+      });
+
+      return this.buildSession(result.user);
+    } catch (error) {
+      handleDbError(error);
+    }
+  }
+
+  private async buildSession(user: NonNullable<Awaited<ReturnType<UserRepository['findOne']>>>) {
     const accessToken = this.jwtService.sign({ sub: user.id, email: user.email, role: user.role });
+    const authenticatedUser = await this.buildAuthenticatedUser(user);
+    return { accessToken, user: authenticatedUser, organization: authenticatedUser.organization };
+  }
+
+  private async buildAuthenticatedUser(
+    user: NonNullable<Awaited<ReturnType<UserRepository['findOne']>>>,
+  ): Promise<AuthenticatedUser> {
     const { password: _, ...userWithoutPassword } = user;
-    return { accessToken, user: userWithoutPassword };
+    const membership =
+      user.role === 'pyme' ? await this.pymeMembershipRepository.findOrganizationByUserId(user.id) : undefined;
+
+    if (membership) {
+      const organization = {
+        id: membership.pymeId,
+        name: membership.name,
+        logoUrl: membership.logoUrl,
+        membershipRole: membership.membershipRole,
+      };
+      return {
+        ...userWithoutPassword,
+        pymeId: organization.id,
+        membershipRole: organization.membershipRole,
+        organization,
+      };
+    }
+
+    // Compatibilidad durante el despliegue: la migración crea estas membresías para
+    // todos los propietarios históricos antes de iniciar la nueva versión.
+    const ownedPyme = user.role === 'pyme' ? await this.pymeRepository.findByUserId(user.id) : undefined;
+    if (ownedPyme) {
+      const organization = {
+        id: ownedPyme.id,
+        name: ownedPyme.name,
+        logoUrl: ownedPyme.logoUrl,
+        membershipRole: 'owner' as const,
+      };
+      return {
+        ...userWithoutPassword,
+        pymeId: organization.id,
+        membershipRole: organization.membershipRole,
+        organization,
+      };
+    }
+
+    return { ...userWithoutPassword, pymeId: null, membershipRole: null, organization: null };
+  }
+
+  async getInvitationPreview(token: string) {
+    const invitation = await this.findValidInvitation(token);
+    const existingUser = await this.userRepository.findByEmail(invitation.email);
+    return {
+      email: invitation.email,
+      organizationName: invitation.organizationName,
+      expiresAt: invitation.expiresAt,
+      hasAccount: Boolean(existingUser),
+    };
+  }
+
+  async acceptInvitation(currentUser: AuthenticatedUser, token: string) {
+    const invitation = await this.findValidInvitation(token);
+    if (currentUser.email.trim().toLowerCase() !== invitation.email) {
+      throw new BadRequestException(['La invitación corresponde a otro correo electrónico']);
+    }
+    if (currentUser.role !== 'pyme') {
+      throw new BadRequestException(['Solo una cuenta PYME puede unirse a una organización']);
+    }
+    if (currentUser.pymeId) {
+      throw new BadRequestException(['Tu cuenta ya pertenece a una organización']);
+    }
+
+    try {
+      await this.pymeMembershipRepository.acceptInvitationForExistingUser(
+        invitation.id,
+        invitation.pymeId,
+        currentUser.id,
+      );
+      const user = await this.userRepository.findOne(currentUser.id);
+      if (!user) throw new UnauthorizedException();
+      return await this.buildSession(user);
+    } catch (error) {
+      handleDbError(error);
+    }
+  }
+
+  private async registerFromInvitation(
+    registerDto: RegisterDto,
+    displayName: string,
+    firstName?: string,
+    lastName?: string,
+  ) {
+    if ((registerDto.role ?? 'pyme') !== 'pyme') {
+      throw new BadRequestException(['Una invitación de empresa solo puede crear una cuenta PYME']);
+    }
+
+    const invitation = await this.findValidInvitation(registerDto.invitationToken ?? '');
+    const email = registerDto.email.trim().toLowerCase();
+    if (email !== invitation.email) {
+      throw new BadRequestException(['El correo debe coincidir con el de la invitación']);
+    }
+    if (await this.userRepository.findByEmail(email)) {
+      throw new BadRequestException(['Ya existe una cuenta con este correo. Inicia sesión para aceptar la invitación']);
+    }
+
+    try {
+      const result = await this.pymeMembershipRepository.createInvitedUserAndAcceptInvitation({
+        invitationId: invitation.id,
+        pymeId: invitation.pymeId,
+        user: {
+          email,
+          password: await bcrypt.hash(registerDto.password, 10),
+          name: displayName,
+          firstName,
+          lastName,
+          role: 'pyme',
+          authProvider: 'local',
+          isActive: 'true',
+        },
+      });
+      return await this.buildSession(result.user);
+    } catch (error) {
+      handleDbError(error);
+    }
+  }
+
+  private async findValidInvitation(token: string) {
+    const normalizedToken = token.trim();
+    if (!normalizedToken) throw new BadRequestException(['La invitación no es válida']);
+    const tokenHash = createHash('sha256').update(normalizedToken).digest('hex');
+    const invitation = await this.pymeMembershipRepository.findPendingInvitationByTokenHash(tokenHash);
+    if (!invitation) {
+      throw new BadRequestException(['La invitación no existe, venció o ya fue utilizada']);
+    }
+    return invitation;
   }
 
   private buildDisplayName(registerDto: RegisterDto) {
@@ -489,6 +664,45 @@ export class AuthService {
     }
   }
 
+  private getGoogleErrorMessage(error: unknown): string {
+    if (error instanceof HttpException) {
+      const response = error.getResponse();
+      const responseMessage =
+        typeof response === 'string'
+          ? response
+          : response && typeof response === 'object' && 'message' in response
+            ? response.message
+            : undefined;
+      const message = Array.isArray(responseMessage)
+        ? responseMessage.filter((item): item is string => typeof item === 'string').join(' ')
+        : typeof responseMessage === 'string'
+          ? responseMessage
+          : undefined;
+
+      if (message) return this.translateGoogleError(message);
+    }
+
+    if (error instanceof Error && error.message) {
+      return this.translateGoogleError(error.message);
+    }
+
+    return 'No se pudo completar el inicio de sesión con Google.';
+  }
+
+  private translateGoogleError(message: string): string {
+    const normalizedMessage = message.trim().toLowerCase();
+
+    if (normalizedMessage === 'access_denied') {
+      return 'Cancelaste el inicio de sesión con Google.';
+    }
+
+    if (normalizedMessage === 'bad request') {
+      return 'No se pudo completar el inicio de sesión con Google. Verifica que uses el correo de la invitación.';
+    }
+
+    return message;
+  }
+
   async forgotPassword(forgotPasswordDto: ForgotPasswordDto) {
     const { email } = forgotPasswordDto;
     const cleanEmail = email.trim().toLowerCase();
@@ -507,10 +721,7 @@ export class AuthService {
     }
 
     const secret = `${process.env.JWT_SECRET}-${user.password}`;
-    const token = this.jwtService.sign(
-      { sub: user.id, email: user.email },
-      { secret, expiresIn: '15m' },
-    );
+    const token = this.jwtService.sign({ sub: user.id, email: user.email }, { secret, expiresIn: '15m' });
 
     const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:6200';
     const resetUrl = `${frontendUrl}/auth/reset-password?token=${token}`;

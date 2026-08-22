@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -21,6 +22,7 @@ import {
   PromotionCodeRedeemServiceDto,
   PromotionCodeUpdateDto,
 } from './dto/promotion-code.dto';
+import { AuthenticatedUser } from '@modules/auth/authenticated-user.type';
 
 @Injectable()
 export class PromotionCodeService {
@@ -183,13 +185,10 @@ export class PromotionCodeService {
         promotionCode: claim.promotion.code,
         redemptionId: claim.redemption.id,
       });
-      await this.meetingRescheduleHistoryRepository.updateReplacementByPromotionCodeId(
-        claim.promotion.id,
-        {
-          replacementMeetingId: meeting.id,
-          promotionCodeRedemptionId: claim.redemption.id,
-        },
-      );
+      await this.meetingRescheduleHistoryRepository.updateReplacementByPromotionCodeId(claim.promotion.id, {
+        replacementMeetingId: meeting.id,
+        promotionCodeRedemptionId: claim.redemption.id,
+      });
       await this.sendMeetingNotifications(meeting.id);
 
       return {
@@ -205,6 +204,10 @@ export class PromotionCodeService {
       await this.promotionCodeRepository.releaseClaim(claim.redemption.id);
       throw error;
     }
+  }
+
+  redeemForUser(currentUser: AuthenticatedUser, data: PromotionCodeRedeemDto) {
+    return this.redeem(this.requirePymeOwnerId(currentUser), data);
   }
 
   async redeemService(currentUserId: number, data: PromotionCodeRedeemServiceDto) {
@@ -294,6 +297,17 @@ export class PromotionCodeService {
       }
       throw error;
     }
+  }
+
+  redeemServiceForUser(currentUser: AuthenticatedUser, data: PromotionCodeRedeemServiceDto) {
+    return this.redeemService(this.requirePymeOwnerId(currentUser), data);
+  }
+
+  private requirePymeOwnerId(currentUser: AuthenticatedUser) {
+    if (currentUser.role !== 'pyme' || currentUser.membershipRole !== 'owner' || !currentUser.pymeId) {
+      throw new ForbiddenException('Solo el propietario de la PYME puede canjear códigos');
+    }
+    return currentUser.pymeId;
   }
 
   private async sendMeetingNotifications(meetingId: number) {

@@ -37,6 +37,8 @@ export const meetingConsultantPayout = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: 'restrict' }),
     amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
+    mercadoPagoFeeAmount: decimal('mercado_pago_fee_amount', { precision: 10, scale: 2 }),
+    mercadoPagoFeePercent: decimal('mercado_pago_fee_percent', { precision: 7, scale: 4 }),
     currency: varchar('currency', { length: 10 }).default('PEN').notNull(),
     status: meetingConsultantPayoutStatusEnum('status').default('pending').notNull(),
     paymentReference: varchar('payment_reference', { length: 180 }),

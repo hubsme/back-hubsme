@@ -1,8 +1,8 @@
 import { Body, Controller, Post, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { HttpErrorDto } from '@core/dto/http-error.dto';
-import { User } from '@db/tables/user.table';
 import { JwtAuthGuard } from '@modules/auth/jwt-auth.guard';
+import type { AuthenticatedRequest } from '@modules/auth/authenticated-user.type';
 import { AiService } from './ai.service';
 import { HubsmeAiRunDto } from './dto/hubsme-ai/hubsme-ai-run.dto';
 import { HubsmeAiResultDto } from './dto/hubsme-ai/hubsme-ai-result.dto';
@@ -14,8 +14,6 @@ import { ServiceRequestChatRunDto } from './dto/service-request/service-request-
 import { ServiceRequestChatResultDto } from './dto/service-request/service-request-chat-result.dto';
 import { ServicePaymentPlanRunDto } from './dto/service-request/service-payment-plan-run.dto';
 import { ServicePaymentPlanResultDto } from './dto/service-request/service-payment-plan-result.dto';
-
-type AuthenticatedRequest = { user: User };
 
 @ApiTags('ia')
 @Controller('admin/ia')

@@ -1,13 +1,8 @@
 import { Body, Controller, Post, Request, UseGuards } from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiOperation,
-  ApiResponse,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { HttpErrorDto } from '@core/dto/http-error.dto';
-import { User } from '@db/tables/user.table';
 import { JwtAuthGuard } from '@modules/auth/jwt-auth.guard';
+import type { AuthenticatedRequest } from '@modules/auth/authenticated-user.type';
 import {
   PromotionCodeRedeemDto,
   PromotionCodeRedeemResultDto,
@@ -15,8 +10,6 @@ import {
   PromotionCodeRedeemServiceResultDto,
 } from './dto/promotion-code.dto';
 import { PromotionCodeService } from './promotion-code.service';
-
-type AuthenticatedRequest = { user: User };
 
 @ApiTags('promotionCode')
 @ApiBearerAuth()
@@ -29,21 +22,15 @@ export class PromotionCodeController {
   @ApiOperation({ summary: 'Redeem a code for a free consulting session' })
   @ApiResponse({ status: 201, type: PromotionCodeRedeemResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  redeem(
-    @Request() req: AuthenticatedRequest,
-    @Body() body: PromotionCodeRedeemDto,
-  ) {
-    return this.promotionCodeService.redeem(req.user.id, body);
+  redeem(@Request() req: AuthenticatedRequest, @Body() body: PromotionCodeRedeemDto) {
+    return this.promotionCodeService.redeemForUser(req.user, body);
   }
 
   @Post('redeem-service')
   @ApiOperation({ summary: 'Redeem a service code for the next available installment' })
   @ApiResponse({ status: 201, type: PromotionCodeRedeemServiceResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  redeemService(
-    @Request() req: AuthenticatedRequest,
-    @Body() body: PromotionCodeRedeemServiceDto,
-  ) {
-    return this.promotionCodeService.redeemService(req.user.id, body);
+  redeemService(@Request() req: AuthenticatedRequest, @Body() body: PromotionCodeRedeemServiceDto) {
+    return this.promotionCodeService.redeemServiceForUser(req.user, body);
   }
 }

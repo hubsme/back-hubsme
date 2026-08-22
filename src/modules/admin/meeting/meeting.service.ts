@@ -19,11 +19,13 @@ import { MeetingUpdateDto } from './dto/meeting-update.dto';
 import { TeamsMeetingService } from './teams-meeting.service';
 import { ConsultantAvailabilityService } from '../consultant-availability/consultant-availability.service';
 import { ScheduledNotificationService } from '../scheduled-notification/scheduled-notification.service';
-import { User } from '@db/tables/user.table';
 import { MeetingAccessStatus } from './dto/meeting-access.dto';
 import { MeetingConsultantCancelDto } from './dto/meeting-consultant-cancel.dto';
 import { randomBytes } from 'crypto';
 import { parseDateInPeru } from '@functions/date.function';
+import { AuthenticatedUser } from '@modules/auth/authenticated-user.type';
+
+type MeetingRequester = Pick<AuthenticatedUser, 'id' | 'role' | 'pymeId' | 'membershipRole'>;
 
 const MEETING_ACCESS_MARGIN_MS = 15 * 60 * 1000;
 const CONSULTANT_CANCELLATION_GRACE_MS = 24 * 60 * 60 * 1000;
@@ -41,7 +43,7 @@ export class MeetingService {
     private readonly scheduledNotificationService: ScheduledNotificationService,
   ) {}
 
-  async findCalendarPaginated(filters: MeetingCalendarFiltersDto, requester: Pick<User, 'id' | 'role'>) {
+  async findCalendarPaginated(filters: MeetingCalendarFiltersDto, requester: MeetingRequester) {
     const startDate = new Date(filters.startDate);
     const endDate = new Date(filters.endDate);
     const rangeMilliseconds = endDate.getTime() - startDate.getTime();
@@ -60,7 +62,7 @@ export class MeetingService {
       page,
       limit,
       { startDate, endDate, status: filters.status },
-      requester,
+      { id: this.participantId(requester), role: requester.role },
     );
     const totalPages = Math.ceil(total / limit);
 
@@ -77,13 +79,13 @@ export class MeetingService {
     };
   }
 
-  async findAllPaginated(filters: MeetingListFiltersDto, requester?: Pick<User, 'id' | 'role'>) {
+  async findAllPaginated(filters: MeetingListFiltersDto, requester?: MeetingRequester) {
     const page = filters.page ?? 1;
     const limit = filters.limit ?? 10;
     const scopedFilters = { ...filters };
 
     if (requester?.role === 'pyme') {
-      scopedFilters.pymeId = requester.id;
+      scopedFilters.pymeId = this.participantId(requester);
       scopedFilters.consultantId = undefined;
     } else if (requester?.role === 'consultor') {
       scopedFilters.consultantId = requester.id;
@@ -109,13 +111,13 @@ export class MeetingService {
     return this.toMeetingAdminResult(await this.findOne(id));
   }
 
-  async findOneForRequester(id: number, requester: Pick<User, 'id' | 'role'>) {
+  async findOneForRequester(id: number, requester: MeetingRequester) {
     const meeting = await this.findOne(id);
     this.assertMeetingParticipant(meeting, requester);
     return this.toMeetingResult(meeting);
   }
 
-  async resolveAccess(id: number, requester: Pick<User, 'id' | 'role'>) {
+  async resolveAccess(id: number, requester: MeetingRequester) {
     const meeting = await this.findOne(id);
     this.assertMeetingParticipant(meeting, requester);
 
@@ -195,6 +197,16 @@ export class MeetingService {
     return this.toMeetingResult(meeting);
   }
 
+  async createForRequester(data: MeetingCreateDto, requester: MeetingRequester) {
+    if (requester.role === 'pyme') {
+      if (requester.membershipRole !== 'owner') {
+        throw new ForbiddenException('Tu acceso a la empresa es de solo lectura');
+      }
+      return this.create({ ...data, pymeId: this.participantId(requester) });
+    }
+    return this.create(data);
+  }
+
   async confirm(id: number) {
     const meeting = await this.findOne(id);
     this.logger.log(
@@ -235,6 +247,11 @@ export class MeetingService {
     return this.toMeetingResult(confirmedMeeting);
   }
 
+  async confirmForRequester(id: number, requester: MeetingRequester) {
+    await this.assertMeetingWriteAccess(id, requester);
+    return this.confirm(id);
+  }
+
   async markPaidPendingConfirmation(id: number) {
     const meeting = await this.findOne(id);
 
@@ -253,11 +270,7 @@ export class MeetingService {
     });
   }
 
-  async confirmProposedOption(
-    id: number,
-    data: MeetingConfirmOptionDto,
-    requester?: Pick<User, 'id' | 'role'>,
-  ) {
+  async confirmProposedOption(id: number, data: MeetingConfirmOptionDto, requester?: MeetingRequester) {
     const meeting = await this.findOne(id);
 
     if (requester) {
@@ -331,6 +344,12 @@ export class MeetingService {
     }
   }
 
+  async listMeetingRecordingsForRequester(id: number, requester: MeetingRequester) {
+    const meeting = await this.findOne(id);
+    this.assertMeetingParticipant(meeting, requester);
+    return this.listMeetingRecordings(id);
+  }
+
   async update(id: number, data: MeetingUpdateDto) {
     const meeting = await this.findOne(id);
     if (data.status === 'confirmada') {
@@ -358,11 +377,12 @@ export class MeetingService {
     return this.toMeetingResult(updatedMeeting);
   }
 
-  async cancelByConsultant(
-    id: number,
-    data: MeetingConsultantCancelDto,
-    requester: Pick<User, 'id' | 'role'>,
-  ) {
+  async updateForRequester(id: number, data: MeetingUpdateDto, requester: MeetingRequester) {
+    await this.assertMeetingWriteAccess(id, requester);
+    return this.update(id, data);
+  }
+
+  async cancelByConsultant(id: number, data: MeetingConsultantCancelDto, requester: MeetingRequester) {
     if (requester.role !== 'consultor') {
       throw new ForbiddenException('Solo el consultor puede usar este flujo de cancelación');
     }
@@ -390,19 +410,14 @@ export class MeetingService {
       throw new BadRequestException(['El motivo de la cancelación debe tener al menos 10 caracteres']);
     }
     const code = `REUNION-FREE-${randomBytes(6).toString('hex').toUpperCase()}`;
-    const result = await this.meetingRepository.cancelByConsultantWithPromotionCode(
-      meeting.id,
-      requester.id,
-      reason,
-      {
-        code,
-        description: `Reposición automática por cancelación de la reunión #${meeting.id}`,
-        maxRedemptions: 1,
-        startsAt: new Date(),
-        allowedPymeIds: [meeting.pymeId],
-        allowedConsultantIds: [meeting.consultantId],
-      },
-    );
+    const result = await this.meetingRepository.cancelByConsultantWithPromotionCode(meeting.id, requester.id, reason, {
+      code,
+      description: `Reposición automática por cancelación de la reunión #${meeting.id}`,
+      maxRedemptions: 1,
+      startsAt: new Date(),
+      allowedPymeIds: [meeting.pymeId],
+      allowedConsultantIds: [meeting.consultantId],
+    });
 
     if (!result) {
       throw new BadRequestException(['La reunión ya no está disponible para cancelación']);
@@ -476,10 +491,20 @@ export class MeetingService {
     return { meeting: this.toMeetingResult(meeting), tasks };
   }
 
+  async finalizeForRequester(id: number, data: MeetingFinalizeDto, requester: MeetingRequester) {
+    await this.assertMeetingWriteAccess(id, requester);
+    return this.finalize(id, data);
+  }
+
   async delete(id: number) {
     await this.findOne(id);
     await this.scheduledNotificationService.cancelMeetingReminders(id);
     return this.toMeetingResult(await this.meetingRepository.delete(id));
+  }
+
+  async deleteForRequester(id: number, requester: MeetingRequester) {
+    await this.assertMeetingWriteAccess(id, requester);
+    return this.delete(id);
   }
 
   async getCopilotSummary(id: number) {
@@ -489,6 +514,12 @@ export class MeetingService {
     }
 
     return this.teamsMeetingService.getOnlineMeetingAiInsights(meeting.teamsOnlineMeetingId);
+  }
+
+  async getCopilotSummaryForRequester(id: number, requester: MeetingRequester) {
+    const meeting = await this.findOne(id);
+    this.assertMeetingParticipant(meeting, requester);
+    return this.getCopilotSummary(id);
   }
 
   private async createTeamsMeeting(data: {
@@ -542,17 +573,27 @@ export class MeetingService {
     return parsedDate;
   }
 
-  private assertMeetingParticipant(
-    meeting: { pymeId: number; consultantId: number },
-    requester: Pick<User, 'id' | 'role'>,
-  ) {
+  private assertMeetingParticipant(meeting: { pymeId: number; consultantId: number }, requester: MeetingRequester) {
     const belongsToRequester =
-      (requester.role === 'pyme' && meeting.pymeId === requester.id) ||
+      (requester.role === 'pyme' && meeting.pymeId === this.participantId(requester)) ||
       (requester.role === 'consultor' && meeting.consultantId === requester.id);
 
     if (!belongsToRequester) {
       throw new ForbiddenException('No tienes acceso a esta reunión');
     }
+  }
+
+  private async assertMeetingWriteAccess(id: number, requester: MeetingRequester) {
+    if (requester.role === 'pyme' && requester.membershipRole !== 'owner') {
+      throw new ForbiddenException('Tu acceso a la empresa es de solo lectura');
+    }
+    if (requester.role === 'admin') return;
+    const meeting = await this.findOne(id);
+    this.assertMeetingParticipant(meeting, requester);
+  }
+
+  private participantId(requester: MeetingRequester) {
+    return requester.role === 'pyme' ? (requester.pymeId ?? requester.id) : requester.id;
   }
 
   private toMeetingResult<T extends { meetingUrl: string | null; teamsOnlineMeetingId: string | null }>(

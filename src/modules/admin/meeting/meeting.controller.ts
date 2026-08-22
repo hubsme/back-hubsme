@@ -1,26 +1,20 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { HttpErrorDto } from '@core/dto/http-error.dto';
-import { User } from '@db/tables/user.table';
 import { JwtAuthGuard } from '@modules/auth/jwt-auth.guard';
+import type { AuthenticatedRequest } from '@modules/auth/authenticated-user.type';
 import { MeetingCalendarFiltersDto, MeetingCalendarListDto } from './dto/meeting-calendar.dto';
 import { MeetingCreateDto } from './dto/meeting-create.dto';
 import { MeetingConfirmOptionDto } from './dto/meeting-confirm-option.dto';
 import { MeetingFinalizeDto } from './dto/meeting-finalize.dto';
 import { MeetingListDto, MeetingListFiltersDto } from './dto/meeting-list.dto';
 import { MeetingRecordingDto } from './dto/meeting-recording.dto';
-import {
-  MeetingConsultantCancelResultDto,
-  MeetingFinalizeResultDto,
-  MeetingResultDto,
-} from './dto/meeting-result.dto';
+import { MeetingConsultantCancelResultDto, MeetingFinalizeResultDto, MeetingResultDto } from './dto/meeting-result.dto';
 import { MeetingUpdateDto } from './dto/meeting-update.dto';
 import { MeetingCopilotSummaryDto } from './dto/meeting-copilot-summary.dto';
 import { MeetingAccessResultDto } from './dto/meeting-access.dto';
 import { MeetingConsultantCancelDto } from './dto/meeting-consultant-cancel.dto';
 import { MeetingService } from './meeting.service';
-
-type AuthenticatedRequest = { user: User };
 
 @ApiTags('meeting')
 @ApiBearerAuth()
@@ -68,8 +62,8 @@ export class MeetingController {
   @ApiOperation({ summary: 'Create a new meeting' })
   @ApiResponse({ status: 200, type: MeetingResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  create(@Body() createMeetingDto: MeetingCreateDto) {
-    return this.meetingService.create(createMeetingDto);
+  create(@Request() request: AuthenticatedRequest, @Body() createMeetingDto: MeetingCreateDto) {
+    return this.meetingService.createForRequester(createMeetingDto, request.user);
   }
 
   @Post('confirm/:id')
@@ -77,8 +71,8 @@ export class MeetingController {
   @ApiParam({ name: 'id', type: 'number' })
   @ApiResponse({ status: 200, type: MeetingResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  confirm(@Param('id') id: string) {
-    return this.meetingService.confirm(+id);
+  confirm(@Request() request: AuthenticatedRequest, @Param('id') id: string) {
+    return this.meetingService.confirmForRequester(+id, request.user);
   }
 
   @Post('confirm-option/:id')
@@ -99,8 +93,8 @@ export class MeetingController {
   @ApiParam({ name: 'id', type: 'number' })
   @ApiResponse({ status: 200, type: [MeetingRecordingDto] })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  getRecordings(@Param('id') id: string) {
-    return this.meetingService.listMeetingRecordings(+id);
+  getRecordings(@Request() request: AuthenticatedRequest, @Param('id') id: string) {
+    return this.meetingService.listMeetingRecordingsForRequester(+id, request.user);
   }
 
   @Get('hubsme-ai/:id')
@@ -108,8 +102,8 @@ export class MeetingController {
   @ApiParam({ name: 'id', type: 'number' })
   @ApiResponse({ status: 200, type: MeetingCopilotSummaryDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  getCopilotSummary(@Param('id') id: string) {
-    return this.meetingService.getCopilotSummary(+id);
+  getCopilotSummary(@Request() request: AuthenticatedRequest, @Param('id') id: string) {
+    return this.meetingService.getCopilotSummaryForRequester(+id, request.user);
   }
 
   @Patch('update/:id')
@@ -117,8 +111,12 @@ export class MeetingController {
   @ApiParam({ name: 'id', type: 'number' })
   @ApiResponse({ status: 200, type: MeetingResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  update(@Param('id') id: string, @Body() updateMeetingDto: MeetingUpdateDto) {
-    return this.meetingService.update(+id, updateMeetingDto);
+  update(
+    @Request() request: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() updateMeetingDto: MeetingUpdateDto,
+  ) {
+    return this.meetingService.updateForRequester(+id, updateMeetingDto, request.user);
   }
 
   @Post('cancel-by-consultant/:id')
@@ -140,8 +138,8 @@ export class MeetingController {
   @ApiParam({ name: 'id', type: 'number' })
   @ApiResponse({ status: 200, type: MeetingFinalizeResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  finalize(@Param('id') id: string, @Body() finalizeDto: MeetingFinalizeDto) {
-    return this.meetingService.finalize(+id, finalizeDto);
+  finalize(@Request() request: AuthenticatedRequest, @Param('id') id: string, @Body() finalizeDto: MeetingFinalizeDto) {
+    return this.meetingService.finalizeForRequester(+id, finalizeDto, request.user);
   }
 
   @Delete('delete/:id')
@@ -149,7 +147,7 @@ export class MeetingController {
   @ApiParam({ name: 'id', type: 'number' })
   @ApiResponse({ status: 200, type: MeetingResultDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  remove(@Param('id') id: string) {
-    return this.meetingService.delete(+id);
+  remove(@Request() request: AuthenticatedRequest, @Param('id') id: string) {
+    return this.meetingService.deleteForRequester(+id, request.user);
   }
 }

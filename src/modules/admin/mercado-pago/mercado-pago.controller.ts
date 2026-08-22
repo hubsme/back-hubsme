@@ -13,8 +13,8 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { HttpErrorDto } from '@core/dto/http-error.dto';
-import { User } from '@db/tables/user.table';
 import { JwtAuthGuard } from '@modules/auth/jwt-auth.guard';
+import type { AuthenticatedRequest } from '@modules/auth/authenticated-user.type';
 import {
   MercadoPagoAuthUrlDto,
   MercadoPagoAuthUrlResponseDto,
@@ -33,8 +33,6 @@ import {
 } from './dto/mercado-pago-payment-history.dto';
 import { MercadoPagoStatusDto } from './dto/mercado-pago-status.dto';
 import { MercadoPagoService } from './mercado-pago.service';
-
-type AuthenticatedRequest = { user: User };
 
 @ApiTags('mercadoPago')
 @Controller('admin/mercado-pago')
@@ -86,7 +84,7 @@ export class MercadoPagoController {
   @ApiResponse({ status: 200, type: MercadoPagoCheckoutDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
   createCheckout(@Request() req: AuthenticatedRequest, @Body() body: MercadoPagoCreateCheckoutDto) {
-    return this.mercadoPagoService.createCheckout(req.user.id, body);
+    return this.mercadoPagoService.createCheckout(req.user, body);
   }
 
   @Get('payments')
@@ -118,7 +116,7 @@ export class MercadoPagoController {
   @ApiResponse({ status: 200, type: MercadoPagoCheckoutDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
   findCheckout(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
-    return this.mercadoPagoService.findCheckout(req.user.id, +id);
+    return this.mercadoPagoService.findCheckout(req.user, +id);
   }
 
   @Post('checkout/:id/payment')
@@ -129,7 +127,7 @@ export class MercadoPagoController {
   @ApiResponse({ status: 200, type: MercadoPagoCheckoutDto })
   @ApiResponse({ status: 400, type: HttpErrorDto })
   prepareCheckoutPayment(@Request() req: AuthenticatedRequest, @Param('id') id: string) {
-    return this.mercadoPagoService.prepareCheckoutPayment(req.user.id, +id);
+    return this.mercadoPagoService.prepareCheckoutPayment(req.user, +id);
   }
 
   @Post('service/:id/payment')
@@ -144,7 +142,7 @@ export class MercadoPagoController {
     @Param('id') id: string,
     @Body() body?: MercadoPagoServicePaymentDto,
   ) {
-    return this.mercadoPagoService.prepareServicePayment(req.user.id, +id, body?.installmentIndex);
+    return this.mercadoPagoService.prepareServicePayment(req.user, +id, body?.installmentIndex);
   }
 
   @Post('service/:id/payment/sync')

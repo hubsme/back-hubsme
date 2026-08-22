@@ -12,6 +12,8 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { MessageResponseDto } from './dto/message-response.dto';
+import type { AuthenticatedRequest } from './authenticated-user.type';
+import { InvitationPreviewDto, InvitationTokenDto } from '@modules/admin/pyme/dto/pyme-membership.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -32,6 +34,24 @@ export class AuthController {
   @ApiResponse({ status: 400, type: HttpErrorDto })
   async register(@Body() registerDto: RegisterDto) {
     return await this.authService.register(registerDto);
+  }
+
+  @Get('invitation')
+  @ApiOperation({ summary: 'Validate a PYME invitation token' })
+  @ApiResponse({ status: 200, type: InvitationPreviewDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  invitation(@Query() query: InvitationTokenDto) {
+    return this.authService.getInvitationPreview(query.token);
+  }
+
+  @Post('invitation/accept')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Accept a PYME invitation with the current account' })
+  @ApiResponse({ status: 200, type: LoginResponseDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  acceptInvitation(@Request() req: AuthenticatedRequest, @Body() body: InvitationTokenDto) {
+    return this.authService.acceptInvitation(req.user, body.token);
   }
 
   @Get('google/url')
@@ -56,7 +76,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Get current user profile' })
   @ApiResponse({ status: 200, description: 'Returns current user information' })
   @ApiResponse({ status: 400, type: HttpErrorDto })
-  getProfile(@Request() req) {
+  getProfile(@Request() req: AuthenticatedRequest) {
     return req.user;
   }
 

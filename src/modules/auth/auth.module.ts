@@ -10,6 +10,7 @@ import { PymeRepository } from '@repositories/pyme.repository';
 import { SubscriptionRepository } from '@repositories/subscription.repository';
 import { EmailModule } from '@modules/admin/email/email.module';
 import { IdentityVerificationModule } from '@modules/admin/identity-verification/identity-verification.module';
+import { PymeMembershipRepository } from '@repositories/pyme-membership.repository';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { IdentityVerificationModule } from '@modules/admin/identity-verification
     PymeRepository,
     ConsultantRepository,
     SubscriptionRepository,
+    PymeMembershipRepository,
   ],
   exports: [AuthService],
 })

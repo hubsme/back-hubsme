@@ -1,3 +1,3 @@
-import type { User } from '@db/tables/user.table';
+import type { AuthenticatedUser } from '@modules/auth/authenticated-user.type';
 
-export type ServiceRequestAuthenticatedRequest = { user: User };
+export type ServiceRequestAuthenticatedRequest = { user: AuthenticatedUser };

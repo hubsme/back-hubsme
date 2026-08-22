@@ -46,6 +46,12 @@ export class MeetingConsultantPayoutResultDto {
   @ApiProperty()
   amount: string;
 
+  @ApiProperty({ nullable: true, description: 'Cargo retenido por Mercado Pago' })
+  mercadoPagoFeeAmount: string | null;
+
+  @ApiProperty({ nullable: true, description: 'Porcentaje efectivo retenido por Mercado Pago sobre el cobro bruto' })
+  mercadoPagoFeePercent: string | null;
+
   @ApiProperty()
   currency: string;
 

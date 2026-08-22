@@ -1,6 +1,18 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsEmail, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Matches, Min, MinLength, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsEmail,
+  IsIn,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+  Min,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
 import {
   ConsultantCaseStudyDto,
   ConsultantEducationDto,
@@ -13,6 +25,11 @@ import {
 import type { ConsultantWorkModality } from '@db/tables/consultant.table';
 
 export class RegisterDto {
+  @ApiPropertyOptional({ description: 'Token de invitación para unirse a una PYME existente' })
+  @IsString()
+  @IsOptional()
+  invitationToken?: string;
+
   @ApiProperty({ example: 'maria@empresa.com', description: 'User email address' })
   @IsEmail()
   @IsNotEmpty()
@@ -54,7 +71,10 @@ export class RegisterDto {
   @IsOptional()
   maternalLastName?: string;
 
-  @ApiPropertyOptional({ example: '1990-05-21', description: 'Fecha de nacimiento usada en la validación de identidad' })
+  @ApiPropertyOptional({
+    example: '1990-05-21',
+    description: 'Fecha de nacimiento usada en la validación de identidad',
+  })
   @IsString()
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'birthDate debe tener el formato YYYY-MM-DD' })
   @IsOptional()

@@ -10,7 +10,7 @@ import {
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { FunctionCallingConfigMode, FunctionDeclaration, GoogleGenAI } from '@google/genai';
-import { User } from '@db/tables/user.table';
+import { AuthenticatedUser } from '@modules/auth/authenticated-user.type';
 import {
   SERVICE_REQUEST_BUDGET_TYPES,
   SERVICE_REQUEST_CATEGORIES,
@@ -463,7 +463,10 @@ export class AiService {
     return normalized;
   }
 
-  async runServiceRequestChat(data: ServiceRequestChatRunDto, currentUser: User): Promise<ServiceRequestChatResultDto> {
+  async runServiceRequestChat(
+    data: ServiceRequestChatRunDto,
+    currentUser: AuthenticatedUser,
+  ): Promise<ServiceRequestChatResultDto> {
     this.assertPyme(currentUser);
     const sourceMeetingContext = await this.getServiceRequestMeetingContext(
       data.sourceTaskId,
@@ -592,7 +595,10 @@ export class AiService {
     return response;
   }
 
-  async runServicePaymentPlan(data: ServicePaymentPlanRunDto, currentUser: User): Promise<ServicePaymentPlanResultDto> {
+  async runServicePaymentPlan(
+    data: ServicePaymentPlanRunDto,
+    currentUser: AuthenticatedUser,
+  ): Promise<ServicePaymentPlanResultDto> {
     this.assertPyme(currentUser);
     const draft = this.normalizeServiceDraft(data.draft);
     const missingInformation = this.getDraftMissingInformation(draft);
@@ -634,7 +640,7 @@ export class AiService {
 
   async runServiceConsultantMatches(
     data: ServiceConsultantMatchRunDto,
-    currentUser: User,
+    currentUser: AuthenticatedUser,
   ): Promise<ServiceConsultantMatchesResultDto> {
     this.assertPyme(currentUser);
     const draft = this.normalizeServiceDraft(data.draft);
@@ -1368,13 +1374,13 @@ export class AiService {
   private async getServiceRequestMeetingContext(
     sourceTaskId: number | undefined,
     sourceMeetingId: number | undefined,
-    currentUser: User,
+    currentUser: AuthenticatedUser,
   ): Promise<ServiceRequestMeetingContext | null> {
     if (sourceTaskId === undefined && sourceMeetingId === undefined) return null;
 
     const sourceTask = sourceTaskId === undefined ? null : await this.taskRepository.findOne(sourceTaskId);
     if (sourceTaskId !== undefined && !sourceTask) throw new NotFoundException('La tarea seleccionada no existe');
-    if (sourceTask && sourceTask.pymeId !== currentUser.id) {
+    if (sourceTask && sourceTask.pymeId !== this.pymeId(currentUser)) {
       throw new ForbiddenException('No puedes crear un servicio desde una tarea de otra PYME');
     }
     if (sourceTask?.serviceRequestId !== null && sourceTask?.serviceRequestId !== undefined) {
@@ -1389,7 +1395,7 @@ export class AiService {
 
     const meeting = await this.meetingRepository.findOne(resolvedMeetingId);
     if (!meeting) throw new NotFoundException('El acta seleccionada no existe');
-    if (meeting.pymeId !== currentUser.id) {
+    if (meeting.pymeId !== this.pymeId(currentUser)) {
       throw new ForbiddenException('No puedes crear un servicio desde un acta de otra PYME');
     }
     if (meeting.status !== 'finalizada' || !meeting.description?.trim()) {
@@ -1425,10 +1431,14 @@ export class AiService {
     };
   }
 
-  private assertPyme(currentUser: User) {
-    if (currentUser.role !== 'pyme') {
+  private assertPyme(currentUser: AuthenticatedUser) {
+    if (currentUser.role !== 'pyme' || currentUser.membershipRole !== 'owner') {
       throw new ForbiddenException('Solo una PYME puede usar el asistente de servicios');
     }
+  }
+
+  private pymeId(currentUser: AuthenticatedUser) {
+    return currentUser.pymeId ?? currentUser.id;
   }
 
   private async validateConsultantCvProfile(data: ConsultantCvProfileResultDto) {

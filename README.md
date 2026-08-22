@@ -134,14 +134,31 @@ Los checkouts nuevos de consultoría se crean con `collection_destination = hubs
 Cuando Mercado Pago confirma un pago real de consultoría:
 
 1. El total cobrado queda registrado en `checkout.amount`.
-2. La comisión de Hubsme queda registrada en `checkout.marketplace_fee`.
-3. Se crea idempotentemente una obligación `meeting_consultant_payout` en estado `pending` por el neto (`amount - marketplace_fee`).
-4. El administrador realiza el depósito fuera del sistema y lo registra desde Backoffice > Reuniones > Pagos a consultores.
-5. Para cambiar la obligación a `paid` son obligatorias la referencia, la constancia PDF/imagen, la fecha y el administrador responsable.
+2. El cargo real de Mercado Pago se obtiene de `raw_payment.transaction_details.net_received_amount` (con `fee_details` como respaldo) y se guarda en `meeting_consultant_payout.mercado_pago_fee_amount` y `mercado_pago_fee_percent`.
+3. La comisión contable de Hubsme queda registrada en `checkout.marketplace_fee`.
+4. Se crea idempotentemente una obligación `meeting_consultant_payout` en estado `pending` por el neto real recibido menos la comisión de Hubsme (`net_received_amount - marketplace_fee`).
+5. El administrador realiza el depósito fuera del sistema y lo registra desde Backoffice > Reuniones > Pagos a consultores.
+6. Para cambiar la obligación a `paid` son obligatorias la referencia, la constancia PDF/imagen, la fecha y el administrador responsable.
+
+El cargo de Mercado Pago no se calcula con un porcentaje fijo: puede incluir comisión, IGV y un importe fijo según la configuración y el momento de liberación del dinero. Por eso el valor de la API de Mercado Pago es la fuente de verdad para cada operación. La migración `src/db/migrations/version_010/v010_001_add_mercado_pago_fee_to_meeting_consultant_payout.sql` agrega estos campos y corrige únicamente las obligaciones pendientes; los pagos ya realizados conservan el importe histórico transferido.
 
 Los cupones no generan obligaciones monetarias y las cuotas de servicios usan su flujo propio. Los checkouts históricos de consultoría se conservan con destino `consultant` para no duplicar deudas ya liquidadas mediante el split anterior.
 
-La estructura se incorpora mediante las migraciones manuales `src/db/migrations/version_009/v009_001_create_meeting_consultant_payout.sql` y `src/db/migrations/version_009/v009_002_create_meeting_reschedule_history.sql`. Debido a que la base está en producción, debe aplicarlas una persona autorizada; la IA no ejecuta migraciones.
+La estructura se incorpora mediante las migraciones manuales `src/db/migrations/version_009/v009_001_create_meeting_consultant_payout.sql`, `src/db/migrations/version_009/v009_002_create_meeting_reschedule_history.sql` y `src/db/migrations/version_010/v010_001_add_mercado_pago_fee_to_meeting_consultant_payout.sql`. Debido a que la base está en producción, debe aplicarlas una persona autorizada; la IA no ejecuta migraciones.
+
+## 👥 Organizaciones y acceso compartido
+
+Una PYME funciona como organización compartida. El perfil `pyme` sigue representando a la empresa y sus recursos continúan relacionados mediante `pyme_id`; las cuentas personales se vinculan a esa empresa con `pyme_member`.
+
+- Cada usuario puede tener una sola membresía activa en este MVP.
+- El usuario que creó la PYME es miembro `owner`; la migración `version_011` agrega esta membresía a las empresas históricas.
+- Un `owner` puede invitar correos desde Equipo. La invitación vence en 7 días y la base solo guarda el hash SHA-256 del token.
+- Si el invitado todavía no tiene cuenta, el registro por invitación crea `app_user` y `pyme_member`, pero no crea otra fila `pyme` ni otra suscripción.
+- Si ya tiene una cuenta compatible sin organización, inicia sesión y acepta el mismo token.
+- Los miembros ven los diagnósticos, reuniones, calendario, tareas, servicios y documentos de la organización. En el MVP su acceso es de solo lectura; el propietario conserva las operaciones de creación, edición, pago y administración del equipo.
+- El JWT identifica a la persona. En cada petición autenticada el backend resuelve `pymeId` y `membershipRole` desde la membresía activa, por lo que el alcance no depende del ID enviado por el navegador.
+
+La migración manual `src/db/migrations/version_011/v011_001_create_pyme_organization_membership.sql` crea `pyme_member`, `pyme_invitation` y el backfill de propietarios. La aplicación no ejecuta esta migración automáticamente.
 
 ### Endpoints principales
 
