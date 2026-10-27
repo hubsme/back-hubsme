@@ -1,10 +1,12 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, ParseIntPipe, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { HttpErrorDto } from '@core/dto/http-error.dto';
 import { AdminAuthGuard } from '../admin-auth/admin-auth.guard';
 import { PymeListDto, PymeListFiltersDto } from './dto/pyme-list.dto';
 import { PymeResultDto } from './dto/pyme-result.dto';
 import { PymeService } from './pyme.service';
+import { PaginationFiltersDto } from '../common/pagination.dto';
+import { DiagnosticListDto } from '../diagnostic/dto/diagnostic-list.dto';
 
 @ApiTags('pymeAdmin')
 @ApiBearerAuth()
@@ -28,5 +30,16 @@ export class PymeAdminController {
   @ApiResponse({ status: 400, type: HttpErrorDto })
   findOne(@Param('id') id: string) {
     return this.pymeService.findOne(+id);
+  }
+
+  @Get(':id/diagnostics')
+  @ApiOperation({ summary: 'List AI diagnostics for a PYME in the internal admin panel' })
+  @ApiParam({ name: 'id', type: 'number' })
+  @ApiResponse({ status: 200, type: DiagnosticListDto })
+  @ApiResponse({ status: 400, type: HttpErrorDto })
+  @ApiResponse({ status: 401, type: HttpErrorDto })
+  @ApiResponse({ status: 404, type: HttpErrorDto })
+  diagnostics(@Param('id', ParseIntPipe) id: number, @Query() filters: PaginationFiltersDto) {
+    return this.pymeService.findDiagnosticsForAdmin(id, filters);
   }
 }
