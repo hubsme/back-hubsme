@@ -17,6 +17,7 @@ import { UserRepository } from '@repositories/user.repository';
 import { AuthenticatedUser } from '@modules/auth/authenticated-user.type';
 import { CreatePymeInvitationDto } from './dto/pyme-membership.dto';
 import { createHash, randomBytes } from 'crypto';
+import { PaginationFiltersDto } from '../common/pagination.dto';
 
 @Injectable()
 export class PymeService {
@@ -114,6 +115,19 @@ export class PymeService {
       limit,
       filters.search,
     );
+    const totalPages = Math.ceil(total / limit);
+
+    return {
+      data,
+      meta: { total, page, limit, totalPages, hasNextPage: page < totalPages, hasPreviousPage: page > 1 },
+    };
+  }
+
+  async findDiagnosticsForAdmin(pymeId: number, filters: PaginationFiltersDto) {
+    await this.findOne(pymeId);
+    const page = filters.page ?? 1;
+    const limit = filters.limit ?? 10;
+    const { data, total } = await this.diagnosticRepository.findAllPaginated(page, limit, { pymeId });
     const totalPages = Math.ceil(total / limit);
 
     return {
