@@ -1,18 +1,8 @@
-import { INestApplication } from '@nestjs/common';
-import { DocumentBuilder, OpenAPIObject, SwaggerModule } from '@nestjs/swagger';
+import type { INestApplication } from '@nestjs/common';
+import { SwaggerModule } from '@nestjs/swagger';
+import { SwaggerFunction } from '@functions/swagger.function';
 
-export function createSwaggerDocument(app: INestApplication): OpenAPIObject {
-  const config = new DocumentBuilder()
-    .setTitle('Hubsme API Documentation')
-    .setDescription('API endpoints for the Hubsme consulting platform')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-
-  return SwaggerModule.createDocument(app, config);
-}
-
-export function setupSwagger(app: INestApplication) {
-  const document = createSwaggerDocument(app);
+export function setupSwagger(app: INestApplication): void {
+  const document = SwaggerFunction.createDocument(app);
   SwaggerModule.setup('api', app, document);
 }

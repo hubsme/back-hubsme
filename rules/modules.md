@@ -70,17 +70,17 @@ export class EntityController {
 ### Service (`.service.ts`)
 
 - **Decorador**: `@Injectable()`.
-- **Inyección**: Inyecta el **Repositorio** correspondiente (`@repositories/[name].repository`).
+- **Inyección**: Inyecta el **Repositorio** correspondiente (`@queries/[name].query`).
 - **Lógica**:
   - Implementa `findAllPaginated(filters: [Entity]ListFiltersDto)`.
-  - Delega el acceso a datos al repositorio.
+  - Delega el acceso a datos al query.
   - No debe contener lógica de acceso a base de datos directa (query builders, etc.).
 
 ### Module (`.module.ts`)
 
 - **Decorador**: `@Module()`.
 - **Controllers**: Registra el controlador.
-- **Providers**: Registra el servicio y el repositorio necesario.
+- **Providers**: Registra el servicio y el query necesario.
 
 ### DTOs (`dto/`)
 
@@ -109,9 +109,9 @@ import { entityEnumName } from '@db/tables/entity.table';
 ```typescript
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEnum, IsNotEmpty } from 'class-validator';
-import { entityEnumName, EntityDTO } from '@db/tables/entity.table';
+import { entity, entityEnumName } from '@db/tables/entity.table';
 
-export class EntityCreateDto implements Omit<EntityDTO, 'id' | 'createdAt' | 'updatedAt' | 'deletedAt'> {
+export class EntityCreateDto implements Omit<typeof entity.$inferInsert, 'id' | 'createdAt' | 'updatedAt' | 'deletedAt'> {
   @ApiProperty({
     enum: entityEnumName.enumValues,
     default: entityEnumName.enumValues[0],
@@ -160,9 +160,9 @@ export class EntityListFiltersDto {
 
 ```typescript
 import { ApiProperty } from '@nestjs/swagger';
-import { Entity, entityEnumName } from '@db/tables/entity.table';
+import { entity, entityEnumName } from '@db/tables/entity.table';
 
-export class EntityResultDto implements Entity {
+export class EntityResultDto {
   @ApiProperty()
   id: number;
 
@@ -266,7 +266,7 @@ export class EntityListDto {
 ```typescript
 async findAllPaginated(filters: EntityListFiltersDto) {
   const { page, limit, ...rest } = filters;
-  const { data, total } = await this.entityRepository.findAllPaginated(page, limit, rest);
+  const { data, total } = await this.entityQuery.findAllPaginated(page, limit, rest);
 
   const totalPages = Math.ceil(total / limit);
   const hasNextPage = page < totalPages;
@@ -332,7 +332,7 @@ Ejemplo en Hubsme: el módulo `pyme` expone endpoints de la PYME y también los 
 - `GET /admin/pyme/consultant-messages` - Listar mensajes.
 - `POST /admin/pyme/send-consultant-message` - Enviar mensaje.
 
-El servicio debe inyectar los repositorios relacionados y mantener la regla de capas: la lógica queda en service, el acceso a datos queda en repository y el controller solo enruta/documenta.
+El servicio debe inyectar los queries relacionados y mantener la regla de capas: la lógica queda en service, el acceso a datos queda en query y el controller solo enruta/documenta.
 
 ### 5.6 Ventajas de este Enfoque
 

@@ -1,6 +1,6 @@
 import { pgTable, serial, text, timestamp, integer, pgEnum, index } from 'drizzle-orm/pg-core';
-import { user } from './user.table';
-import { serviceRequest } from './service-request.table';
+import { user } from '@db/tables/user.table';
+import { serviceRequest } from '@db/tables/service-request.table';
 
 export const meetingStatusEnum = pgEnum('meeting_status', [
   'solicitada',
@@ -9,7 +9,9 @@ export const meetingStatusEnum = pgEnum('meeting_status', [
   'finalizada',
   'cancelada',
 ]);
+
 export const meetingRequestedByEnum = pgEnum('meeting_requested_by', ['pyme', 'consultor']);
+
 export const meetingTypeEnum = pgEnum('meeting_type', ['consultoria', 'servicio']);
 
 export const meeting = pgTable(
@@ -49,6 +51,3 @@ export const meeting = pgTable(
     index('meeting_start_time_idx').on(t.startTime),
   ],
 );
-
-export type Meeting = typeof meeting.$inferSelect;
-export type MeetingDTO = typeof meeting.$inferInsert;

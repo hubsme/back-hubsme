@@ -1,8 +1,20 @@
-import { date, pgTable, text, varchar, timestamp, integer, decimal, index, uniqueIndex, jsonb, pgEnum } from 'drizzle-orm/pg-core';
+import { user } from '@db/tables/user.table';
 import { sql } from 'drizzle-orm';
-import { user } from './user.table';
+import {
+  date,
+  decimal,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  varchar,
+} from 'drizzle-orm/pg-core';
 
-export const CONSULTANT_DIAGNOSTIC_AREAS = [
+export const consultantDiagnosticAreaEnum = pgEnum('consultant_diagnostic_area', [
   'Estratégica',
   'Financiera',
   'Comercial / Ventas',
@@ -14,37 +26,9 @@ export const CONSULTANT_DIAGNOSTIC_AREAS = [
   'Legal',
   'Laboral',
   'Tributario / Contable',
-] as const;
+] as const);
 
-export type ConsultantDiagnosticArea = (typeof CONSULTANT_DIAGNOSTIC_AREAS)[number];
-
-export const CONSULTANT_WORK_MODALITIES = ['remote'] as const;
-
-export type ConsultantWorkModality = (typeof CONSULTANT_WORK_MODALITIES)[number];
-
-export const consultantDiagnosticAreaEnum = pgEnum(
-  'consultant_diagnostic_area',
-  CONSULTANT_DIAGNOSTIC_AREAS,
-);
-
-export const consultantWorkModalityEnum = pgEnum(
-  'consultant_work_modality',
-  CONSULTANT_WORK_MODALITIES,
-);
-
-export type ConsultantEducationItem = {
-  degree: string;
-  institution?: string;
-  year?: string;
-};
-
-export type ConsultantCaseStudy = {
-  title: string;
-  problem?: string;
-  action?: string;
-  result?: string;
-  sector?: string;
-};
+export const consultantWorkModalityEnum = pgEnum('consultant_work_modality', ['remote'] as const);
 
 export const consultant = pgTable(
   'consultant',
@@ -73,10 +57,30 @@ export const consultant = pgTable(
     companyTypes: text('company_types').array().default([]).notNull(),
     services: text('services').array().default([]).notNull(),
     yearsExperience: integer('years_experience').default(0).notNull(),
-    education: jsonb('education').$type<ConsultantEducationItem[]>().default([]).notNull(),
+    education: jsonb('education')
+      .$type<
+        {
+          degree: string;
+          institution?: string;
+          year?: string;
+        }[]
+      >()
+      .default([])
+      .notNull(),
     certifications: text('certifications').array().default([]).notNull(),
     workedSectors: text('worked_sectors').array().default([]).notNull(),
-    caseStudies: jsonb('case_studies').$type<ConsultantCaseStudy[]>().default([]).notNull(),
+    caseStudies: jsonb('case_studies')
+      .$type<
+        {
+          title: string;
+          problem?: string;
+          action?: string;
+          result?: string;
+          sector?: string;
+        }[]
+      >()
+      .default([])
+      .notNull(),
     cvText: text('cv_text'),
     cvUrl: text('cv_url'),
     photoUrl: text('photo_url'),
@@ -106,6 +110,3 @@ export const consultant = pgTable(
       .where(sql`${t.deletedAt} IS NULL`),
   ],
 );
-
-export type Consultant = typeof consultant.$inferSelect;
-export type ConsultantDTO = typeof consultant.$inferInsert;

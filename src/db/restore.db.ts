@@ -167,4 +167,7 @@ const runRestore = async () => {
   });
 };
 
-runRestore();
+// Importar el módulo no ejecuta operaciones administrativas.
+if (require.main === module) {
+  void runRestore();
+}

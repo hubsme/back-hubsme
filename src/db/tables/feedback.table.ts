@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { check, index, integer, pgEnum, pgTable, serial, text, timestamp, varchar } from 'drizzle-orm/pg-core';
-import { user, userRoleEnum } from './user.table';
+import { user, userRoleEnum } from '@db/tables/user.table';
 
 export const feedbackStatusEnum = pgEnum('feedback_status', ['new', 'in_review', 'accepted', 'resolved', 'closed']);
 
@@ -31,6 +31,3 @@ export const feedback = pgTable(
     check('feedback_user_role_check', sql`${t.userRole} IN ('pyme', 'consultor')`),
   ],
 );
-
-export type Feedback = typeof feedback.$inferSelect;
-export type FeedbackDTO = typeof feedback.$inferInsert;

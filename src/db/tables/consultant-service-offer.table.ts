@@ -1,3 +1,5 @@
+import { consultant } from '@db/tables/consultant.table';
+import { serviceRequestCategoryEnum, serviceRequestWorkModalityEnum } from '@db/tables/service-request.table';
 import { sql } from 'drizzle-orm';
 import {
   boolean,
@@ -12,16 +14,12 @@ import {
   timestamp,
   varchar,
 } from 'drizzle-orm/pg-core';
-import { consultant } from './consultant.table';
-import { serviceRequestCategoryEnum, serviceRequestWorkModalityEnum } from './service-request.table';
 
-export const CONSULTANT_SERVICE_OFFER_PRICE_PERIODS = ['one_time', 'monthly', 'hourly'] as const;
-export type ConsultantServiceOfferPricePeriod = (typeof CONSULTANT_SERVICE_OFFER_PRICE_PERIODS)[number];
-
-export const consultantServiceOfferPricePeriodEnum = pgEnum(
-  'consultant_service_offer_price_period',
-  CONSULTANT_SERVICE_OFFER_PRICE_PERIODS,
-);
+export const consultantServiceOfferPricePeriodEnum = pgEnum('consultant_service_offer_price_period', [
+  'one_time',
+  'monthly',
+  'hourly',
+] as const);
 
 export const consultantServiceOffer = pgTable(
   'consultant_service_offer',
@@ -62,6 +60,3 @@ export const consultantServiceOffer = pgTable(
     ),
   ],
 );
-
-export type ConsultantServiceOffer = typeof consultantServiceOffer.$inferSelect;
-export type ConsultantServiceOfferDTO = typeof consultantServiceOffer.$inferInsert;

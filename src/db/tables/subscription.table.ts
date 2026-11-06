@@ -1,7 +1,7 @@
 import { pgTable, serial, timestamp, integer, pgEnum, index, uniqueIndex, text } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { user } from './user.table';
-import { subscriptionPlan } from './subscription-plan.table';
+import { user } from '@db/tables/user.table';
+import { subscriptionPlan } from '@db/tables/subscription-plan.table';
 
 export const subscriptionStatusEnum = pgEnum('subscription_status', ['active', 'paused', 'cancelled', 'expired']);
 
@@ -32,6 +32,3 @@ export const subscription = pgTable(
       .where(sql`${t.deletedAt} IS NULL`),
   ],
 );
-
-export type Subscription = typeof subscription.$inferSelect;
-export type SubscriptionDTO = typeof subscription.$inferInsert;

@@ -1,0 +1,220 @@
+import { Trace } from '@erixcel/traceflow';
+import type {
+  ConsultantNotificationRecipient,
+  WeekDate,
+} from '@modules/admin/modules/scheduled-notification/types/consultant-availability-reminder.type';
+import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from '@nestjs/common';
+import { ConsultantAvailabilityQuery } from '@queries/consultant-availability/consultant-availability.query';
+import { ConsultantJoinQuery } from '@queries/consultant/consultant-join.query';
+
+import { DateFunction } from '@functions/date.function';
+import { EmailService } from '@modules/admin/modules/email/email.service';
+import { WhatsappService } from '@modules/admin/modules/whatsapp/whatsapp.service';
+
+// Gestiona los recordatorios de disponibilidad.
+@Trace({ name: 'consultant-availability-reminder', type: 'service' })
+@Injectable()
+export class ConsultantAvailabilityReminderService implements OnApplicationBootstrap, OnModuleDestroy {
+  private readonly oneDayMs = 24 * 60 * 60 * 1000;
+
+  private readonly monday = 1;
+
+  private readonly reminderHourLima = 6;
+
+  private readonly consultantCalendarPath = '/admin/consultor/meetings';
+
+  private readonly logger = new Logger(ConsultantAvailabilityReminderService.name);
+  private timer?: ReturnType<typeof setTimeout>;
+
+  constructor(
+    private readonly whatsappService: WhatsappService,
+    private readonly emailService: EmailService,
+    private readonly consultantJoinQuery: ConsultantJoinQuery,
+    private readonly consultantAvailabilityQuery: ConsultantAvailabilityQuery,
+  ) {}
+
+  onApplicationBootstrap() {
+    this.scheduleNextRun();
+  }
+
+  onModuleDestroy() {
+    if (this.timer) clearTimeout(this.timer);
+  }
+
+  private scheduleNextRun(reference = new Date()) {
+    if (this.timer) clearTimeout(this.timer);
+
+    const nextRun = this.getNextMondayAtSix(reference);
+    const delay = Math.max(0, nextRun.getTime() - Date.now());
+    this.timer = setTimeout(() => void this.runAndReschedule(), delay);
+    this.timer.unref?.();
+
+    this.logger.log(
+      `Proximo recordatorio de disponibilidad: ${DateFunction.formatInPeru(nextRun, {
+        dateStyle: 'full',
+        timeStyle: 'short',
+      })}`,
+    );
+  }
+
+  private async runAndReschedule() {
+    this.timer = undefined;
+    try {
+      await this.sendWeeklyAvailabilityReminders(new Date());
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`No se pudo procesar el recordatorio semanal de disponibilidad: ${message}`);
+    } finally {
+      this.scheduleNextRun(new Date(Date.now() + 60_000));
+    }
+  }
+
+  private async sendWeeklyAvailabilityReminders(reference: Date) {
+    const recipients = await this.consultantJoinQuery.findActiveNotificationRecipients();
+    if (!recipients.length) {
+      this.logger.log('No hay consultores activos para revisar disponibilidad');
+      return;
+    }
+
+    const weekDates = this.getLimaWeekDates(reference);
+    const months = this.getDistinctMonthStarts(weekDates);
+    const availability = await this.consultantAvailabilityQuery.findByConsultantsAndMonths(
+      recipients.map((recipient) => recipient.id),
+      months,
+    );
+    const availabilityByConsultantAndMonth = this.indexAvailability(availability);
+    const pendingRecipients = recipients.filter(
+      (recipient) => !this.hasAvailabilityInWeek(recipient.id, weekDates, availabilityByConsultantAndMonth),
+    );
+    const period = this.formatWeekPeriod(weekDates);
+    const calendarUrl = this.buildCalendarUrl();
+
+    const results = await Promise.allSettled(
+      pendingRecipients.map((recipient) => this.notifyConsultant(recipient, period, calendarUrl)),
+    );
+    const failures = results.filter((result) => result.status === 'rejected');
+    failures.forEach((result) => {
+      const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
+      this.logger.error(`Fallo un recordatorio semanal de disponibilidad: ${message}`);
+    });
+
+    this.logger.log(
+      `Recordatorio semanal completado: ${pendingRecipients.length - failures.length} enviado(s), ${failures.length} con error, ${recipients.length - pendingRecipients.length} con disponibilidad`,
+    );
+  }
+
+  private async notifyConsultant(recipient: ConsultantNotificationRecipient, period: string, calendarUrl: string) {
+    const notifications: Promise<unknown>[] = [];
+    const phone = recipient.ownerPhone?.trim();
+    const email = recipient.userEmail?.trim();
+
+    if (phone) {
+      notifications.push(
+        this.whatsappService.sendAvailabilityPendingReminder(phone, {
+          consultantName: recipient.fullName,
+          period,
+          calendarPath: this.consultantCalendarPath,
+        }),
+      );
+    }
+
+    if (email) {
+      notifications.push(
+        this.emailService.sendAvailabilityPendingReminderEmail({
+          to: email,
+          consultantName: recipient.fullName,
+          period,
+          calendarUrl,
+        }),
+      );
+    }
+
+    if (!notifications.length) {
+      this.logger.warn(`Consultor ${recipient.id} sin telefono ni correo para el recordatorio semanal`);
+      return;
+    }
+
+    const results = await Promise.allSettled(notifications);
+    const errors = results
+      .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+      .map((result) => (result.reason instanceof Error ? result.reason.message : String(result.reason)));
+
+    if (errors.length) {
+      throw new Error(`Consultor ${recipient.id}: ${errors.join(' | ')}`);
+    }
+  }
+
+  private getNextMondayAtSix(reference: Date) {
+    const lima = DateFunction.dateTimePartsInPeru(reference);
+    const daysUntilMonday = (this.monday - lima.weekday + 7) % 7;
+    let nextRun = DateFunction.peruDateTimeToUtc(
+      lima.year,
+      lima.month,
+      lima.day + daysUntilMonday,
+      this.reminderHourLima,
+    );
+
+    if (nextRun.getTime() <= reference.getTime()) {
+      nextRun = new Date(nextRun.getTime() + 7 * this.oneDayMs);
+    }
+
+    return nextRun;
+  }
+
+  private getLimaWeekDates(reference: Date): WeekDate[] {
+    const lima = DateFunction.dateTimePartsInPeru(reference);
+    const daysSinceMonday = (lima.weekday + 6) % 7;
+    const monday = new Date(Date.UTC(lima.year, lima.month - 1, lima.day - daysSinceMonday));
+
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(monday.getTime() + index * this.oneDayMs);
+      return {
+        date,
+        monthKey: this.toMonthKey(date),
+        dayKey: String(date.getUTCDate()),
+      };
+    });
+  }
+
+  private getDistinctMonthStarts(weekDates: WeekDate[]) {
+    const months = new Map<string, Date>();
+    for (const { date, monthKey } of weekDates) {
+      months.set(monthKey, new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1)));
+    }
+    return [...months.values()];
+  }
+
+  private indexAvailability(rows: Awaited<ReturnType<ConsultantAvailabilityQuery['findOne']>>[]) {
+    return new Map(rows.map((row) => [`${row.consultantId}:${this.toMonthKey(row.month)}`, row]));
+  }
+
+  private hasAvailabilityInWeek(
+    consultantId: number,
+    weekDates: WeekDate[],
+    availabilityByConsultantAndMonth: Map<string, Awaited<ReturnType<ConsultantAvailabilityQuery['findOne']>>>,
+  ) {
+    return weekDates.some(({ monthKey, dayKey }) => {
+      const availability = availabilityByConsultantAndMonth.get(`${consultantId}:${monthKey}`);
+      const times = availability?.availableSchedule?.[dayKey];
+      return Array.isArray(times) && times.length > 0;
+    });
+  }
+
+  private formatWeekPeriod(weekDates: WeekDate[]) {
+    const options: Intl.DateTimeFormatOptions = {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric',
+    };
+    return `Del ${DateFunction.formatInUtc(weekDates[0].date, options)} al ${DateFunction.formatInUtc(weekDates[6].date, options)}`;
+  }
+
+  private buildCalendarUrl() {
+    const frontendUrl = (process.env.FRONTEND_URL?.trim() || 'https://www.hubsme.net').replace(/\/+$/, '');
+    return `${frontendUrl}${this.consultantCalendarPath}`;
+  }
+
+  private toMonthKey(date: Date) {
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+  }
+}

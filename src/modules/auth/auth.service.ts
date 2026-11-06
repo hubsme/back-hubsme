@@ -1,70 +1,62 @@
+import type { VerifiedDniProviderResult } from '@modules/admin/modules/identity-verification/types/identity-verification.type';
+import type { AuthRole, GoogleState, GoogleTokenResponse, GoogleUserInfo } from '@modules/auth/types/auth.type';
+import { ConsultantJoinQuery } from '@queries/consultant/consultant-join.query';
+import { ConsultantQuery } from '@queries/consultant/consultant.query';
+import { PymeInvitationJoinQuery } from '@queries/pyme-invitation/pyme-invitation-join.query';
+import { PymeInvitationQuery } from '@queries/pyme-invitation/pyme-invitation.query';
+import { PymeMemberJoinQuery } from '@queries/pyme-member/pyme-member-join.query';
+import { PymeMemberQuery } from '@queries/pyme-member/pyme-member.query';
+import { PymeJoinQuery } from '@queries/pyme/pyme-join.query';
+import { PymeQuery } from '@queries/pyme/pyme.query';
+import { SubscriptionQuery } from '@queries/subscription/subscription.query';
+import { UserQuery } from '@queries/user/user.query';
+import * as bcrypt from 'bcrypt';
+
+import { Trace } from '@erixcel/traceflow';
+import { DbErrorFunction } from '@functions/db-error.function';
+import { EmailService } from '@modules/admin/modules/email/email.service';
+import { DniVerificationDto } from '@modules/admin/modules/identity-verification/dto/verify-dni.dto';
+import { IdentityVerificationService } from '@modules/admin/modules/identity-verification/identity-verification.service';
+import { ForgotPasswordDto } from '@modules/auth/dto/forgot-password.dto';
+import { GoogleCallbackQueryDto } from '@modules/auth/dto/google-callback.dto';
+import { GoogleAuthUrlDto } from '@modules/auth/dto/google-url.dto';
+import { LoginDto } from '@modules/auth/dto/login.dto';
+import { RegisterDto } from '@modules/auth/dto/register.dto';
+import { ResetPasswordDto } from '@modules/auth/dto/reset-password.dto';
+import { AuthenticatedUser } from '@modules/auth/types/authenticated-user.type';
 import { BadRequestException, HttpException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { UserRepository } from '@repositories/user.repository';
-import { ConsultantRepository } from '@repositories/consultant.repository';
-import { PymeRepository } from '@repositories/pyme.repository';
-import { SubscriptionRepository } from '@repositories/subscription.repository';
-import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
-import { GoogleAuthUrlDto } from './dto/google-auth-url.dto';
-import { GoogleCallbackQueryDto } from './dto/google-callback-query.dto';
-import * as bcrypt from 'bcrypt';
-import { handleDbError } from '@functions/db-error.function';
 import { createHash, randomUUID } from 'crypto';
-import { EmailService } from '@modules/admin/email/email.service';
-import { ForgotPasswordDto } from './dto/forgot-password.dto';
-import { ResetPasswordDto } from './dto/reset-password.dto';
-import { DniVerificationDto } from '@modules/admin/identity-verification/dto/dni-verification.dto';
-import {
-  IdentityVerificationService,
-  VerifiedDniProviderResult,
-} from '@modules/admin/identity-verification/identity-verification.service';
-import { PymeMembershipRepository } from '@repositories/pyme-membership.repository';
-import { AuthenticatedUser } from './authenticated-user.type';
 
-type AuthRole = 'pyme' | 'consultor';
-type GoogleAuthFlow = 'login' | 'register' | 'invitation';
-
-type GoogleState = {
-  flow: GoogleAuthFlow;
-  role?: AuthRole;
-  invitationToken?: string;
-};
-
-type GoogleTokenResponse = {
-  access_token?: string;
-  error?: string;
-  error_description?: string;
-};
-
-type GoogleUserInfo = {
-  sub: string;
-  email: string;
-  email_verified?: boolean;
-  name?: string;
-  given_name?: string;
-  family_name?: string;
-  picture?: string;
-};
-
+// Gestiona la autenticación de los usuarios.
+@Trace({ name: 'auth', type: 'service' })
 @Injectable()
 export class AuthService {
+  getProfile(user: AuthenticatedUser): AuthenticatedUser {
+    return user;
+  }
+
   constructor(
-    private readonly userRepository: UserRepository,
-    private readonly pymeRepository: PymeRepository,
-    private readonly consultantRepository: ConsultantRepository,
     private readonly identityVerificationService: IdentityVerificationService,
     private readonly jwtService: JwtService,
     private readonly emailService: EmailService,
-    private readonly subscriptionRepository: SubscriptionRepository,
-    private readonly pymeMembershipRepository: PymeMembershipRepository,
+    private readonly userQuery: UserQuery,
+    private readonly consultantQuery: ConsultantQuery,
+    private readonly pymeQuery: PymeQuery,
+    private readonly pymeMemberQuery: PymeMemberQuery,
+    private readonly subscriptionQuery: SubscriptionQuery,
+    private readonly consultantJoinQuery: ConsultantJoinQuery,
+    private readonly pymeJoinQuery: PymeJoinQuery,
+    private readonly pymeMemberJoinQuery: PymeMemberJoinQuery,
+    private readonly pymeInvitationJoinQuery: PymeInvitationJoinQuery,
+    private readonly pymeInvitationQuery: PymeInvitationQuery,
   ) {}
 
   async login(loginDto: LoginDto) {
     const { email, password } = loginDto;
 
     // Find user by email
-    const user = await this.userRepository.findByEmail(email);
+    const user = await this.userQuery.findByEmail(email);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
@@ -129,7 +121,7 @@ export class AuthService {
       }
 
       const hashedPassword = await bcrypt.hash(registerDto.password, 10);
-      const user = await this.userRepository.create({
+      const user = await this.userQuery.create({
         email: registerDto.email.trim().toLowerCase(),
         password: hashedPassword,
         name: displayName,
@@ -141,7 +133,7 @@ export class AuthService {
       });
 
       if (user.role === 'consultor') {
-        await this.consultantRepository.create({
+        await this.consultantQuery.create({
           id: user.id,
           fullName: user.name,
           firstName,
@@ -171,7 +163,7 @@ export class AuthService {
           validated: 'false',
         });
       } else if (user.role === 'pyme') {
-        await this.pymeRepository.create({
+        await this.pymeQuery.create({
           id: user.id,
           name: registerDto.name.trim(),
           ruc: registerDto.ruc?.trim(),
@@ -181,11 +173,11 @@ export class AuthService {
           ownerPhone: registerDto.ownerPhone?.trim(),
           ownerPosition: registerDto.ownerPosition?.trim(),
         });
-        await this.pymeMembershipRepository.createOwnerMembership(user.id, user.id);
+        await this.pymeMemberQuery.createOwnerMembership(user.id, user.id);
       }
 
       // Create default free subscription
-      await this.subscriptionRepository.create({
+      await this.subscriptionQuery.create({
         userId: user.id,
         plan: 'free',
         status: 'active',
@@ -194,7 +186,7 @@ export class AuthService {
 
       return await this.buildSession(user);
     } catch (error) {
-      handleDbError(error);
+      DbErrorFunction.handleDbError(error);
     }
   }
 
@@ -272,7 +264,7 @@ export class AuthService {
       return null;
     }
 
-    const user = await this.userRepository.findOne(numericId);
+    const user = await this.userQuery.findOne(numericId);
     if (!user || user.isActive !== 'true') {
       return null;
     }
@@ -323,8 +315,8 @@ export class AuthService {
 
   private async loginWithGoogle(googleUser: GoogleUserInfo) {
     const email = googleUser.email.trim().toLowerCase();
-    const googleUserById = await this.userRepository.findByGoogleId(googleUser.sub);
-    const user = googleUserById ?? (await this.userRepository.findByEmail(email));
+    const googleUserById = await this.userQuery.findByGoogleId(googleUser.sub);
+    const user = googleUserById ?? (await this.userQuery.findByEmail(email));
 
     if (!user) {
       throw new UnauthorizedException('Esta cuenta de Google no esta registrada en Hubsme');
@@ -337,23 +329,23 @@ export class AuthService {
     const linkedUser =
       user.googleId === googleUser.sub
         ? user
-        : await this.userRepository.update(user.id, {
+        : await this.userQuery.update(user.id, {
             googleId: googleUser.sub,
             authProvider: 'google',
           });
 
     // Save or update photo url/logo url if missing
     if (linkedUser.role === 'consultor') {
-      const profile = await this.consultantRepository.findByUserId(linkedUser.id);
+      const profile = await this.consultantJoinQuery.findByUserId(linkedUser.id);
       if (profile && !profile.photoUrl && googleUser.picture) {
-        await this.consultantRepository.update(profile.id, {
+        await this.consultantQuery.update(profile.id, {
           photoUrl: googleUser.picture,
         });
       }
     } else if (linkedUser.role === 'pyme') {
-      const profile = await this.pymeRepository.findByUserId(linkedUser.id);
+      const profile = await this.pymeJoinQuery.findByUserId(linkedUser.id);
       if (profile && !profile.logoUrl && googleUser.picture) {
-        await this.pymeRepository.update(profile.id, {
+        await this.pymeQuery.update(profile.id, {
           logoUrl: googleUser.picture,
         });
       }
@@ -369,14 +361,14 @@ export class AuthService {
       const lastName = googleUser.family_name?.trim() || googleUser.name?.split(' ').slice(1).join(' ').trim() || '';
       const name = [firstName, lastName].filter(Boolean).join(' ');
 
-      const existingUserByGoogleId = await this.userRepository.findByGoogleId(googleUser.sub);
-      const existingUserByEmail = await this.userRepository.findByEmail(email);
+      const existingUserByGoogleId = await this.userQuery.findByGoogleId(googleUser.sub);
+      const existingUserByEmail = await this.userQuery.findByEmail(email);
 
       if (existingUserByGoogleId || existingUserByEmail) {
         throw new BadRequestException(['El correo electrónico ya está registrado']);
       }
 
-      const user = await this.userRepository.create({
+      const user = await this.userQuery.create({
         email,
         password: await bcrypt.hash(`google:${googleUser.sub}:${randomUUID()}`, 10),
         name,
@@ -389,9 +381,9 @@ export class AuthService {
       });
 
       if (user.role === 'consultor') {
-        const profile = await this.consultantRepository.findByUserId(user.id);
+        const profile = await this.consultantJoinQuery.findByUserId(user.id);
         if (!profile) {
-          await this.consultantRepository.create({
+          await this.consultantQuery.create({
             id: user.id,
             fullName: user.name,
             firstName: user.firstName ?? firstName,
@@ -401,16 +393,16 @@ export class AuthService {
             validated: 'false',
           });
         } else if (!profile.photoUrl && googleUser.picture) {
-          await this.consultantRepository.update(profile.id, {
+          await this.consultantQuery.update(profile.id, {
             photoUrl: googleUser.picture,
           });
         }
       }
 
       if (user.role === 'pyme') {
-        const profile = await this.pymeRepository.findByUserId(user.id);
+        const profile = await this.pymeJoinQuery.findByUserId(user.id);
         if (!profile) {
-          await this.pymeRepository.create({
+          await this.pymeQuery.create({
             id: user.id,
             name: user.name,
             ownerFirstName: user.firstName ?? firstName,
@@ -418,16 +410,16 @@ export class AuthService {
             ownerEmail: user.email,
             logoUrl: googleUser.picture,
           });
-          await this.pymeMembershipRepository.createOwnerMembership(user.id, user.id);
+          await this.pymeMemberQuery.createOwnerMembership(user.id, user.id);
         } else if (!profile.logoUrl && googleUser.picture) {
-          await this.pymeRepository.update(profile.id, {
+          await this.pymeQuery.update(profile.id, {
             logoUrl: googleUser.picture,
           });
         }
       }
 
       // Create default free subscription
-      await this.subscriptionRepository.create({
+      await this.subscriptionQuery.create({
         userId: user.id,
         plan: 'free',
         status: 'active',
@@ -436,7 +428,7 @@ export class AuthService {
 
       return this.buildSession(user);
     } catch (error) {
-      handleDbError(error);
+      DbErrorFunction.handleDbError(error);
     }
   }
 
@@ -448,8 +440,8 @@ export class AuthService {
       throw new BadRequestException(['El correo de Google debe coincidir con el de la invitación']);
     }
 
-    const existingUserByGoogleId = await this.userRepository.findByGoogleId(googleUser.sub);
-    const existingUserByEmail = await this.userRepository.findByEmail(email);
+    const existingUserByGoogleId = await this.userQuery.findByGoogleId(googleUser.sub);
+    const existingUserByEmail = await this.userQuery.findByEmail(email);
     const existingUser = existingUserByGoogleId ?? existingUserByEmail;
 
     if (existingUser) {
@@ -466,7 +458,7 @@ export class AuthService {
     const name = [firstName, lastName].filter(Boolean).join(' ');
 
     try {
-      const result = await this.pymeMembershipRepository.createInvitedUserAndAcceptInvitation({
+      const result = await this.createInvitedMember({
         invitationId: invitation.id,
         pymeId: invitation.pymeId,
         user: {
@@ -484,22 +476,22 @@ export class AuthService {
 
       return this.buildSession(result.user);
     } catch (error) {
-      handleDbError(error);
+      DbErrorFunction.handleDbError(error);
     }
   }
 
-  private async buildSession(user: NonNullable<Awaited<ReturnType<UserRepository['findOne']>>>) {
+  private async buildSession(user: NonNullable<Awaited<ReturnType<UserQuery['findOne']>>>) {
     const accessToken = this.jwtService.sign({ sub: user.id, email: user.email, role: user.role });
     const authenticatedUser = await this.buildAuthenticatedUser(user);
     return { accessToken, user: authenticatedUser, organization: authenticatedUser.organization };
   }
 
   private async buildAuthenticatedUser(
-    user: NonNullable<Awaited<ReturnType<UserRepository['findOne']>>>,
+    user: NonNullable<Awaited<ReturnType<UserQuery['findOne']>>>,
   ): Promise<AuthenticatedUser> {
     const { password: _, ...userWithoutPassword } = user;
     const membership =
-      user.role === 'pyme' ? await this.pymeMembershipRepository.findOrganizationByUserId(user.id) : undefined;
+      user.role === 'pyme' ? await this.pymeMemberJoinQuery.findOrganizationByUserId(user.id) : undefined;
 
     if (membership) {
       const organization = {
@@ -518,7 +510,7 @@ export class AuthService {
 
     // Compatibilidad durante el despliegue: la migración crea estas membresías para
     // todos los propietarios históricos antes de iniciar la nueva versión.
-    const ownedPyme = user.role === 'pyme' ? await this.pymeRepository.findByUserId(user.id) : undefined;
+    const ownedPyme = user.role === 'pyme' ? await this.pymeJoinQuery.findByUserId(user.id) : undefined;
     if (ownedPyme) {
       const organization = {
         id: ownedPyme.id,
@@ -539,7 +531,7 @@ export class AuthService {
 
   async getInvitationPreview(token: string) {
     const invitation = await this.findValidInvitation(token);
-    const existingUser = await this.userRepository.findByEmail(invitation.email);
+    const existingUser = await this.userQuery.findByEmail(invitation.email);
     return {
       email: invitation.email,
       organizationName: invitation.organizationName,
@@ -561,16 +553,12 @@ export class AuthService {
     }
 
     try {
-      await this.pymeMembershipRepository.acceptInvitationForExistingUser(
-        invitation.id,
-        invitation.pymeId,
-        currentUser.id,
-      );
-      const user = await this.userRepository.findOne(currentUser.id);
+      await this.acceptMembershipInvitation(invitation.id, invitation.pymeId, currentUser.id);
+      const user = await this.userQuery.findOne(currentUser.id);
       if (!user) throw new UnauthorizedException();
       return await this.buildSession(user);
     } catch (error) {
-      handleDbError(error);
+      DbErrorFunction.handleDbError(error);
     }
   }
 
@@ -589,12 +577,12 @@ export class AuthService {
     if (email !== invitation.email) {
       throw new BadRequestException(['El correo debe coincidir con el de la invitación']);
     }
-    if (await this.userRepository.findByEmail(email)) {
+    if (await this.userQuery.findByEmail(email)) {
       throw new BadRequestException(['Ya existe una cuenta con este correo. Inicia sesión para aceptar la invitación']);
     }
 
     try {
-      const result = await this.pymeMembershipRepository.createInvitedUserAndAcceptInvitation({
+      const result = await this.createInvitedMember({
         invitationId: invitation.id,
         pymeId: invitation.pymeId,
         user: {
@@ -610,7 +598,7 @@ export class AuthService {
       });
       return await this.buildSession(result.user);
     } catch (error) {
-      handleDbError(error);
+      DbErrorFunction.handleDbError(error);
     }
   }
 
@@ -618,7 +606,7 @@ export class AuthService {
     const normalizedToken = token.trim();
     if (!normalizedToken) throw new BadRequestException(['La invitación no es válida']);
     const tokenHash = createHash('sha256').update(normalizedToken).digest('hex');
-    const invitation = await this.pymeMembershipRepository.findPendingInvitationByTokenHash(tokenHash);
+    const invitation = await this.pymeInvitationJoinQuery.findPendingInvitationByTokenHash(tokenHash);
     if (!invitation) {
       throw new BadRequestException(['La invitación no existe, venció o ya fue utilizada']);
     }
@@ -707,7 +695,7 @@ export class AuthService {
     const { email } = forgotPasswordDto;
     const cleanEmail = email.trim().toLowerCase();
 
-    const user = await this.userRepository.findByEmail(cleanEmail);
+    const user = await this.userQuery.findByEmail(cleanEmail);
     if (!user) {
       throw new BadRequestException('No existe ninguna cuenta registrada con este correo electrónico');
     }
@@ -770,7 +758,7 @@ export class AuthService {
       throw new BadRequestException('El token es inválido o está corrupto');
     }
 
-    const user = await this.userRepository.findOne(decoded.sub);
+    const user = await this.userQuery.findOne(decoded.sub);
     if (!user) {
       throw new BadRequestException('El usuario no existe');
     }
@@ -783,8 +771,33 @@ export class AuthService {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    await this.userRepository.update(user.id, { password: hashedPassword });
+    await this.userQuery.update(user.id, { password: hashedPassword });
 
     return { message: 'Contraseña restablecida con éxito. Ya puedes iniciar sesión con tu nueva contraseña' };
+  }
+
+  private async acceptMembershipInvitation(invitationId: number, pymeId: number, userId: number) {
+    return this.pymeMemberQuery.transaction(async () => {
+      const membership = await this.pymeMemberQuery.create({ pymeId, userId, role: 'member', status: 'active' });
+      await this.pymeInvitationQuery.acceptInvitation(invitationId);
+      return membership;
+    });
+  }
+  private async createInvitedMember(data: {
+    invitationId: number;
+    pymeId: number;
+    user: Parameters<UserQuery['create']>[0];
+  }) {
+    return this.pymeMemberQuery.transaction(async () => {
+      const createdUser = await this.userQuery.create(data.user);
+      const membership = await this.pymeMemberQuery.create({
+        pymeId: data.pymeId,
+        userId: createdUser.id,
+        role: 'member',
+        status: 'active',
+      });
+      await this.pymeInvitationQuery.acceptInvitation(data.invitationId);
+      return { user: createdUser, membership };
+    });
   }
 }

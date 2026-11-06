@@ -3,8 +3,9 @@ import { AppModule } from './app.module';
 import { config } from 'dotenv';
 import { setupSwagger } from '@core/swagger.core';
 import { setupTransformer } from '@core/transformer.core';
+import { setupCors } from '@core/cors.core';
 import { json, urlencoded } from 'express';
-import type { WhatsappWebhookRequest } from '@modules/admin/whatsapp/types/whatsapp-webhook.types';
+import type { WhatsappWebhookRequest } from '@modules/admin/modules/whatsapp/types/whatsapp-webhook.types';
 
 config();
 
@@ -25,7 +26,7 @@ async function bootstrap() {
 
   setupTransformer(app);
   setupSwagger(app);
-  app.enableCors();
+  setupCors(app);
 
   await app.listen(process.env.PORT || 6001);
 }

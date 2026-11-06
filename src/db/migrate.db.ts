@@ -74,4 +74,7 @@ async function migrate() {
   }
 }
 
-migrate();
+// Importar el módulo no ejecuta operaciones administrativas.
+if (require.main === module) {
+  void migrate();
+}

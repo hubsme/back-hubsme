@@ -1,6 +1,6 @@
 import { pgTable, serial, text, varchar, timestamp, integer, index, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { user } from './user.table';
+import { user } from '@db/tables/user.table';
 
 export const pyme = pgTable(
   'pyme',
@@ -37,6 +37,3 @@ export const pyme = pgTable(
       .where(sql`${t.deletedAt} IS NULL AND ${t.ruc} IS NOT NULL`),
   ],
 );
-
-export type Pyme = typeof pyme.$inferSelect;
-export type PymeDTO = typeof pyme.$inferInsert;

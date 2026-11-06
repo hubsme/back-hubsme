@@ -10,6 +10,3 @@ export const subscriptionPlan = pgTable('subscription_plans', {
   description: text('description').notNull(),
   features: text('features').array().default([]).notNull(),
 });
-
-export type SubscriptionPlan = typeof subscriptionPlan.$inferSelect;
-export type SubscriptionPlanDTO = typeof subscriptionPlan.$inferInsert;

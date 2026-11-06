@@ -1,8 +1,11 @@
+import { Trace } from '@erixcel/traceflow';
 import { Injectable, InternalServerErrorException, StreamableFile } from '@nestjs/common';
 import { BlobServiceClient } from '@azure/storage-blob';
 import { Readable } from 'stream';
-import { StorageResultDto } from './dto/storage-result.dto';
+import { StorageResultDto } from '@modules/storage/dto/upload.dto';
 
+// Gestiona el almacenamiento de archivos.
+@Trace({ name: 'storage', type: 'service' })
 @Injectable()
 export class StorageService {
   private readonly containerName = process.env.AZURE_CONTAINER_NAME || 'storage';

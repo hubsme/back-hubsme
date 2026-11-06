@@ -2,6 +2,7 @@ import { pgTable, serial, text, varchar, timestamp, pgEnum, index, uniqueIndex }
 import { sql } from 'drizzle-orm';
 
 export const userRoleEnum = pgEnum('user_role', ['admin', 'pyme', 'consultor']);
+
 export const userAuthProviderEnum = pgEnum('user_auth_provider', ['local', 'google']);
 
 export const user = pgTable(
@@ -37,6 +38,3 @@ export const user = pgTable(
       .where(sql`${t.deletedAt} IS NULL AND ${t.googleId} IS NOT NULL`),
   ],
 );
-
-export type User = typeof user.$inferSelect;
-export type UserDTO = typeof user.$inferInsert;

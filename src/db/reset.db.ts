@@ -27,4 +27,7 @@ async function reset() {
   }
 }
 
-reset();
+// Importar el módulo no ejecuta operaciones administrativas.
+if (require.main === module) {
+  void reset();
+}

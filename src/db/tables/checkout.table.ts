@@ -1,3 +1,7 @@
+import { meeting } from '@db/tables/meeting.table';
+import { serviceRequest } from '@db/tables/service-request.table';
+import { user } from '@db/tables/user.table';
+import { sql } from 'drizzle-orm';
 import {
   check,
   decimal,
@@ -12,10 +16,6 @@ import {
   uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core';
-import { sql } from 'drizzle-orm';
-import { meeting } from './meeting.table';
-import { serviceRequest } from './service-request.table';
-import { user } from './user.table';
 
 export const checkoutStatusEnum = pgEnum('checkout_status', [
   'created',
@@ -27,8 +27,6 @@ export const checkoutStatusEnum = pgEnum('checkout_status', [
 ]);
 
 export const checkoutCollectionDestinationEnum = pgEnum('checkout_collection_destination', ['consultant', 'hubsme']);
-
-export type CheckoutRaw = Record<string, unknown>;
 
 export const checkout = pgTable(
   'checkout',
@@ -56,7 +54,7 @@ export const checkout = pgTable(
     amount: decimal('amount', { precision: 10, scale: 2 }).notNull(),
     marketplaceFee: decimal('marketplace_fee', { precision: 10, scale: 2 }).default('0.00').notNull(),
     currency: varchar('currency', { length: 10 }).default('PEN').notNull(),
-    rawPayment: jsonb('raw_payment').$type<CheckoutRaw>(),
+    rawPayment: jsonb('raw_payment').$type<Record<string, unknown>>(),
     meetingDetails: jsonb('meeting_details').$type<{
       startTime: string;
       proposedStartTimes?: string[];
@@ -85,6 +83,3 @@ export const checkout = pgTable(
     ),
   ],
 );
-
-export type Checkout = typeof checkout.$inferSelect;
-export type CheckoutDTO = typeof checkout.$inferInsert;

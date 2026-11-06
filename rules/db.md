@@ -15,7 +15,7 @@ El directorio `src/db` centraliza toda la lógica relacionada con la base de dat
 
 La conexión se realiza utilizando `drizzle-orm/node-postgres` y `pg`.
 
-- La instancia exportada `database` en `connection.db.ts` debe ser usada para cualquier consulta en Repositorios o Seeds.
+- La instancia exportada `database` en `connection.db.ts` debe ser usada para cualquier consulta en Queries o Seeds.
 - **Schema**: La conexión carga todos los esquemas definidos en `tables/` para habilitar el tipado y las consultas `query`.
 
 ## 3. Definición de Modelos (Tablas)
@@ -72,10 +72,9 @@ export const user = pgTable(
   ],
 );
 
-// 3. Inferencia de Tipos
-export type User = typeof user.$inferSelect; // Tipo de selección
-export type UserDTO = typeof user.$inferInsert; // Tipo de inserción
 ```
+
+Los tipos inferidos se usan desde los consumidores con `typeof user.$inferSelect` o `typeof user.$inferInsert`; no se exportan aliases desde la tabla.
 
 ### 4. Directrices de Indexación (Indexing)
 

@@ -12,9 +12,9 @@ import {
   uniqueIndex,
   varchar,
 } from 'drizzle-orm/pg-core';
-import { checkout } from './checkout.table';
-import { meeting } from './meeting.table';
-import { user } from './user.table';
+import { checkout } from '@db/tables/checkout.table';
+import { meeting } from '@db/tables/meeting.table';
+import { user } from '@db/tables/user.table';
 
 export const meetingConsultantPayoutStatusEnum = pgEnum('meeting_consultant_payout_status', ['pending', 'paid']);
 
@@ -24,6 +24,7 @@ export const meetingConsultantPayout = pgTable(
     id: serial('id').primaryKey(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    deletedAt: timestamp('deleted_at'),
     meetingId: integer('meeting_id')
       .notNull()
       .references(() => meeting.id, { onDelete: 'restrict' }),
@@ -75,6 +76,3 @@ export const meetingConsultantPayout = pgTable(
     ),
   ],
 );
-
-export type MeetingConsultantPayout = typeof meetingConsultantPayout.$inferSelect;
-export type MeetingConsultantPayoutDTO = typeof meetingConsultantPayout.$inferInsert;

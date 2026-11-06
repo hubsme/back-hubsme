@@ -1,10 +1,12 @@
 import { pgTable, serial, text, timestamp, integer, pgEnum, index, uniqueIndex } from 'drizzle-orm/pg-core';
-import { user } from './user.table';
-import { meeting } from './meeting.table';
-import { serviceRequest } from './service-request.table';
+import { user } from '@db/tables/user.table';
+import { meeting } from '@db/tables/meeting.table';
+import { serviceRequest } from '@db/tables/service-request.table';
 
 export const taskAssignedToEnum = pgEnum('task_assigned_to', ['pyme', 'consultor']);
+
 export const taskPriorityEnum = pgEnum('task_priority', ['alta', 'media', 'baja']);
+
 export const taskStatusEnum = pgEnum('task_status', ['pendiente', 'en_progreso', 'completada', 'bloqueada']);
 
 export const task = pgTable(
@@ -38,6 +40,3 @@ export const task = pgTable(
     index('task_due_date_idx').on(t.dueDate),
   ],
 );
-
-export type Task = typeof task.$inferSelect;
-export type TaskDTO = typeof task.$inferInsert;

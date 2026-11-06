@@ -1,7 +1,8 @@
 import { index, integer, pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
-import { meeting } from './meeting.table';
-import { promotionCode, promotionCodeRedemption } from './promotion-code.table';
-import { user } from './user.table';
+import { meeting } from '@db/tables/meeting.table';
+import { promotionCode } from '@db/tables/promotion-code.table';
+import { promotionCodeRedemption } from '@db/tables/promotion-code-redemption.table';
+import { user } from '@db/tables/user.table';
 
 export const meetingRescheduleHistory = pgTable(
   'meeting_reschedule_history',
@@ -22,10 +23,9 @@ export const meetingRescheduleHistory = pgTable(
     promotionCodeId: integer('promotion_code_id')
       .notNull()
       .references(() => promotionCode.id, { onDelete: 'restrict' }),
-    promotionCodeRedemptionId: integer('promotion_code_redemption_id').references(
-      () => promotionCodeRedemption.id,
-      { onDelete: 'set null' },
-    ),
+    promotionCodeRedemptionId: integer('promotion_code_redemption_id').references(() => promotionCodeRedemption.id, {
+      onDelete: 'set null',
+    }),
     cancellationReason: text('cancellation_reason'),
     cancelledBy: integer('cancelled_by').references(() => user.id, { onDelete: 'set null' }),
   },
@@ -38,6 +38,3 @@ export const meetingRescheduleHistory = pgTable(
     index('meeting_reschedule_history_created_at_idx').on(t.createdAt),
   ],
 );
-
-export type MeetingRescheduleHistory = typeof meetingRescheduleHistory.$inferSelect;
-export type MeetingRescheduleHistoryDTO = typeof meetingRescheduleHistory.$inferInsert;

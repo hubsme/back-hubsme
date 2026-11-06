@@ -1,9 +1,9 @@
-import { and, inArray, isNull } from 'drizzle-orm';
 import { database } from '@db/connection.db';
 import { pyme } from '@db/tables/pyme.table';
-import { User } from '@db/tables/user.table';
+import type { seedUsers } from '@seeds/user.seed';
+import { and, inArray, isNull } from 'drizzle-orm';
 
-export async function seedPymes(users: { byEmail: Record<string, User> }) {
+export async function seedPymes(users: Pick<Awaited<ReturnType<typeof seedUsers>>, 'byEmail'>) {
   const pymesData = [
     {
       email: 'xerickcua@gmail.com',

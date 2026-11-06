@@ -66,4 +66,7 @@ async function createTables() {
   }
 }
 
-createTables();
+// Importar el módulo no ejecuta operaciones administrativas.
+if (require.main === module) {
+  void createTables();
+}

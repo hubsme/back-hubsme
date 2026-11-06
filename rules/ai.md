@@ -7,7 +7,7 @@ Este archivo define las reglas generales que la IA debe seguir al generar códig
 - **Framework**: El proyecto utiliza **NestJS** (v11) como framework principal. Sigue estrictamente el estilo y las convenciones de NestJS (Inyección de Dependencias, Decoradores, Módulos).
 - **ORM**: Utilizamos **Drizzle ORM** con PostgreSQL. **No** uses TypeORM ni Prisma a menos que se indique explícitamente una migración.
 - **Lenguaje**: Todo el código debe ser **TypeScript**.
-- **Path Aliases**: Úsalos siempre que sea posible según `tsconfig.json` y `package.json` (ej. `@modules/*`, `@core/*`, `@db/*`, `@models/*`).
+- **Path Aliases**: Úsalos siempre que sea posible según `tsconfig.json` y `package.json` (ej. `@modules/*`, `@core/*`, `@db/*`, `@queries/*`).
 
 ## 2. Pautas de Implementación
 
@@ -54,6 +54,7 @@ No ejecutar desde la IA:
 
 ### Capas backend
 
-- `repository`: unica capa con conexion directa a base de datos, queries, inserts, updates y deletes.
-- `service`: contiene logica de negocio y solo se conecta con repositories; nunca accede directo a la DB.
-- `controller`: enruta endpoints y documenta modelos/DTOs. Cada DTO debe importarse; no declarar DTOs inline. Cada response debe delegar directo al service, sin logica de negocio.
+- `query`: encapsula el acceso a datos. Las queries atómicas usan una sola tabla y las queries con JOIN solo leen.
+- Las queries usan `database` directamente y exponen la función compartida `transaction` de `connection.db.ts`, sin parámetros executor.
+- `service`: contiene lógica de negocio y coordina queries y transacciones; nunca accede directo a la DB.
+- `controller`: enruta endpoints y documenta DTOs. Cada DTO debe importarse; no declarar DTOs inline. Cada response debe delegar directo al service, sin lógica de negocio.

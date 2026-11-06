@@ -1,7 +1,8 @@
 import { pgTable, serial, text, timestamp, integer, pgEnum, index } from 'drizzle-orm/pg-core';
-import { user } from './user.table';
+import { user } from '@db/tables/user.table';
 
 export const dashboardAlertToneEnum = pgEnum('dashboard_alert_tone', ['danger', 'warning', 'info']);
+
 export const dashboardAlertStatusEnum = pgEnum('dashboard_alert_status', ['active', 'resolved']);
 
 export const dashboardAlert = pgTable(
@@ -26,6 +27,3 @@ export const dashboardAlert = pgTable(
     index('dashboard_alert_created_at_idx').on(t.createdAt),
   ],
 );
-
-export type DashboardAlert = typeof dashboardAlert.$inferSelect;
-export type DashboardAlertDTO = typeof dashboardAlert.$inferInsert;

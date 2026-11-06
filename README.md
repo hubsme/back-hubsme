@@ -2,6 +2,23 @@
 
 API REST desarrollada con NestJS para la plataforma Hubsme, enfocada en diagnostico empresarial, consultoria para PYMES, reuniones, tareas, documentos y suscripciones.
 
+## Arquitectura
+
+- `src/modules/admin/modules` y `src/modules/public/modules` agrupan las funcionalidades de cada área. Los módulos contenedores registran sus dependencias en NestJS.
+- Los controllers delegan al service. El acceso a PostgreSQL vive en `src/queries/<tabla>`: `<tabla>.query.ts` opera sobre una sola tabla y `<tabla>-join.query.ts` contiene únicamente lecturas con relaciones.
+- Los services coordinan las operaciones de varias tablas con `query.transaction(async () => ...)`. Las queries usan directamente `database`; `connection.db.ts` mantiene la transacción de cada operación con `AsyncLocalStorage`, incluidos los bloqueos y las escrituras condicionales. Las transacciones anidadas usan savepoints de Drizzle.
+- Los cálculos y permisos del dashboard permanecen en su service; sus lecturas se distribuyen entre las queries de reuniones, tareas, diagnósticos, alertas y participantes.
+- Cada operación mantiene sus contratos en `dto/<metodo-en-kebab-case>.dto.ts`. Los DTO compartidos entre funcionalidades están en `src/dto`.
+- Cada archivo de `src/db/tables` declara una sola tabla Drizzle y sus enums. Las queries usan `typeof tabla.$inferSelect` y `typeof tabla.$inferInsert`. Los DTO reutilizan los enums de las tablas y los services obtienen sus tipos de los DTO o de las firmas de las queries.
+- `src/functions` expone clases con métodos estáticos. `src/core` contiene exclusivamente funciones de configuración del arranque.
+- Los decoradores de TraceFlow identifican controllers, servicios, queries, DTOs y utilidades. Este cambio no inicializa exportadores ni habilita captura de peticiones en producción.
+- `npm run generate:types` construye OpenAPI sin iniciar el servidor y actualiza el cliente del frontend. Cierra el contexto Nest incluso si falla la generación del documento.
+- Los scripts administrativos de `src/db` solo ejecutan su operación cuando son el programa principal; importarlos no inicia migraciones, respaldos, restauraciones ni cargas de datos.
+
+La migración manual `src/db/migrations/version_012/v012_001_add_architecture_audit_columns.sql` incorpora `deleted_at` en `meeting_consultant_payout` y `scheduled_notification`. Debe aplicarla una persona autorizada **antes de desplegar esta versión**, porque las definiciones Drizzle ya incluyen esas columnas. No modifica estados, importes ni registros existentes.
+
+Las comprobaciones de regresión se ejecutan con `npm test -- --runInBand`. Cubren el alcance por organización, los totales del dashboard, los filtros públicos, la transformación de solicitudes multipart, fechas de Perú, errores de PostgreSQL y la importación segura de scripts administrativos. También verifican el contexto compartido entre queries, BEGIN/COMMIT/ROLLBACK de Drizzle con un cliente simulado, bloqueos de fila, hitos, invitaciones, cupones idempotentes y soporte, sin conectarse a PostgreSQL.
+
 ## 📋 Descripción
 
 Sistema backend que proporciona una API para gestionar:
@@ -24,7 +41,8 @@ Sistema backend que proporciona una API para gestionar:
 - **Microsoft Graph** - Reuniones de Teams, grabaciones, transcripciones y correo
 - **Azure Blob Storage** - Almacenamiento de archivos
 - **Google Gemini** - Diagnósticos y asistencia de IA
-- **Mercado Pago** - Pagos y suscripciones
+- **Monnet QR** - Checkout de reuniones
+- **Mercado Pago** - Servicios, suscripciones y pagos históricos
 - **WhatsApp Cloud API** - Notificaciones y webhooks
 
 ## 📦 Requisitos Previos
@@ -129,9 +147,9 @@ const label = formatInPeru(new Date(), { dateStyle: 'long', timeStyle: 'short' }
 
 ## 💳 Cobros de consultoría y depósitos a consultores
 
-Los checkouts nuevos de consultoría se crean con `collection_destination = hubsme`: Mercado Pago cobra el importe completo usando la cuenta de Hubsme y no recibe `marketplace_fee`. El campo `checkout.marketplace_fee` conserva únicamente la comisión contable configurada en `MERCADO_PAGO_PLATFORM_FEE_PERCENT` para calcular el neto que corresponde al consultor.
+Los checkouts nuevos de consultoría usan **Monnet QR**, con `collection_destination = hubsme`. El importe se calcula con la tarifa del consultor y `checkout.marketplace_fee` conserva la comisión contable configurada en `MONNET_PLATFORM_FEE_PERCENT`. La comisión del procesador queda pendiente de conciliación. Consulta [el flujo, endpoints, webhook y pruebas de Monnet](docs/monnet-checkout.md).
 
-Cuando Mercado Pago confirma un pago real de consultoría:
+Para los pagos históricos de consultoría que siguen siendo confirmados por Mercado Pago:
 
 1. El total cobrado queda registrado en `checkout.amount`.
 2. El cargo real de Mercado Pago se obtiene de `raw_payment.transaction_details.net_received_amount` (con `fee_details` como respaldo) y se guarda en `meeting_consultant_payout.mercado_pago_fee_amount` y `mercado_pago_fee_percent`.
@@ -142,7 +160,7 @@ Cuando Mercado Pago confirma un pago real de consultoría:
 
 El cargo de Mercado Pago no se calcula con un porcentaje fijo: puede incluir comisión, IGV y un importe fijo según la configuración y el momento de liberación del dinero. Por eso el valor de la API de Mercado Pago es la fuente de verdad para cada operación. La migración `src/db/migrations/version_010/v010_001_add_mercado_pago_fee_to_meeting_consultant_payout.sql` agrega estos campos y corrige únicamente las obligaciones pendientes; los pagos ya realizados conservan el importe histórico transferido.
 
-Los cupones no generan obligaciones monetarias y las cuotas de servicios usan su flujo propio. Los checkouts históricos de consultoría se conservan con destino `consultant` para no duplicar deudas ya liquidadas mediante el split anterior.
+Los cupones no generan obligaciones monetarias y las cuotas de servicios usan su flujo propio. Los checkouts anteriores conservan su proveedor y destino; los que ya tienen una preferencia de Mercado Pago no se reutilizan para emitir un segundo cobro en Monnet.
 
 La estructura se incorpora mediante las migraciones manuales `src/db/migrations/version_009/v009_001_create_meeting_consultant_payout.sql`, `src/db/migrations/version_009/v009_002_create_meeting_reschedule_history.sql` y `src/db/migrations/version_010/v010_001_add_mercado_pago_fee_to_meeting_consultant_payout.sql`. Debido a que la base está en producción, debe aplicarlas una persona autorizada; la IA no ejecuta migraciones.
 
@@ -215,3 +233,44 @@ Proyecto Hubsme - Backend Team
 ---
 
 **¿Necesitas ayuda?** Contacta al equipo de desarrollo.
+
+## Monnet Payin: Create Transaction desde Swagger
+
+El módulo `src/modules/admin/modules/monnet/modules/payin` expone **cuatro operaciones** de creación de transacciones: transferencia bancaria, QR y Yape One Shot móvil y web. Estas cuatro rutas de exploración no crean reuniones ni registran pagos en la base de datos. El checkout real de reuniones usa el submódulo `monnet/modules/checkout` y su [guía de integración](docs/monnet-checkout.md).
+
+### Configurar y entrar
+
+1. Completa en `.env` `MONNET_PAYIN_MERCHANT_ID` y `MONNET_PAYIN_KEY` con el MID y KeyMonnet **CERT** entregados por Monnet.
+2. Completa `MONNET_PAYIN_SUCCESS_URL` y `MONNET_PAYIN_ERROR_URL` con URLs HTTPS de retorno. `.env.example` documenta todas las opciones y contiene URLs ilustrativas que puedes sustituir.
+3. Mantén `MONNET_PAYIN_ENVIRONMENT=cert` para las pruebas. El destino se deriva del entorno: CERT usa `https://cert.monnetpayments.com`, producción usa `https://payin.api.monnetpayments.com`.
+4. Con el backend iniciado, abre Swagger en `/api` (por defecto `http://localhost:6001/api`). Usa `POST /admin/auth/login` con las credenciales administrativas configuradas y pega `accessToken` en **Authorize**. Los endpoints están en la etiqueta **monnetPayin**.
+5. Abre una operación, pulsa **Try it out** y utiliza su ejemplo. Los cuatro DTO comparten los datos de contacto del DTO base. El documento y la dirección siguen siendo ilustrativos y deben adaptarse a los datos admitidos por Monnet en el entorno de pruebas.
+
+### Operaciones válidas
+
+Todas usan el prefijo `/admin/monnet/payin/create-transaction`:
+
+| POST | Qué envía y qué puedes observar |
+| --- | --- |
+| `/standard/bank-transfer` | `payinMethod=BankTransfer`. Abre `paymentUrl` para ver la página/instrucciones de pago que devuelva Monnet. |
+| `/standard/qr` | `payinMethod=QR`, llamado Ligo en la colección. Conserva la URL y, cuando Monnet lo proporciona, `experienceVoucher`, QR en base64 e instrucciones. El procesador disponible depende del comercio. |
+| `/white-label/yape/mobile` | `Wallet`, `processorCode=Yape_one_shot`, `payinProductDescription=Mobile`. La respuesta puede contener el deeplink para continuar desde el móvil. |
+| `/white-label/yape/web` | El mismo cobro único con `payinProductDescription=Web`; permite inspeccionar la experiencia de autorización desde web/Yape. |
+
+Cada DTO incluye ejemplos de entrada y cada operación muestra una respuesta ilustrativa en Swagger. La respuesta **real** se conserva en `response`, incluyendo campos adicionales del proveedor.
+
+En las cuatro operaciones válidas, `payinAmount` es obligatorio y debe ser un texto positivo con exactamente dos decimales, como `"120.00"`. Los números JSON (`120`, `120.00`), importes sin dos decimales y `"0.00"` se rechazan con HTTP 400 antes de llamar a Monnet. El importe se conserva sin conversiones al calcular la firma y enviarlo al proveedor.
+
+### Interpretar el resultado
+
+- `upstreamHttpStatus`: HTTP recibido de Monnet, conservado incluso si es 4xx/5xx.
+- `request`: JSON enviado al proveedor, con `payinVerification` oculto. Permite comprobar el método y el tipo real del importe sin exponer la Key.
+- `response`: respuesta original JSON, texto o `null` si el cuerpo está vacío. Revisar `payinErrorCode`, `payinErrorMessage`, `url`, `experienceVoucher` y `deepLinks`, según el caso.
+- `paymentUrl`: copia de `response.url` cuando existe. Los enlaces que aparecen en los ejemplos estáticos son ilustrativos; para abrir el checkout utiliza el enlace de la respuesta real.
+- `payinMerchantOperationNumber`: referencia del comercio. Si se omite en la entrada, se genera una nueva de hasta 50 caracteres en cada llamada, de modo que el ejemplo pueda repetirse.
+
+El HTTP 200 de Hubsme indica que fue posible obtener una respuesta del proveedor; no implica creación exitosa ni pago aprobado. Un fallo de conexión devuelve 502, un timeout 504 y una configuración pendiente 503. No se reintenta automáticamente el POST de creación.
+
+El transporte siempre envía **JSON plano** a `/api-payin/v3/online-payments`. El campo `URLMonnet` del JSON se calcula automáticamente con el host de `MONNET_PAYIN_ENVIRONMENT` y la ruta `/api-payin/v1/online-payments`, siguiendo la documentación pública. No requiere una variable de entorno adicional. Las credenciales y la firma se completan en el servidor.
+
+Referencias oficiales: [Perú](https://payinmonnetpayments.readme.io/reference/peru), [White Label](https://payinmonnetpayments.readme.io/reference/white-label), [QR White Label](https://payinmonnetpayments.readme.io/reference/qr-white-label), [Yape One Shot](https://payinmonnetpayments.readme.io/reference/yape-one-shot).

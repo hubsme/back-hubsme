@@ -1,7 +1,15 @@
 {
   "singleQuote": true,
   "trailingComma": "all",
-  "printWidth": 120,
+  "printWidth": 250,
   "tabWidth": 2,
-  "semi": true
+  "semi": true,
+  "overrides": [
+    {
+      "files": "src/modules/admin/modules/monnet/**/*.ts",
+      "options": {
+        "printWidth": 100
+      }
+    }
+  ]
 }

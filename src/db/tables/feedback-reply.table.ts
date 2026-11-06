@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { check, index, integer, pgEnum, pgTable, serial, text, timestamp, varchar } from 'drizzle-orm/pg-core';
-import { feedback } from './feedback.table';
-import { user } from './user.table';
+import { feedback } from '@db/tables/feedback.table';
+import { user } from '@db/tables/user.table';
 
 export const feedbackReplyAuthorTypeEnum = pgEnum('feedback_reply_author_type', ['user', 'admin']);
 
@@ -30,6 +30,3 @@ export const feedbackReply = pgTable(
     ),
   ],
 );
-
-export type FeedbackReply = typeof feedbackReply.$inferSelect;
-export type FeedbackReplyDTO = typeof feedbackReply.$inferInsert;

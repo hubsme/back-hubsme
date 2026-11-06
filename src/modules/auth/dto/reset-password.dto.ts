@@ -1,6 +1,8 @@
+import { Trace } from '@erixcel/traceflow';
 import { ApiProperty } from '@nestjs/swagger';
 import { IsNotEmpty, IsString, MinLength } from 'class-validator';
 
+@Trace({ type: 'validation' })
 export class ResetPasswordDto {
   @ApiProperty({ description: 'Token de restablecimiento enviado por correo electrónico' })
   @IsString({ message: 'El token debe ser una cadena de texto' })

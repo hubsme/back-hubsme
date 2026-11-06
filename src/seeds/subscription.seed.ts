@@ -1,44 +1,45 @@
-import { and, inArray, isNull } from 'drizzle-orm';
 import { database } from '@db/connection.db';
-import { subscription, SubscriptionDTO } from '@db/tables/subscription.table';
-import { User } from '@db/tables/user.table';
-import { daysFromNow } from '@functions/date.function';
+import { subscription } from '@db/tables/subscription.table';
+import type { seedUsers } from '@seeds/user.seed';
+import { and, inArray, isNull } from 'drizzle-orm';
 
-export async function seedSubscriptions(seededUsers: { byEmail: Record<string, User> }) {
+import { DateFunction } from '@functions/date.function';
+
+export async function seedSubscriptions(seededUsers: Pick<Awaited<ReturnType<typeof seedUsers>>, 'byEmail'>) {
   const getUser = (email: string) => {
     const found = seededUsers.byEmail[email];
     if (!found) throw new Error(`Usuario no encontrado en seed: ${email}`);
     return found;
   };
 
-  const subscriptionValues: SubscriptionDTO[] = [
+  const subscriptionValues: (typeof subscription.$inferInsert)[] = [
     {
       userId: getUser('miguel.salinas@hubsme.com').id,
       plan: 'pro',
       status: 'active',
-      startedAt: daysFromNow(-120),
-      expiresAt: daysFromNow(245),
+      startedAt: DateFunction.daysFromNow(-120),
+      expiresAt: DateFunction.daysFromNow(245),
     },
     {
       userId: getUser('ana.torres@hubsme.com').id,
       plan: 'expert',
       status: 'active',
-      startedAt: daysFromNow(-200),
-      expiresAt: daysFromNow(160),
+      startedAt: DateFunction.daysFromNow(-200),
+      expiresAt: DateFunction.daysFromNow(160),
     },
     {
       userId: getUser('roberto.sanchez@hubsme.com').id,
       plan: 'basic',
       status: 'active',
-      startedAt: daysFromNow(-75),
-      expiresAt: daysFromNow(290),
+      startedAt: DateFunction.daysFromNow(-75),
+      expiresAt: DateFunction.daysFromNow(290),
     },
     {
       userId: getUser('elena.rivas@hubsme.com').id,
       plan: 'pro',
       status: 'paused',
-      startedAt: daysFromNow(-140),
-      expiresAt: daysFromNow(80),
+      startedAt: DateFunction.daysFromNow(-140),
+      expiresAt: DateFunction.daysFromNow(80),
     },
   ];
 

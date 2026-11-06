@@ -1,6 +1,6 @@
 import { index, integer, pgTable, serial, text, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { user } from './user.table';
+import { user } from '@db/tables/user.table';
 
 export const consultantGoogleCalendar = pgTable(
   'consultant_google_calendar',
@@ -28,6 +28,3 @@ export const consultantGoogleCalendar = pgTable(
       .where(sql`${t.deletedAt} IS NULL`),
   ],
 );
-
-export type ConsultantGoogleCalendar = typeof consultantGoogleCalendar.$inferSelect;
-export type ConsultantGoogleCalendarDTO = typeof consultantGoogleCalendar.$inferInsert;

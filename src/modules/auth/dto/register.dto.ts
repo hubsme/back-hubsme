@@ -1,3 +1,6 @@
+import { consultantDiagnosticAreaEnum, consultantWorkModalityEnum } from '@db/tables/consultant.table';
+import { Trace } from '@erixcel/traceflow';
+import { ConsultantCaseStudyDto, ConsultantEducationDto } from '@modules/admin/modules/consultant/dto/find-all.dto';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
@@ -13,17 +16,8 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import {
-  ConsultantCaseStudyDto,
-  ConsultantEducationDto,
-} from '@modules/admin/consultant/dto/consultant-profile-fields.dto';
-import {
-  CONSULTANT_DIAGNOSTIC_AREAS,
-  ConsultantDiagnosticArea,
-  CONSULTANT_WORK_MODALITIES,
-} from '@db/tables/consultant.table';
-import type { ConsultantWorkModality } from '@db/tables/consultant.table';
 
+@Trace({ type: 'validation' })
 export class RegisterDto {
   @ApiPropertyOptional({ description: 'Token de invitación para unirse a una PYME existente' })
   @IsString()
@@ -105,10 +99,10 @@ export class RegisterDto {
   @IsOptional()
   location?: string;
 
-  @ApiPropertyOptional({ enum: CONSULTANT_WORK_MODALITIES, example: 'remote', default: 'remote' })
-  @IsIn(CONSULTANT_WORK_MODALITIES)
+  @ApiPropertyOptional({ enum: consultantWorkModalityEnum.enumValues, example: 'remote', default: 'remote' })
+  @IsIn(consultantWorkModalityEnum.enumValues)
   @IsOptional()
-  workModality?: ConsultantWorkModality;
+  workModality?: (typeof consultantWorkModalityEnum.enumValues)[number];
 
   @ApiPropertyOptional({ example: 'https://www.linkedin.com/in/carlos-mendoza' })
   @IsString()
@@ -121,14 +115,14 @@ export class RegisterDto {
   bio?: string;
 
   @ApiPropertyOptional({
-    enum: CONSULTANT_DIAGNOSTIC_AREAS,
+    enum: consultantDiagnosticAreaEnum.enumValues,
     isArray: true,
     example: ['Financiera', 'Tributario / Contable'],
   })
   @IsArray()
-  @IsIn(CONSULTANT_DIAGNOSTIC_AREAS, { each: true })
+  @IsIn(consultantDiagnosticAreaEnum.enumValues, { each: true })
   @IsOptional()
-  diagnosticAreas?: ConsultantDiagnosticArea[];
+  diagnosticAreas?: (typeof consultantDiagnosticAreaEnum.enumValues)[number][];
 
   @ApiPropertyOptional({ example: ['Finanzas', 'Tributario'], type: [String] })
   @IsArray()
@@ -167,7 +161,7 @@ export class RegisterDto {
   @IsOptional()
   yearsExperience?: number;
 
-  @ApiPropertyOptional({ type: [ConsultantEducationDto] })
+  @ApiPropertyOptional({ type: () => [ConsultantEducationDto] })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ConsultantEducationDto)
@@ -186,7 +180,7 @@ export class RegisterDto {
   @IsOptional()
   workedSectors?: string[];
 
-  @ApiPropertyOptional({ type: [ConsultantCaseStudyDto] })
+  @ApiPropertyOptional({ type: () => [ConsultantCaseStudyDto] })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => ConsultantCaseStudyDto)

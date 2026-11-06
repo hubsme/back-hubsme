@@ -19,13 +19,13 @@
     "skipLibCheck": true,
     "paths": {
       "@core/*": ["src/core/*"],
-      "@models/*": ["src/models/*"],
+      "@dto/*": ["src/dto/*"],
       "@db/*": ["src/db/*"],
       "@seeds/*": ["src/seeds/*"],
       "@modules/*": ["src/modules/*"],
       "@controllers/*": ["src/controllers/*"],
       "@services/*": ["src/services/*"],
-      "@repositories/*": ["src/repositories/*"],
+      "@queries/*": ["src/queries/*"],
       "@functions/*": ["src/functions/*"],
       "@utils/*": ["src/utils/*"],
       "@config/*": ["src/config/*"]

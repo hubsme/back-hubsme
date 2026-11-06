@@ -1,20 +1,5 @@
-import { pgTable, serial, text, timestamp, integer, jsonb, index } from 'drizzle-orm/pg-core';
-import { user } from './user.table';
-
-export type DiagnosticResult = {
-  resumenEjecutivo: string;
-  puntajeGeneral: number;
-  feedbackIa: string;
-  areasEvaluadas: { area: string; puntaje: number; estado: string; hallazgo: string }[];
-  problemasCriticos: { problema: string; impacto: string; urgencia: string }[];
-  recomendaciones: { accion: string; beneficioEsperado: string; plazo: string; prioridad: string }[];
-  foda?: {
-    fortalezas: string[];
-    oportunidades: string[];
-    debilidades: string[];
-    amenazas: string[];
-  };
-};
+import { user } from '@db/tables/user.table';
+import { index, integer, jsonb, pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
 
 export const diagnostic = pgTable(
   'diagnostic',
@@ -27,7 +12,22 @@ export const diagnostic = pgTable(
       .notNull()
       .references(() => user.id),
     responses: jsonb('responses').$type<Record<string, unknown>>().default({}).notNull(),
-    result: jsonb('result').$type<DiagnosticResult>().notNull(),
+    result: jsonb('result')
+      .$type<{
+        resumenEjecutivo: string;
+        puntajeGeneral: number;
+        feedbackIa: string;
+        areasEvaluadas: { area: string; puntaje: number; estado: string; hallazgo: string }[];
+        problemasCriticos: { problema: string; impacto: string; urgencia: string }[];
+        recomendaciones: { accion: string; beneficioEsperado: string; plazo: string; prioridad: string }[];
+        foda?: {
+          fortalezas: string[];
+          oportunidades: string[];
+          debilidades: string[];
+          amenazas: string[];
+        };
+      }>()
+      .notNull(),
     score: integer('score').notNull(),
     summary: text('summary').notNull(),
   },
@@ -37,6 +37,3 @@ export const diagnostic = pgTable(
     index('diagnostic_created_at_idx').on(t.createdAt),
   ],
 );
-
-export type Diagnostic = typeof diagnostic.$inferSelect;
-export type DiagnosticDTO = typeof diagnostic.$inferInsert;

@@ -20,8 +20,12 @@ Reglas clave e imprescindibles para cambios en `backend-hubsme`.
 
 ## Arquitectura Backend
 
-- `repository`: unica capa con conexion directa a base de datos, queries, inserts, updates y deletes.
-- `service`: solo se conecta con repositories y contiene logica de negocio; nunca accede directo a la DB.
-- `controller`: solo enruta endpoints y documenta modelos/DTOs.
+- `src/queries/<tabla>/<tabla>.query.ts`: operaciones atomicas de una sola tabla; sin JOIN ni imports de otras tablas.
+- `src/queries/<tabla>/<tabla>-join.query.ts`: consultas de lectura con relaciones; nunca INSERT, UPDATE ni DELETE.
+- Cada query contiene solo imports, decoradores y una clase `<Tabla>Query` o `<Tabla>JoinQuery`.
+- Las queries usan `database` directamente y `readonly transaction = transaction` desde `@db/connection.db`; no reciben un executor como parámetro ni requieren una capa de modelos.
+- Para tipos de filas e inserciones, usar `typeof tabla.$inferSelect` / `typeof tabla.$inferInsert` dentro de las queries; los services reutilizan las firmas de las queries o los DTO.
+- `service`: contiene logica de negocio y coordina queries y transacciones; nunca ejecuta SQL directo ni accede a la conexion DB.
+- `controller`: solo enruta endpoints y documenta DTOs.
 - En controllers, cada DTO debe importarse. No declarar DTOs o tipos inline.
 - Cada response del controller debe delegar directo al service, sin logica de negocio.

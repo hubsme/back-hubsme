@@ -1,8 +1,8 @@
 import { index, integer, pgEnum, pgTable, serial, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { pyme } from './pyme.table';
-import { user } from './user.table';
-import { pymeMemberRoleEnum } from './pyme-member.table';
+import { pyme } from '@db/tables/pyme.table';
+import { user } from '@db/tables/user.table';
+import { pymeMemberRoleEnum } from '@db/tables/pyme-member.table';
 
 export const pymeInvitationStatusEnum = pgEnum('pyme_invitation_status', ['pending', 'accepted', 'revoked']);
 
@@ -37,6 +37,3 @@ export const pymeInvitation = pgTable(
       .where(sql`${t.deletedAt} IS NULL AND ${t.status} = 'pending'`),
   ],
 );
-
-export type PymeInvitation = typeof pymeInvitation.$inferSelect;
-export type PymeInvitationDTO = typeof pymeInvitation.$inferInsert;

@@ -27,4 +27,7 @@ async function seed() {
   }
 }
 
-seed();
+// Importar el módulo no ejecuta operaciones administrativas.
+if (require.main === module) {
+  void seed();
+}

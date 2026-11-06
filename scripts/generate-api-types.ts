@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../src/app.module';
-import { createSwaggerDocument } from '../src/core/swagger.core';
+import { SwaggerFunction } from '../src/functions/swagger.function';
 
 const OUTPUT_DIR = path.resolve(__dirname, '../../frontend-hubsme/src/api');
 const OUTPUT_FILE = 'backend.api.ts';
@@ -127,8 +127,12 @@ async function generate(): Promise<void> {
       bodyParser: false,
       logger: false,
     });
-    const spec = createSwaggerDocument(app);
-    await app.close();
+    let spec: ReturnType<typeof SwaggerFunction.createDocument>;
+    try {
+      spec = SwaggerFunction.createDocument(app);
+    } finally {
+      await app.close();
+    }
 
     await generateApi({
       fileName: OUTPUT_FILE,
@@ -182,7 +186,7 @@ async function generate(): Promise<void> {
       console.log(`\n✨ Generación completada exitosamente!`);
       console.log(`📁 Archivo procesado guardado en: ${outputPath}`);
     } else {
-      console.error('❌ Error: No se encontró el archivo generado para procesar.');
+      throw new Error('No se encontró el archivo generado para procesar.');
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

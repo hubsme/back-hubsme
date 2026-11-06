@@ -1,6 +1,6 @@
 import { index, integer, pgTable, serial, text, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { user } from './user.table';
+import { user } from '@db/tables/user.table';
 
 export const consultantMercadoPagoAccount = pgTable(
   'consultant_mercado_pago_account',
@@ -29,6 +29,3 @@ export const consultantMercadoPagoAccount = pgTable(
       .where(sql`${t.deletedAt} IS NULL`),
   ],
 );
-
-export type ConsultantMercadoPagoAccount = typeof consultantMercadoPagoAccount.$inferSelect;
-export type ConsultantMercadoPagoAccountDTO = typeof consultantMercadoPagoAccount.$inferInsert;

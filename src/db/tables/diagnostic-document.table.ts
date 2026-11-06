@@ -1,12 +1,8 @@
 import { pgTable, serial, text, timestamp, integer, pgEnum, index } from 'drizzle-orm/pg-core';
-import { diagnostic } from './diagnostic.table';
-import { user } from './user.table';
+import { diagnostic } from '@db/tables/diagnostic.table';
+import { user } from '@db/tables/user.table';
 
-export const diagnosticDocumentTypeEnum = pgEnum('diagnostic_document_type', [
-  'informe',
-  'plan_accion',
-  'respuestas',
-]);
+export const diagnosticDocumentTypeEnum = pgEnum('diagnostic_document_type', ['informe', 'plan_accion', 'respuestas']);
 
 export const diagnosticDocument = pgTable(
   'diagnostic_document',
@@ -32,6 +28,3 @@ export const diagnosticDocument = pgTable(
     index('diagnostic_document_created_at_idx').on(t.createdAt),
   ],
 );
-
-export type DiagnosticDocument = typeof diagnosticDocument.$inferSelect;
-export type DiagnosticDocumentDTO = typeof diagnosticDocument.$inferInsert;

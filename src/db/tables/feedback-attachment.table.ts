@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { check, index, integer, pgTable, serial, text, timestamp, varchar } from 'drizzle-orm/pg-core';
-import { feedback } from './feedback.table';
+import { feedback } from '@db/tables/feedback.table';
 
 export const feedbackAttachment = pgTable(
   'feedback_attachment',
@@ -24,6 +24,3 @@ export const feedbackAttachment = pgTable(
     check('feedback_attachment_size_positive', sql`${t.sizeBytes} > 0`),
   ],
 );
-
-export type FeedbackAttachment = typeof feedbackAttachment.$inferSelect;
-export type FeedbackAttachmentDTO = typeof feedbackAttachment.$inferInsert;

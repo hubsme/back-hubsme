@@ -1,6 +1,6 @@
 import { index, integer, jsonb, pgEnum, pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
-import { MeetingReminderPayload } from '@modules/admin/scheduled-notification/scheduled-notification.types';
-import { meeting } from './meeting.table';
+import { MeetingReminderPayload } from '@modules/admin/modules/scheduled-notification/types/scheduled-notification.types';
+import { meeting } from '@db/tables/meeting.table';
 
 export const scheduledNotificationRecipientEnum = pgEnum('scheduled_notification_recipient', ['pyme', 'consultor']);
 
@@ -18,6 +18,7 @@ export const scheduledNotification = pgTable(
     id: serial('id').primaryKey(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    deletedAt: timestamp('deleted_at'),
     meetingId: integer('meeting_id')
       .notNull()
       .references(() => meeting.id, { onDelete: 'cascade' }),
@@ -37,6 +38,3 @@ export const scheduledNotification = pgTable(
     index('scheduled_notification_status_scheduled_at_idx').on(t.status, t.scheduledAt),
   ],
 );
-
-export type ScheduledNotification = typeof scheduledNotification.$inferSelect;
-export type ScheduledNotificationDTO = typeof scheduledNotification.$inferInsert;

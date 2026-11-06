@@ -124,4 +124,7 @@ const runBackup = () => {
   });
 };
 
-runBackup();
+// Importar el módulo no ejecuta operaciones administrativas.
+if (require.main === module) {
+  void runBackup();
+}

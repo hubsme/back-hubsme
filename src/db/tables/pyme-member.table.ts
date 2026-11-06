@@ -1,9 +1,10 @@
 import { index, integer, pgEnum, pgTable, serial, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { pyme } from './pyme.table';
-import { user } from './user.table';
+import { pyme } from '@db/tables/pyme.table';
+import { user } from '@db/tables/user.table';
 
 export const pymeMemberRoleEnum = pgEnum('pyme_member_role', ['owner', 'member']);
+
 export const pymeMemberStatusEnum = pgEnum('pyme_member_status', ['active', 'suspended']);
 
 export const pymeMember = pgTable(
@@ -35,6 +36,3 @@ export const pymeMember = pgTable(
       .where(sql`${t.deletedAt} IS NULL AND ${t.status} = 'active'`),
   ],
 );
-
-export type PymeMember = typeof pymeMember.$inferSelect;
-export type PymeMemberDTO = typeof pymeMember.$inferInsert;

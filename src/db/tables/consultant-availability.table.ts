@@ -1,8 +1,6 @@
-import { date, index, integer, jsonb, pgTable, serial, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import { user } from '@db/tables/user.table';
 import { sql } from 'drizzle-orm';
-import { user } from './user.table';
-
-export type ConsultantAvailabilitySchedule = Record<string, string[]>;
+import { date, index, integer, jsonb, pgTable, serial, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 
 export const consultantAvailability = pgTable(
   'consultant_availability',
@@ -15,7 +13,7 @@ export const consultantAvailability = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
     month: date('month', { mode: 'date' }).notNull(),
-    availableSchedule: jsonb('available_schedule').$type<ConsultantAvailabilitySchedule>().default({}).notNull(),
+    availableSchedule: jsonb('available_schedule').$type<Record<string, string[]>>().default({}).notNull(),
   },
   (t) => [
     index('consultant_availability_consultant_id_idx').on(t.consultantId),
@@ -25,6 +23,3 @@ export const consultantAvailability = pgTable(
       .where(sql`${t.deletedAt} IS NULL`),
   ],
 );
-
-export type ConsultantAvailability = typeof consultantAvailability.$inferSelect;
-export type ConsultantAvailabilityDTO = typeof consultantAvailability.$inferInsert;

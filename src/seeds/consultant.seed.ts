@@ -1,16 +1,16 @@
-import { and, inArray, isNull } from 'drizzle-orm';
 import { database } from '@db/connection.db';
-import { consultant, ConsultantDTO } from '@db/tables/consultant.table';
-import { User } from '@db/tables/user.table';
+import { consultant } from '@db/tables/consultant.table';
+import type { seedUsers } from '@seeds/user.seed';
+import { and, inArray, isNull } from 'drizzle-orm';
 
-export async function seedConsultants(seededUsers: { byEmail: Record<string, User> }) {
+export async function seedConsultants(seededUsers: Pick<Awaited<ReturnType<typeof seedUsers>>, 'byEmail'>) {
   const getUser = (email: string) => {
     const found = seededUsers.byEmail[email];
     if (!found) throw new Error(`Usuario no encontrado en seed: ${email}`);
     return found;
   };
 
-  const consultantValues: ConsultantDTO[] = [
+  const consultantValues: (typeof consultant.$inferInsert)[] = [
     {
       id: getUser('miguel.salinas@hubsme.com').id,
       firstName: 'Miguel',

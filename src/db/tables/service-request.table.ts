@@ -1,3 +1,4 @@
+import { user } from '@db/tables/user.table';
 import { sql } from 'drizzle-orm';
 import {
   check,
@@ -13,133 +14,6 @@ import {
   timestamp,
   varchar,
 } from 'drizzle-orm/pg-core';
-import { user } from './user.table';
-
-export const SERVICE_REQUEST_CATEGORY_OPTIONS = [
-  {
-    category: 'Estratégica',
-    subcategories: ['Planificación estratégica', 'Modelo de negocio', 'Transformación empresarial'],
-  },
-  {
-    category: 'Financiera',
-    subcategories: ['Planeamiento financiero', 'Costos y presupuestos', 'Financiamiento'],
-  },
-  {
-    category: 'Comercial / Ventas',
-    subcategories: ['Estrategia comercial', 'Proceso de ventas', 'CRM'],
-  },
-  {
-    category: 'Marketing',
-    subcategories: ['Redes sociales', 'Branding / Diseño', 'Marketing digital', 'Investigación de mercado'],
-  },
-  {
-    category: 'Servicio al cliente',
-    subcategories: ['Experiencia del cliente', 'Atención y soporte', 'Fidelización'],
-  },
-  {
-    category: 'Operaciones',
-    subcategories: ['Mejora de procesos', 'Logística', 'Calidad'],
-  },
-  {
-    category: 'Organizacional / RRHH',
-    subcategories: ['Selección', 'Capacitación', 'Cultura y clima'],
-  },
-  {
-    category: 'Tecnología',
-    subcategories: ['Desarrollo web', 'Software / Automatización', 'Datos / Analítica', 'Ciberseguridad'],
-  },
-  {
-    category: 'Legal',
-    subcategories: ['Contratos', 'Corporativo', 'Propiedad intelectual'],
-  },
-  {
-    category: 'Laboral',
-    subcategories: ['Cumplimiento laboral', 'Gestión de planillas', 'Seguridad y salud en el trabajo'],
-  },
-  {
-    category: 'Tributario / Contable',
-    subcategories: ['Contabilidad', 'Declaraciones tributarias', 'Facturación / SUNAT', 'Auditoría'],
-  },
-] as const;
-
-export const SERVICE_REQUEST_CATEGORIES = [
-  'Estratégica',
-  'Financiera',
-  'Comercial / Ventas',
-  'Marketing',
-  'Servicio al cliente',
-  'Operaciones',
-  'Organizacional / RRHH',
-  'Tecnología',
-  'Legal',
-  'Laboral',
-  'Tributario / Contable',
-] as const;
-
-export const SERVICE_REQUEST_BUDGET_TYPES = ['fixed', 'range'] as const;
-export const SERVICE_REQUEST_WORK_MODALITIES = ['remote'] as const;
-export const SERVICE_REQUEST_PAYMENT_PLAN_STRATEGIES = ['single', 'initial_final', 'milestone_installments'] as const;
-export const SERVICE_REQUEST_PAYMENT_TRIGGERS = [
-  'service_approval',
-  'milestone_completion',
-  'service_completion',
-] as const;
-
-export type ServiceRequestCategory = (typeof SERVICE_REQUEST_CATEGORIES)[number];
-export type ServiceRequestBudgetType = (typeof SERVICE_REQUEST_BUDGET_TYPES)[number];
-export type ServiceRequestWorkModality = (typeof SERVICE_REQUEST_WORK_MODALITIES)[number];
-export type ServiceRequestPaymentPlanStrategy = (typeof SERVICE_REQUEST_PAYMENT_PLAN_STRATEGIES)[number];
-export type ServiceRequestPaymentTrigger = (typeof SERVICE_REQUEST_PAYMENT_TRIGGERS)[number];
-
-export type ServiceRequestMilestone = {
-  title: string;
-  dueDate: string;
-};
-
-export type ServiceRequestPaymentInstallment = {
-  label: string;
-  percentage: number;
-  trigger: ServiceRequestPaymentTrigger;
-  milestoneIndex: number;
-};
-
-export type ServiceRequestPaymentPlan = {
-  strategy: ServiceRequestPaymentPlanStrategy;
-  summary: string;
-  rationale: string;
-  installments: ServiceRequestPaymentInstallment[];
-};
-
-export const DEFAULT_SERVICE_REQUEST_PAYMENT_PLAN: ServiceRequestPaymentPlan = {
-  strategy: 'single',
-  summary: 'Pago único al aprobar la propuesta',
-  rationale: 'El servicio se paga en una sola operación antes de iniciar.',
-  installments: [
-    {
-      label: 'Pago único del servicio',
-      percentage: 100,
-      trigger: 'service_approval',
-      milestoneIndex: 0,
-    },
-  ],
-};
-
-export type ServiceRequestReferenceAttachment = {
-  storagePath: string;
-  fileUrl: string;
-  originalName: string;
-  mimeType: string;
-  sizeBytes: number;
-};
-
-export type ServiceRequestEvidenceAttachment = ServiceRequestReferenceAttachment & {
-  id: string;
-  note: string | null;
-  milestoneIndex: number | null;
-  uploadedAt: string;
-  uploadedBy: number;
-  uploadedByRole: 'pyme' | 'consultor';
-};
 
 export const serviceRequestStatusEnum = pgEnum('service_request_status', [
   'requested',
@@ -152,9 +26,23 @@ export const serviceRequestStatusEnum = pgEnum('service_request_status', [
   'cancelled',
 ]);
 
-export const serviceRequestCategoryEnum = pgEnum('service_request_category', SERVICE_REQUEST_CATEGORIES);
-export const serviceRequestBudgetTypeEnum = pgEnum('service_request_budget_type', SERVICE_REQUEST_BUDGET_TYPES);
-export const serviceRequestWorkModalityEnum = pgEnum('service_request_work_modality', SERVICE_REQUEST_WORK_MODALITIES);
+export const serviceRequestCategoryEnum = pgEnum('service_request_category', [
+  'Estratégica',
+  'Financiera',
+  'Comercial / Ventas',
+  'Marketing',
+  'Servicio al cliente',
+  'Operaciones',
+  'Organizacional / RRHH',
+  'Tecnología',
+  'Legal',
+  'Laboral',
+  'Tributario / Contable',
+] as const);
+
+export const serviceRequestBudgetTypeEnum = pgEnum('service_request_budget_type', ['fixed', 'range'] as const);
+
+export const serviceRequestWorkModalityEnum = pgEnum('service_request_work_modality', ['remote'] as const);
 
 export const serviceRequest = pgTable(
   'service_request',
@@ -180,11 +68,34 @@ export const serviceRequest = pgTable(
     exclusions: text('exclusions'),
     referenceUrls: text('reference_urls').array().default([]).notNull(),
     referenceAttachments: jsonb('reference_attachments')
-      .$type<ServiceRequestReferenceAttachment[]>()
+      .$type<
+        {
+          storagePath: string;
+          fileUrl: string;
+          originalName: string;
+          mimeType: string;
+          sizeBytes: number;
+        }[]
+      >()
       .default([])
       .notNull(),
     evidenceAttachments: jsonb('evidence_attachments')
-      .$type<ServiceRequestEvidenceAttachment[]>()
+      .$type<
+        ({
+          storagePath: string;
+          fileUrl: string;
+          originalName: string;
+          mimeType: string;
+          sizeBytes: number;
+        } & {
+          id: string;
+          note: string | null;
+          milestoneIndex: number | null;
+          uploadedAt: string;
+          uploadedBy: number;
+          uploadedByRole: 'pyme' | 'consultor';
+        })[]
+      >()
       .default([])
       .notNull(),
     budgetType: serviceRequestBudgetTypeEnum('budget_type'),
@@ -194,10 +105,40 @@ export const serviceRequest = pgTable(
     estimatedDuration: varchar('estimated_duration', { length: 160 }),
     workModality: serviceRequestWorkModalityEnum('work_modality').default('remote').notNull(),
     workMethod: text('work_method'),
-    milestones: jsonb('milestones').$type<ServiceRequestMilestone[]>().default([]).notNull(),
+    milestones: jsonb('milestones')
+      .$type<
+        {
+          title: string;
+          dueDate: string;
+        }[]
+      >()
+      .default([])
+      .notNull(),
     paymentPlan: jsonb('payment_plan')
-      .$type<ServiceRequestPaymentPlan>()
-      .default(DEFAULT_SERVICE_REQUEST_PAYMENT_PLAN)
+      .$type<{
+        strategy: 'single' | 'initial_final' | 'milestone_installments';
+        summary: string;
+        rationale: string;
+        installments: {
+          label: string;
+          percentage: number;
+          trigger: 'service_approval' | 'milestone_completion' | 'service_completion';
+          milestoneIndex: number;
+        }[];
+      }>()
+      .default({
+        strategy: 'single',
+        summary: 'Pago único al aprobar la propuesta',
+        rationale: 'El servicio se paga en una sola operación antes de iniciar.',
+        installments: [
+          {
+            label: 'Pago único del servicio',
+            percentage: 100,
+            trigger: 'service_approval',
+            milestoneIndex: 0,
+          },
+        ],
+      })
       .notNull(),
     initialMeetingProposedStartTimes: text('initial_meeting_proposed_start_times').array().default([]).notNull(),
     initialMeetingStartTime: timestamp('initial_meeting_start_time'),
@@ -236,6 +177,3 @@ export const serviceRequest = pgTable(
     ),
   ],
 );
-
-export type ServiceRequest = typeof serviceRequest.$inferSelect;
-export type ServiceRequestDTO = typeof serviceRequest.$inferInsert;
